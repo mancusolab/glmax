@@ -1,5 +1,11 @@
-# Requirements file for ReadTheDocs, check .readthedocs.yml.
-# To build the module reference correctly, make sure every external package
-# under `install_requires` in `setup.cfg` is also listed here!
-sphinx>=3.2.1
-# sphinx_rtd_theme
+equinox
+# Install latest version of our dependencies
+jax[cpu]
+jinja2
+mkdocs                          # Main documentation generator.
+mkdocs-material                 # Theme
+mkdocs_include_exclude_files    # Allow for customising which files get included
+mkdocstrings[python]            # Autogenerate documentation from docstrings.
+mknotebooks                     # Turn Jupyter Lab notebooks into webpages.
+pygments
+pymdown-extensions              # Markdown extensions e.g. to handle LaTeX.

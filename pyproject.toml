@@ -1,9 +1,151 @@
 [build-system]
-# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
-requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
-[tool.setuptools_scm]
-# For smarter version schemes and other configuration options,
-# check out https://github.com/pypa/setuptools_scm
-version_scheme = "no-guess-dev"
+[project]
+name = "glmax"
+dynamic = ["version"]
+description = ''
+readme = "README.rst"
+requires-python = ">=3.9"
+license = "MIT"
+keywords = [
+  "jax",
+  "single-cell",
+  "fine-mapping",
+  "statistics",
+  "machine-learning",
+]
+authors = [
+  { name = "Zixuan Zhang", email = "zzhang39@usc.edu"},
+  { name = "Nicholas Mancuso", email = "nmancuso@usc.edu"},
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Natural Language :: English",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+  "Topic :: Scientific/Engineering :: Mathematics",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+  "jaxlib",
+  "jax",
+  "jaxtyping",
+  "equinox",
+  "lineax",
+  "optimistix",
+]
+
+[project.urls]
+Documentation = "https://github.com/MancusoLab/glmax#readme"
+Issues = "https://github.com/MancusoLab/glmax/issues"
+Source = "https://github.com/MancusoLab/glmax"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/glmax/_version.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/"]
+exclude = ["docs/"]
+
+[tool.hatch.envs.default]
+dependencies = [
+  "coverage[toml]>=6.5",
+  "pytest",
+  "pytest-cov",
+]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+test-cov = "coverage run -m pytest {args:tests}"
+cov-report = [
+  "- coverage combine",
+  "coverage report",
+]
+cov = [
+  "test-cov",
+  "cov-report",
+]
+
+[[tool.hatch.envs.all.matrix]]
+python = ["3.9", "3.10", "3.11", "3.12"]
+
+[tool.hatch.envs.lint]
+detached = true
+dependencies = [
+  "mypy>=1.0.0",
+  "ruff>=0.2.2",
+]
+
+[tool.ruff]
+target-version = "py37"
+line-length = 120
+
+[tool.ruff.lint]
+fixable = ["I001", "F401"]
+select = ["E", "F", "I001"]
+ignore = [
+  # Allow non-abstract empty methods in abstract base classes
+  "B027",
+  # Allow boolean positional values in function calls, like `dict.get(... True)`
+  "FBT003",
+  # Ignore checks for possible passwords
+  "S105", "S106", "S107",
+  # Ignore complexity
+  "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915",
+]
+ignore-init-module-imports = true
+
+[tool.ruff.lint.isort]
+known-first-party = ["glmax"]
+combine-as-imports = true
+lines-after-imports = 2
+lines-between-types = 1
+known-local-folder = ["src"]
+section-order = ["future", "standard-library", "third-party", "jax-ecosystem", "first-party", "local-folder"]
+extra-standard-library = ["typing_extensions"]
+order-by-type = false
+
+[tool.ruff.lint.isort.sections]
+jax-ecosystem = ["equinox", "jax", "jaxtyping", "lineax", "optimistix"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests can use magic values, assertions, and relative imports
+"tests/**/*" = ["PLR2004", "S101", "TID252"]
+
+[tool.pyright]
+reportIncompatibleMethodOverride = true
+reportIncompatibleVariableOverride = false  # Incompatible with eqx.AbstractVar
+include = ["glmax", "tests"]
+exclude = ["docs"]
+
+[tool.coverage.run]
+source_pkgs = ["glmax", "tests"]
+branch = true
+parallel = true
+omit = []
+
+[tool.coverage.paths]
+glmax = ["src/glmax", "*/glmax/src/glmax"]
+tests = ["tests", "*/glmax/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
