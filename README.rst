@@ -73,7 +73,7 @@ Support
 =======
 
 Please report any bugs or feature requests in the `Issue Tracker <https://github.com/mancusolab/glmax/issues>`_.
-If users have any questions or comments, please contact Camellia Rui (crui@usc.edu) and Nicholas Mancuso (nmancuso@usc.edu).
+If users have any questions or comments, please contact Eleanor Zhang (zzhang39@usc.edu) and Nicholas Mancuso (nmancuso@usc.edu).
 
 .. _OtherSoftware:
 .. |Other Software| replace:: **Other Software**
