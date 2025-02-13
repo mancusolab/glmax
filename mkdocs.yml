@@ -86,7 +86,7 @@ plugins:
                     extensions:
                     - pydantic: {schema: true}
                     - docs/_scripts/extension.py:DynamicDocstrings:
-                        paths: [glmax.family]
+                        paths: [glmax.families]
                     # general options
                     allow_inspection: true
                     show_bases: true
