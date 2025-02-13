@@ -8,9 +8,9 @@ from jaxtyping import ArrayLike, ScalarLike
 
 from src.glmax.family.distribution import ExponentialFamily, Gaussian
 from src.glmax.family.utils import t_cdf
-from src.glmax.Infer.optimize import irls
-from src.glmax.Infer.solve import AbstractLinearSolver, CholeskySolver
-from src.glmax.Infer.stderr import AbstractStdErrEstimator, FisherInfoError
+from src.glmax.infer.optimize import irls
+from src.glmax.infer.solve import AbstractLinearSolver, CholeskySolver
+from src.glmax.infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
 
 class GLMState(NamedTuple):
