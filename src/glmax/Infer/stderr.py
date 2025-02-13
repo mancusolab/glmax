@@ -9,7 +9,11 @@ from jaxtyping import ArrayLike, ScalarLike
 from ..family.distribution import ExponentialFamily
 
 
-class ErrVarEstimation(eqx.Module):
+class AbstractStdErrEstimator(eqx.Module, strict=True):
+    """
+    TODO: documentation
+    """
+
     @abstractmethod
     def __call__(
         self,
@@ -34,7 +38,11 @@ class ErrVarEstimation(eqx.Module):
         pass
 
 
-class FisherInfoError(ErrVarEstimation):
+class FisherInfoError(AbstractStdErrEstimator, strict=True):
+    """
+    TODO: documentation
+    """
+
     def __call__(
         self,
         family: ExponentialFamily,
@@ -52,7 +60,12 @@ class FisherInfoError(ErrVarEstimation):
         return asmpt_cov
 
 
-class HuberError(ErrVarEstimation):
+class HuberError(AbstractStdErrEstimator, strict=True):
+    """
+    Huber white sandwich estimator using observed hessian
+    TODO: documentation
+    """
+
     def __call__(
         self,
         family: ExponentialFamily,
@@ -63,11 +76,10 @@ class HuberError(ErrVarEstimation):
         weight: ArrayLike,
         alpha: ScalarLike = 0.0,
     ) -> Array:
-        """
-        Huber white sandwich estimator using observed hessian
-        """
-        phi = family.scale(X, y, mu)  # note: this scaler will cancel out in robust_cov
+        # note: this scaler will cancel out in robust_cov
+        phi = family.scale(X, y, mu)
         gprime = family.glink.deriv(mu)
+
         # calculate observed hessian
         W = 1 / phi * (family._hlink_score(eta, alpha) / gprime - family._hlink_hess(eta, alpha) * (y - mu))
         hess_inv = jnpla.inv(-(X * W).T @ X)

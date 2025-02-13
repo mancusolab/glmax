@@ -1,93 +1,85 @@
 from abc import abstractmethod
+from typing_extensions import TypeAlias
 
 import equinox as eqx
 import jax.numpy as jnp
-import jax.numpy.linalg as jnpla
-import jax.scipy.linalg as jspla
 import lineax as lx
 
 from jaxtyping import Array, ArrayLike
 
 
-class LinearSolve(eqx.Module):
+SolverState: TypeAlias = tuple[lx.AbstractLinearOperator, ArrayLike]
+
+
+class AbstractLinearSolver(eqx.Module, strict=True):
     """
     Define parent class for all solvers
     eta = X @ beta, the linear component
     """
 
-    @abstractmethod
-    def __call__(
-        self,
-        X: ArrayLike,
-        r: ArrayLike,
-        weights: ArrayLike,
-    ) -> Array:
-        """Linear equation solver
+    solver: eqx.AbstractVar[lx.AbstractLinearSolver]
 
-        :param X: covariate data matrix (nxp)
-        :param r: residuals
-        :param weights: weights for each individual
-        """
+    @abstractmethod
+    def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         pass
 
+    def __call__(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> Array:
+        """Linear equation solver
 
-class QRSolve(LinearSolve):
-    def __call__(
-        self,
-        X: ArrayLike,
-        r: ArrayLike,
-        weights: ArrayLike,
-    ) -> Array:
+        **Arguments:**
+
+        - `X`: covariate data matrix (nxp)
+        - `r`: residuals
+        - `weights`: weights for each individual
+
+        **Returns:**
+        The solution to the weighted least squares regression.
+        """
+        A, b = self.init(X, r, weights)
+        sol = lx.linear_solve(A, b, solver=self.solver)
+
+        return sol.value.reshape((len(sol.value), 1))
+
+
+class QRSolver(AbstractLinearSolver, strict=True):
+    """ """
+
+    solver: lx.AbstractLinearSolver = lx.QR()
+
+    def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         w_half = jnp.sqrt(weights)
         w_half_r = w_half * r
         w_half_X = w_half * X
 
-        Q, R = jnpla.qr(w_half_X)
+        A = lx.MatrixLinearOperator(w_half_X)
 
-        return jspla.solve_triangular(R, Q.T @ w_half_r)
+        return A, w_half_r
 
 
-class CholeskySolve(LinearSolve):
-    def __call__(
-        self,
-        X: ArrayLike,
-        r: ArrayLike,
-        weights: ArrayLike,
-    ) -> Array:
+class CholeskySolver(AbstractLinearSolver):
+    """ """
+
+    solver: lx.AbstractLinearSolver = lx.Cholesky()
+
+    def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         Xw = X * weights
-        XtWX = Xw.T @ X
-        XtWy = Xw.T @ r
-        factor = jspla.cho_factor(XtWX, lower=True)
+        A = lx.MatrixLinearOperator(Xw.T @ X)
+        b = Xw.T @ r
 
-        return jspla.cho_solve(factor, XtWy)
+        return A, b
 
 
-class CGSolve(LinearSolve):
-    def __call__(
-        self,
-        X: ArrayLike,
-        r: ArrayLike,
-        weights: ArrayLike,
-    ) -> Array:
-        """not converged for some cases in real data;
-        Used jaxopt solve_normal_cg, not always gurantee convergence (not allow specify tol),
-        Now switch lineax
-        """
+class CGSolver(AbstractLinearSolver):
+    """ """
+
+    solver: lx.AbstractLinearSolver = lx.NormalCG(atol=1e-5, rtol=1e-5)
+
+    def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         w_half = jnp.sqrt(weights)
         w_half_X = X * w_half
 
-        # Method 1: CG solve
-        # cg_solver = lx.CG(atol=1e-5, rtol=1e-5)
-        # XtWX = w_half_X.T @ w_half_X
-        # operator = lx.MatrixLinearOperator(XtWX, lx.positive_semidefinite_tag)
-        # b = (weights * X).T @ r
-        # sol = lx.linear_solve(operator, b.squeeze(), solver=cg_solver)
-
-        # Method 2 (faster): CG solve using normal equation which solve A^t A x = A^t b
         # Here we solve (XtWX) beta = XtW b, so A = X * sqrt(W), b = sqrt(W) * r
-        ncg_solver = lx.NormalCG(atol=1e-5, rtol=1e-5)
-        operator = lx.MatrixLinearOperator(w_half_X)
+        A = lx.MatrixLinearOperator(w_half_X)
         b = w_half * r
-        sol = lx.linear_solve(operator, b.squeeze(), solver=ncg_solver)
 
-        return sol.value.reshape((len(sol.value), 1))
+        return A, b

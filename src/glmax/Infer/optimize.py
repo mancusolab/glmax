@@ -6,7 +6,7 @@ from jax import Array, lax, numpy as jnp
 from jaxtyping import ArrayLike, ScalarLike
 
 from ..family.distribution import ExponentialFamily
-from .solve import LinearSolve
+from .solve import AbstractLinearSolver
 
 
 class IRLSState(NamedTuple):
@@ -21,7 +21,7 @@ def irls(
     X: ArrayLike,
     y: ArrayLike,
     family: ExponentialFamily,
-    solver: LinearSolve,
+    solver: AbstractLinearSolver,
     eta: ArrayLike,
     max_iter: int = 1000,
     tol: float = 1e-3,
