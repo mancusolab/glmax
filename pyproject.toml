@@ -11,12 +11,13 @@ requires-python = ">=3.9"
 license = "MIT"
 keywords = [
   "jax",
-  "single-cell",
-  "fine-mapping",
+  "glm",
+  "regression",
   "statistics",
   "machine-learning",
 ]
 authors = [
+  { name = "Linda Serefin", email = "lserafin@usc.edu"},
   { name = "Zixuan Zhang", email = "zzhang39@usc.edu"},
   { name = "Nicholas Mancuso", email = "nmancuso@usc.edu"},
 ]
@@ -108,7 +109,6 @@ ignore = [
   # Ignore complexity
   "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915",
 ]
-ignore-init-module-imports = true
 
 [tool.ruff.lint.isort]
 known-first-party = ["glmax"]

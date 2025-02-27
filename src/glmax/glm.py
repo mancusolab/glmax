@@ -17,30 +17,24 @@ class GLMState(NamedTuple):
     """
     Represents the state of a Generalized Linear Model (GLM) during fitting.
     This class stores the key parameters and intermediate results from
-     a GLM estimation process.
+    a GLM estimation process.
 
-     :param beta: Estimated regression coefficients (p x 1)
-     :param se: Standard errors of the estimated coefficients (p x 1)
-     :param z: Z-scores for hypothesis testing of each coefficient, computed as `beta / se`
-     :param p: P-values associated with each coefficient
-     :param eta: the transformed mean response, linear component eta
-     :param mu: The **fitted mean response**, derived from the inverse link function
-      applied to `eta`
-     :param glm_wt: weights used in the iterative weighted least squares procedure
-     The weights used in the iterative weighted least squares (IWLS) procedure
-     during GLM fitting
-     :param num_iters: number of iterations taken for the optimization algorithm
-     to converge
-     :param converged: TRUE or FALSE indicating whether the ???
-     IBSS converged to a solution within the chosen tolerance level
-     :param infor_inv: **inverse of the Fisher Information matrix**,
-     used for score tests  # for score test
-     :param resid: The **residuals** from the model, used in score tests.
-         ⚠ **Note:** These are not the working residuals from the IWLS algorithm
-     :param alpha: A regularization parameter. The **dispersion parameter** in
-     the Negative Binomial (NB) model,
-         controlling overdispersion
-     :return: GLMState
+    **Attributes:**
+
+    - `beta`: Estimated regression coefficients.
+    - `se`: Standard errors of the estimated coefficients.
+    - `z`: Z-scores for hypothesis testing of each coefficient, computed as `beta / se`.
+    - `p`: P-values associated with each coefficient.
+    - `eta`: the transformed mean response, linear component eta.
+    - `mu`: The **fitted mean response**, derived from the inverse link function applied to - `eta`.
+    - `glm_wt`: weights used in the iterative weighted least squares procedure The weights used in the iterative
+        weighted least squares (IWLS) procedure during GLM fitting.
+    - `num_iters`: number of iterations taken for the optimization algorithm to converge.
+    - `converged`: boolean indicating whether the optimization converged.
+    - `infor_inv`: **inverse of the Fisher Information matrix**, used for score tests  # for score test
+    - `resid`: The **residuals** from the model, used in score tests.
+         ⚠ **Note** These are not the working residuals from the IWLS algorithm
+    - `alpha`: The **dispersion parameter** in the Negative Binomial (NB) model, controlling overdispersion
     """
 
     beta: Array
@@ -64,17 +58,9 @@ class GLM(eqx.Module):
     Exponential Family (e.g., Gaussian, Poisson, Binomial). The GLM framework allows for
     different link functions and estimation methods.
 
-    Attributes:
-        :family: ExponentialFamily
-        The assumed distribution of the response variable (e.g., Gaussian, Poisson,
-        Negative Binomial). This determines the link function and variance structure.
+    !!! info
 
-        :solver: AbstractLinearSolver
-        The method used to solve the system of equations. Options include:
-        - `cholesky`: Cholesky decomposition (default)
-        - `qr`: QR decomposition
-        - `cg`: Conjugate gradient method
-        - `abstractlinearsolver`: A general solver interface for custom methods.
+
     """
 
     family: ExponentialFamily = Gaussian()
@@ -90,10 +76,10 @@ class GLM(eqx.Module):
 
         Under the assumption that the **Maximum Likelihood Estimator (MLE)** follows:
 
-        :param statistic: The test statistic, typically beta / SE(beta), where `SE` is
+        `statistic: The test statistic, typically beta / SE(beta), where `SE` is
         the standard error of the estimated coefficient.
 
-        :param df: The degrees of freedom associated with the test.
+        `df: The degrees of freedom associated with the test.
         For a single coefficient, `df=1`, whereas for a joint test involving multiple coefficients,
         `df` corresponds to the number of parameters tested.
 
@@ -126,19 +112,20 @@ class GLM(eqx.Module):
         and other relevant information from the fitting process of a GLM.
 
         **Arguments:**
-        - :param X: covariate data matrix (nxp)
-        - :param y: outcome vector (nx1)
-        - :param init: initial value for betas
-        - :param max_iter: maximum number of iterations, default to 1000
-        - :param tol: tolerance for convergence, default to 1e-3
-        - :param step_size: step size, default to 1.0
-        - :param offset_eta: offset (nx1)
-        - :param alpha_init: initial value for alpha in NB model, default to 0s
+
+        - `X`: covariate data matrix.
+        - `y`: outcome vector.
+        - `init`: initial value for betas.
+        - `max_iter`: maximum number of iterations, default to 1000.
+        - `tol`: tolerance for convergence, default to 1e-3.
+        - `step_size`: step size, default to 1.0.
+        - `offset_eta`: offset.
+        - `alpha_init`: initial value for alpha in NB model, default to 0s.
 
         **Returns:**
-        - :return: A NamedTuple containing the final estimated parameters and convergence diagnostics
-        from the fitted GLM model.
-        A GLMState object that contains model fitting result.
+
+        -  A [`glmax.GLMState`][] containing the final estimated parameters and convergence diagnostics
+            from the fitted GLM model.
         """
         beta, n_iter, converged, alpha = irls(
             X,
@@ -182,3 +169,12 @@ class GLM(eqx.Module):
             resid,
             alpha,
         )
+
+
+GLM.__init__.__doc__ = r"""**Arguments:**
+
+- `family`: An instance of [`ExponentialFamily`][] indicating the distribution of the response variable
+    (e.g., Gaussian, Poisson, Negative Binomial). This determines the link function and variance structure.
+- `solver`: An instance of [`AbstractLinearSolver`][] to use for solving the weighted least squares problem
+    for inference.
+"""
