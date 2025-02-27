@@ -1,7 +1,5 @@
 from typing import NamedTuple, Tuple
 
-import equinox as eqx
-
 from jax import Array, lax, numpy as jnp
 from jaxtyping import ArrayLike, ScalarLike
 
@@ -16,7 +14,7 @@ class IRLSState(NamedTuple):
     alpha: Array
 
 
-@eqx.filter_jit
+# @eqx.filter_jit
 def irls(
     X: ArrayLike,
     y: ArrayLike,

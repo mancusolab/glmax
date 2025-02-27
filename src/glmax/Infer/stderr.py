@@ -11,7 +11,35 @@ from ..family.distribution import ExponentialFamily
 
 class AbstractStdErrEstimator(eqx.Module, strict=True):
     """
-    TODO: documentation
+    This class defines an interface for computing **standard errors** in statistical models,
+    it serves as a base class for implementations like `FisherInfoError` and `HuberError`.
+
+    Subclasses must implement the `__call__` method, which computes standard errors
+    of choice
+
+    Parameters:
+    ----------
+    family : ExponentialFamily
+        The Generalized Linear Model (GLM) distribution
+    :param X : ArrayLike
+        The **covariate data matrix** of shape (N, P), where:
+        - **N** is the number of observations
+        - **P** is the number of predictors
+    :param y : ArrayLike
+        The outcome vector of shape (N, 1), representing the observed response variable.
+    :param eta : ArrayLike
+        The linear predictor component
+    :param mu : ArrayLike
+        The fitted mean response values (expected values of `y`).
+    :param weight : ArrayLike
+        A weighting vector for each individual observation, used in variance estimation.
+    :param alpha : ScalarLike, optional (default=0.0)
+        The dispersion parameter (specific to models like the **Negative Binomial**).
+
+    Returns:
+    -------
+    Array
+        The computed **standard errors** for the given model parameters.
     """
 
     @abstractmethod
@@ -40,7 +68,33 @@ class AbstractStdErrEstimator(eqx.Module, strict=True):
 
 class FisherInfoError(AbstractStdErrEstimator, strict=True):
     """
-    TODO: documentation
+    This class is an estimator for the standard errors of parameter estimates
+    in models from the Exponential Family. Given a weighted design matrix `X`
+    and other necessary parameters, it calculates the **asymptotic covariance matrix**
+    by inverting the Fisher information matrix.
+
+    Parameters:
+    ----------
+    :family : ExponentialFamily
+        The exponential family distribution associated with the model.
+    :param X : ArrayLike
+        The design matrix (features) used in the estimation.
+    :param y : ArrayLike
+        The observed response variable.
+    :param eta : ArrayLike
+        The natural parameter of the exponential family distribution.
+    :param mu : ArrayLike
+        The mean response values (expected values of `y`).
+    :param weight : ArrayLike
+        A vector of weights applied to the observations.
+    :param alpha : ScalarLike, optional (default=0.0)
+        A regularization parameter.
+
+    Returns:
+    -------
+    Array
+        The asymptotic covariance matrix, computed as the inverse of the Fisher
+        information matrix.
     """
 
     def __call__(
@@ -62,8 +116,32 @@ class FisherInfoError(AbstractStdErrEstimator, strict=True):
 
 class HuberError(AbstractStdErrEstimator, strict=True):
     """
-    Huber white sandwich estimator using observed hessian
-    TODO: documentation
+    This class estimates the standard errors of parameter estimates in models
+    from the Exponential Family using **Huber’s robust standard error approach**.
+    It calculates a **sandwich estimator** for the asymptotic covariance matrix,
+    accounting for heteroskedasticity or model misspecification.
+
+    Parameters:
+    ----------
+    family : ExponentialFamily
+        The exponential family distribution associated with the model.
+    :param X : ArrayLike
+        The design matrix (features) used in the estimation.
+    :param y : ArrayLike
+        The observed response variable.
+    :param eta : ArrayLike
+        The natural parameter of the exponential family distribution.
+    :param mu : ArrayLike
+        The mean response values (expected values of `y`).
+    :param weight : ArrayLike
+        A vector of weights applied to the observations.
+    :param alpha : ScalarLike, optional (default=0.0)
+        A regularization parameter.
+
+    Returns:
+    -------
+    Array
+        The robust covariance matrix, computed using Huber’s sandwich formula.
     """
 
     def __call__(

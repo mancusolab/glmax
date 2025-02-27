@@ -6,16 +6,41 @@ from jax import Array, numpy as jnp
 from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
-from src.glmax.family.distribution import ExponentialFamily, Gaussian
-from src.glmax.family.utils import t_cdf
-from src.glmax.infer.optimize import irls
-from src.glmax.infer.solve import AbstractLinearSolver, CholeskySolver
-from src.glmax.infer.stderr import AbstractStdErrEstimator, FisherInfoError
+from glmax.family.distribution import ExponentialFamily, Gaussian
+from glmax.family.utils import t_cdf
+from glmax.Infer.optimize import irls
+from glmax.Infer.solve import AbstractLinearSolver, CholeskySolver
+from glmax.Infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
 
 class GLMState(NamedTuple):
     """
-    TODO: documentation; what are these things?
+    Represents the state of a Generalized Linear Model (GLM) during fitting.
+    This class stores the key parameters and intermediate results from
+     a GLM estimation process.
+
+     :param beta: Estimated regression coefficients (p x 1)
+     :param se: Standard errors of the estimated coefficients (p x 1)
+     :param z: Z-scores for hypothesis testing of each coefficient, computed as `beta / se`
+     :param p: P-values associated with each coefficient
+     :param eta: the transformed mean response, linear component eta
+     :param mu: The **fitted mean response**, derived from the inverse link function
+      applied to `eta`
+     :param glm_wt: weights used in the iterative weighted least squares procedure
+     The weights used in the iterative weighted least squares (IWLS) procedure
+     during GLM fitting
+     :param num_iters: number of iterations taken for the optimization algorithm
+     to converge
+     :param converged: TRUE or FALSE indicating whether the ???
+     IBSS converged to a solution within the chosen tolerance level
+     :param infor_inv: **inverse of the Fisher Information matrix**,
+     used for score tests  # for score test
+     :param resid: The **residuals** from the model, used in score tests.
+         ⚠ **Note:** These are not the working residuals from the IWLS algorithm
+     :param alpha: A regularization parameter. The **dispersion parameter** in
+     the Negative Binomial (NB) model,
+         controlling overdispersion
+     :return: GLMState
     """
 
     beta: Array
@@ -33,14 +58,47 @@ class GLMState(NamedTuple):
 
 
 class GLM(eqx.Module):
-    """TODO: add better documentation here."""
+    """
+    This class provides a flexible framework for fitting Generalized Linear Models (GLMs),
+    which extend linear regression to accommodate response variables from the
+    Exponential Family (e.g., Gaussian, Poisson, Binomial). The GLM framework allows for
+    different link functions and estimation methods.
+
+    Attributes:
+        :family: ExponentialFamily
+        The assumed distribution of the response variable (e.g., Gaussian, Poisson,
+        Negative Binomial). This determines the link function and variance structure.
+
+        :solver: AbstractLinearSolver
+        The method used to solve the system of equations. Options include:
+        - `cholesky`: Cholesky decomposition (default)
+        - `qr`: QR decomposition
+        - `cg`: Conjugate gradient method
+        - `abstractlinearsolver`: A general solver interface for custom methods.
+    """
 
     family: ExponentialFamily = Gaussian()
     solver: AbstractLinearSolver = CholeskySolver()
 
     def wald_test(self, statistic: ArrayLike, df: int) -> Array:
         """
-        beta_MLE ~ N(beta, I^-1), for large sample size
+        Computes the Wald test statistic and corresponding p-value.
+
+        The Wald test is used to assess the significance of estimated coefficients
+        in a regression model. It tests the null hypothesis that a parameter (or
+        set of parameters) is equal to zero.
+
+        Under the assumption that the **Maximum Likelihood Estimator (MLE)** follows:
+
+        :param statistic: The test statistic, typically beta / SE(beta), where `SE` is
+        the standard error of the estimated coefficient.
+
+        :param df: The degrees of freedom associated with the test.
+        For a single coefficient, `df=1`, whereas for a joint test involving multiple coefficients,
+        `df` corresponds to the number of parameters tested.
+
+        Returns:
+        :return: The Wald test statistic's corresponding p-value.
         """
         if isinstance(self.family, Gaussian):
             pval = 2 * t_cdf(-abs(statistic), df)
@@ -61,21 +119,26 @@ class GLM(eqx.Module):
         tol: float = 1e-3,
         step_size: float = 1.0,
     ) -> GLMState:
-        """TODO: add better documentation here.
-        Fit GLM
+        """
+        Represents the fitted state of a Generalized Linear Model (GLM).
+
+        This class stores the estimated parameters, standard errors, diagnostics,
+        and other relevant information from the fitting process of a GLM.
 
         **Arguments:**
-
-        - `X`: covariate data matrix (nxp)
-        - `y`: outcome vector (nx1)
-        - `offset_eta`: offset (nx1)
-        - `init`: initial value for betas
-        - `alpha_init`: initial value for alpha in NB model, default to 0s
-        - `se_estimator`: estimator for standard error, default to fisher information
+        - :param X: covariate data matrix (nxp)
+        - :param y: outcome vector (nx1)
+        - :param init: initial value for betas
+        - :param max_iter: maximum number of iterations, default to 1000
+        - :param tol: tolerance for convergence, default to 1e-3
+        - :param step_size: step size, default to 1.0
+        - :param offset_eta: offset (nx1)
+        - :param alpha_init: initial value for alpha in NB model, default to 0s
 
         **Returns:**
-
-        A [`glmax.GLMState`][] object that contains model fitting result.
+        - :return: A NamedTuple containing the final estimated parameters and convergence diagnostics
+        from the fitted GLM model.
+        A GLMState object that contains model fitting result.
         """
         beta, n_iter, converged, alpha = irls(
             X,
