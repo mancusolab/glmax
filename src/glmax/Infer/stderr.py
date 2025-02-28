@@ -6,7 +6,7 @@ from jax import Array
 from jax.numpy import linalg as jnpla
 from jaxtyping import ArrayLike, ScalarLike
 
-from ..family.distribution import ExponentialFamily
+from ..family.dist import ExponentialFamily
 
 
 class AbstractStdErrEstimator(eqx.Module, strict=True):

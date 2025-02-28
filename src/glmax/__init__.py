@@ -1,8 +1,27 @@
 from importlib.metadata import version  # pragma: no cover
 
+from .family import (
+    ExponentialFamily as ExponentialFamily,
+    Gaussian as Gaussian,
+    Identity as Identity,
+    Log as Log,
+    Logit as Logit,
+    NBlink as NBlink,
+    NegativeBinomial as NegativeBinomial,
+    Poisson as Poisson,
+    Power as Power,
+)
 from .glm import (
     GLM as GLM,
     GLMState as GLMState,
+)
+from .infer import (
+    CGSolver as CGSolver,
+    CholeskySolver as CholeskySolver,
+    FisherInfoError as FisherInfoError,
+    HuberError as HuberError,
+    irls as irls,
+    QRSolver as QRSolver,
 )
 
 

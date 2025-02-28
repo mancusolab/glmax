@@ -6,11 +6,11 @@ from jax import Array, numpy as jnp
 from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
-from glmax.family.distribution import ExponentialFamily, Gaussian
-from glmax.family.utils import t_cdf
-from glmax.Infer.optimize import irls
-from glmax.Infer.solve import AbstractLinearSolver, CholeskySolver
-from glmax.Infer.stderr import AbstractStdErrEstimator, FisherInfoError
+from .family.dist import ExponentialFamily, Gaussian
+from .family.utils import t_cdf
+from .infer.optimize import irls
+from .infer.solve import AbstractLinearSolver, CholeskySolver
+from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
 
 class GLMState(NamedTuple):

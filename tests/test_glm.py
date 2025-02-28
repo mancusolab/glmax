@@ -17,9 +17,7 @@ from utils import assert_array_eq
 import jax.numpy as jnp
 import jax.random as rdm
 
-from glmax.family.distribution import Poisson
-from glmax.glm import GLM
-from glmax.Infer.solve import CholeskySolver
+import glmax
 
 
 def simulate_glm_data(
@@ -81,7 +79,7 @@ def test_poisson_cho():
     mod = smPoisson(np.array(y), np.array(X))
     sm_state = mod.fit()
 
-    glmax_poisson_cho = GLM(family=Poisson(), solver=CholeskySolver())
+    glmax_poisson_cho = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
     init_pois = glmax_poisson_cho.family.init_eta(y.reshape(-1, 1))
     glm_state = glmax_poisson_cho.fit(X, y.reshape(-1, 1), init=init_pois)
 

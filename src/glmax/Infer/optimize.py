@@ -3,7 +3,7 @@ from typing import NamedTuple, Tuple
 from jax import Array, lax, numpy as jnp
 from jaxtyping import ArrayLike, ScalarLike
 
-from ..family.distribution import ExponentialFamily
+from ..family.dist import ExponentialFamily
 from .solve import AbstractLinearSolver
 
 
