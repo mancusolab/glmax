@@ -68,21 +68,21 @@ def simulate_glm_data(
     return X, y, beta_true
 
 
-def test_poisson_cho():
-    key = rdm.PRNGKey(42)  # Random seed for reproducibility
-    n_samples = 200
-    n_features = 5
+# def test_poisson_cho():
+key = rdm.PRNGKey(42)  # Random seed for reproducibility
+n_samples = 200
+n_features = 5
 
-    # Simulate Poisson regression data
-    X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="poisson")
+# Simulate Poisson regression data
+X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="poisson")
 
-    mod = smPoisson(np.array(y), np.array(X))
-    sm_state = mod.fit()
+mod = smPoisson(np.array(y), np.array(X))
+sm_state = mod.fit()
 
-    glmax_poisson_cho = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
-    init_pois = glmax_poisson_cho.family.init_eta(y.reshape(-1, 1))
-    glm_state = glmax_poisson_cho.fit(X, y.reshape(-1, 1), init=init_pois)
+glmax_poisson_cho = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+init_pois = glmax_poisson_cho.family.init_eta(y.reshape(-1, 1))
+glm_state = glmax_poisson_cho.fit(X, y.reshape(-1, 1), init=init_pois)
 
-    assert_array_eq(glm_state.beta, sm_state.params)
-    assert_array_eq(glm_state.se, sm_state.bse)
-    assert_array_eq(glm_state.p, sm_state.pvalues)
+assert_array_eq(glm_state.beta, sm_state.params)
+assert_array_eq(glm_state.se, sm_state.bse)
+assert_array_eq(glm_state.p, sm_state.pvalues)
