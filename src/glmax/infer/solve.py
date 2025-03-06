@@ -82,7 +82,7 @@ class CholeskySolver(AbstractLinearSolver):
 
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         Xw = X * weights
-        A = lx.MatrixLinearOperator(Xw.T @ X)
+        A = lx.MatrixLinearOperator(Xw.T @ X, tags=lx.positive_semidefinite_tag)
         b = Xw.T @ r
 
         return A, b
