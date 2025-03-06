@@ -36,7 +36,7 @@ class AbstractLinearSolver(eqx.Module, strict=True):
         The solution to the weighted least squares regression using QR factorization
         """
         A, b = self.init(X, r, weights)
-        sol = lx.linear_solve(A, b, solver=self.solver)
+        sol = lx.linear_solve(A, b.squeeze(), solver=self.solver)
 
         return sol.value.reshape((len(sol.value), 1))
 
@@ -83,9 +83,6 @@ class CholeskySolver(AbstractLinearSolver):
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         Xw = X * weights
         A = lx.MatrixLinearOperator(Xw.T @ X)
-        import jax
-
-        jax.debug.print("A: {A}", A=A)
         b = Xw.T @ r
 
         return A, b
