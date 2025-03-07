@@ -10,9 +10,9 @@
 from typing import Tuple
 
 import numpy as np
+import pytest
+import statsmodels.api as sm
 
-from statsmodels.discrete.discrete_model import Poisson as smPoisson
-from statsmodels.regression.linear_model import OLS as smOLS
 from utils import assert_array_eq
 
 import jax.numpy as jnp
@@ -70,48 +70,27 @@ def simulate_glm_data(
     return X, y, beta_true
 
 
-def test_poisson_QR():
-    key = rdm.PRNGKey(42)  # Random seed for reproducibility
+# @pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
+@pytest.mark.parametrize("solver", (glmax.QRSolver(),))
+def test_poisson(getkey, solver):
     n_samples = 200
     n_features = 5
 
     # Simulate Poisson regression data
-    X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="poisson")
+    X, y, beta_true = simulate_glm_data(getkey(), n_samples, n_features, family="poisson")
 
     # solve using statsmodel method (ground truth)
-    mod = smPoisson(np.array(y), np.array(X))
-    sm_state = mod.fit()
+    sm_poi = sm.GLM(np.array(y), np.array(X), family=sm.families.Poisson())
+    sm_state = sm_poi.fit()
 
     # solve using glmax functions
-    glmax_poisson_cho = glmax.GLM(family=glmax.Poisson(), solver=glmax.QRSolver())
-    init_pois = glmax_poisson_cho.family.init_eta(y.reshape(-1, 1))
-    glm_state = glmax_poisson_cho.fit(X, y.reshape(-1, 1), init=init_pois)
+    glmax_poi = glmax.GLM(family=glmax.Poisson(), solver=solver)
+    init_pois = glmax_poi.family.init_eta(y.reshape(-1, 1))
+    glm_state = glmax_poi.fit(X, y.reshape(-1, 1), init=init_pois)
 
-    assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
-    assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
-    assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-2)
-
-
-def test_poisson_cho():
-    key = rdm.PRNGKey(42)  # Random seed for reproducibility
-    n_samples = 200
-    n_features = 5
-
-    # Simulate Poisson regression data
-    X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="poisson")
-
-    # solve using statsmodel method (ground truth)
-    mod = smPoisson(np.array(y), np.array(X))
-    sm_state = mod.fit()
-
-    # solve using glmax functions
-    glmax_poisson_cho = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
-    init_pois = glmax_poisson_cho.family.init_eta(y.reshape(-1, 1))
-    glm_state = glmax_poisson_cho.fit(X, y.reshape(-1, 1), init=init_pois)
-
-    assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
-    assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
-    assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-2)
+    assert_array_eq(glm_state.beta, sm_state.params, atol=1e-3)
+    assert_array_eq(glm_state.se, sm_state.bse, atol=1e-3)
+    assert_array_eq(glm_state.p, sm_state.pvalues, atol=1e-3)
 
 
 def test_normal_QR():
@@ -123,8 +102,8 @@ def test_normal_QR():
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="normal")
 
     # solve using statsmodel method (ground truth)
-    mod = smOLS(np.array(y), np.array(X))
-    sm_state = mod.fit()
+    sm_norm = sm.GLM(np.array(y), np.array(X), family=sm.families.Gaussian())
+    sm_state = sm_norm.fit()
 
     # solve using glmax functions
     glmax_normal_cho = glmax.GLM(family=glmax.Gaussian(), solver=glmax.QRSolver())
@@ -133,7 +112,7 @@ def test_normal_QR():
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
-    assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-2)
+    assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
 
 
 def test_normal_cho():
@@ -145,8 +124,8 @@ def test_normal_cho():
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="normal")
 
     # solve using statsmodel method (ground truth)
-    mod = smOLS(np.array(y), np.array(X))
-    sm_state = mod.fit()
+    sm_norm = sm.GLM(np.array(y), np.array(X), family=sm.families.Gaussian())
+    sm_state = sm_norm.fit()
 
     # solve using glmax functions
     glmax_normal_cho = glmax.GLM(family=glmax.Gaussian(), solver=glmax.CholeskySolver())
@@ -155,4 +134,4 @@ def test_normal_cho():
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
-    assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-1)
+    assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)

@@ -1,5 +1,7 @@
 from importlib.metadata import version  # pragma: no cover
 
+import jax
+
 from .family import (
     ExponentialFamily as ExponentialFamily,
     Gaussian as Gaussian,
@@ -24,5 +26,7 @@ from .infer import (
     QRSolver as QRSolver,
 )
 
+
+jax.config.update("jax_enable_x64", True)  # noqa: E402
 
 __version__ = version("glmax")
