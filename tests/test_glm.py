@@ -102,7 +102,7 @@ def test_normal_QR():
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="normal")
 
     # solve using statsmodel method (ground truth)
-    sm_norm = sm.GLM(np.array(y), np.array(X), family=sm.families.Gaussian())
+    sm_norm = sm.OLS(np.array(y), np.array(X))
     sm_state = sm_norm.fit()
 
     # solve using glmax functions
@@ -124,7 +124,7 @@ def test_normal_cho():
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="normal")
 
     # solve using statsmodel method (ground truth)
-    sm_norm = sm.GLM(np.array(y), np.array(X), family=sm.families.Gaussian())
+    sm_norm = sm.OLS(np.array(y), np.array(X))
     sm_state = sm_norm.fit()
 
     # solve using glmax functions
