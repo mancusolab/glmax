@@ -1,8 +1,20 @@
 import ast
 import inspect
 
-from griffe import Class, Docstring, dynamic_import, Extension, Function, get_logger, Object, ObjectNode
-from griffe.dataclasses import Parameter
+from griffe import (
+    Class,
+    Docstring,
+    dynamic_import,
+    ExprCall,
+    Extension,
+    Function,
+    get_logger,
+    Inspector,
+    Object,
+    ObjectNode,
+    Parameter,
+    Visitor,
+)
 
 
 logger = get_logger(__name__)
@@ -33,7 +45,14 @@ class DynamicDocstrings(Extension):
     def __init__(self, paths: list[str] | None = None) -> None:
         self.module_paths = paths
 
-    def on_class_members(self, *, node: ast.AST | ObjectNode, cls: Class) -> None:
+    def on_class_members(
+        self,
+        *,
+        node: ast.AST | ObjectNode,
+        cls: Class,
+        agent: Visitor | Inspector,
+        **kwargs,
+    ) -> None:
         logger.debug(f"Inspecting class member {cls.path}")
         if isinstance(node, ObjectNode):
             return  # skip runtime objects, their docstrings are already right
@@ -41,15 +60,25 @@ class DynamicDocstrings(Extension):
             return  # skip objects that were not selected
 
         # pull class attributes as parameters for the __init__ function...
-        parameters = [
-            Parameter(name=attr.name, annotation=attr.annotation, kind=attr.kind)
-            for attr in cls.members.values()
-            if attr.is_attribute
-        ]
+        parameters = []
+        for attr in cls.members.values():
+            if attr.is_attribute:
+                if attr.value is not None:
+                    if type(attr.value) is ExprCall and len(attr.value.arguments) > 0:
+                        for arg in attr.value.arguments:
+                            if arg.name == "default":
+                                param = Parameter(
+                                    name=attr.name, default=arg.value.name, annotation=attr.annotation, kind=attr.kind
+                                )
+                    else:
+                        param = Parameter(
+                            name=attr.name, default=attr.value, annotation=attr.annotation, kind=attr.kind
+                        )
+                else:
+                    param = Parameter(name=attr.name, annotation=attr.annotation, kind=attr.kind)
+                parameters.append(param)
+
         # such a huge hack to pull in inherited attributes
-        if cls.name != "ExpFam" and "ExpFam" in cls.parent.members:
-            attr = cls.parent.members["ExpFam"].members["pred_mean"]
-            parameters = [Parameter(name=attr.name, annotation=attr.annotation, kind=attr.kind)] + parameters
         cls.members["__init__"] = Function(
             name="__init__", parameters=parameters, docstring=_get_dynamic_docstring(cls, "__init__")
         )
