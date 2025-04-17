@@ -15,10 +15,10 @@ def _grad_per_sample(func, x):
     x.shape = (n,1), eg. x can be mu or eta
     need to convert x to (n,) in order to apply vmap and grad
     """
-    n = x.shape[0]
-    grad_fn = jax.vmap(jax.grad(func), 0)
-    deriv_val = grad_fn(x.reshape((n,)))
-    return deriv_val.reshape((n, 1))
+    grad_fn = jax.vmap(jax.grad(func))
+    deriv_val = grad_fn(x)
+
+    return deriv_val
 
 
 def t_cdf(value: ArrayLike, df: float, loc: ArrayLike = 0.0, scale: ArrayLike = 1.0):

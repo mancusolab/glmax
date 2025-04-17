@@ -1,4 +1,4 @@
-from typing import NamedTuple
+from typing import NamedTuple, Tuple
 
 import equinox as eqx
 
@@ -6,7 +6,7 @@ from jax import Array, numpy as jnp
 from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
-from .family.dist import ExponentialFamily, Gaussian
+from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
 from .family.utils import t_cdf
 from .infer.optimize import irls
 from .infer.solve import AbstractLinearSolver, CholeskySolver
@@ -65,6 +65,40 @@ class GLM(eqx.Module):
 
     family: ExponentialFamily = Gaussian()
     solver: AbstractLinearSolver = CholeskySolver()
+
+    def calc_eta_and_dispersion(
+        self,
+        X: ArrayLike,
+        y: ArrayLike,
+        offset_eta: ArrayLike = 0.0,
+        max_iter: int = 1000,
+    ) -> Tuple[Array, Array]:
+        """Calculate eta and dispersion parameter alpha
+
+        :param X: covariate data matrix (nxp)
+        :param y: outcome vector (nx1)
+        :param offset_eta: offset (nx1)
+        :return: eta, dispersion (alpha)
+        """
+        n, p = X.shape
+        init_val = self.family.init_eta(y)
+        if isinstance(self.family, NegativeBinomial):
+            jaxqtl_pois = GLM(family=Poisson())
+            glm_state_pois = jaxqtl_pois.fit(X, y, init=init_val, offset_eta=offset_eta, max_iter=max_iter)
+
+            # fit covariate-only model (null)
+            alpha_init = n / jnp.sum((y / self.family.glink.inverse(glm_state_pois.eta) - 1) ** 2)
+            eta = glm_state_pois.eta
+            disp = self.family.estimate_dispersion(X, y, eta, alpha=1.0 / alpha_init, max_iter=max_iter)
+
+            # convert disp to 0.1 if bad initialization
+            disp = jnp.nan_to_num(disp, nan=0.1)
+
+        else:
+            eta = init_val
+            disp = jnp.asarray(0.0)  # alpha is non-zero only in NB model
+
+        return eta, disp
 
     def wald_test(self, statistic: ArrayLike, df: int) -> Array:
         """

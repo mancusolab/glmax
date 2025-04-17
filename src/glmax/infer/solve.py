@@ -36,9 +36,9 @@ class AbstractLinearSolver(eqx.Module, strict=True):
         The solution to the weighted least squares regression using QR factorization
         """
         A, b = self.init(X, r, weights)
-        sol = lx.linear_solve(A, b.squeeze(), solver=self.solver)
+        sol = lx.linear_solve(A, b, solver=self.solver)
 
-        return sol.value.reshape((len(sol.value), 1))
+        return sol.value
 
 
 class QRSolver(AbstractLinearSolver, strict=True):
@@ -64,7 +64,7 @@ class QRSolver(AbstractLinearSolver, strict=True):
         """
         w_half = jnp.sqrt(weights)
         w_half_r = w_half * r
-        w_half_X = w_half * X
+        w_half_X = X * w_half[:, jnp.newaxis]
 
         A = lx.MatrixLinearOperator(w_half_X)
 
@@ -81,7 +81,7 @@ class CholeskySolver(AbstractLinearSolver):
     solver: lx.AbstractLinearSolver = lx.Cholesky()
 
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
-        Xw = X * weights
+        Xw = X * weights[:, jnp.newaxis]
         A = lx.MatrixLinearOperator(Xw.T @ X, tags=lx.positive_semidefinite_tag)
         b = Xw.T @ r
 
@@ -105,7 +105,7 @@ class CGSolver(AbstractLinearSolver):
 
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         w_half = jnp.sqrt(weights)
-        w_half_X = X * w_half
+        w_half_X = X * w_half[:, jnp.newaxis]
 
         # Here we solve (XtWX) beta = XtW b, so A = X * sqrt(W), b = sqrt(W) * r
         A = lx.MatrixLinearOperator(w_half_X)

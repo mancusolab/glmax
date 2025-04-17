@@ -241,6 +241,7 @@ class NegativeBinomial(ExponentialFamily):
         return jnp.asarray(1.0)
 
     def negloglikelihood(self, X: ArrayLike, y: ArrayLike, eta: ArrayLike, alpha: ScalarLike) -> Array:
+        y = y.astype(float)
         r = 1.0 / alpha
         mu = self.glink.inverse(eta)
         p = mu / (mu + r)
@@ -311,6 +312,8 @@ class NegativeBinomial(ExponentialFamily):
         max_iter=1000,
         offset_eta=0.0,
     ) -> Array:
+        alpha = jnp.asarray(alpha)
+
         def body_fun(val: Tuple):
             diff, num_iter, alpha_o = val
             log_alpha_o = jnp.log(alpha_o)
@@ -321,7 +324,7 @@ class NegativeBinomial(ExponentialFamily):
             )
             diff = jnp.exp(log_alpha_n) - jnp.exp(log_alpha_o)
 
-            return diff.squeeze(), num_iter + 1, jnp.exp(log_alpha_n).squeeze()
+            return diff, num_iter + 1, jnp.exp(log_alpha_n)
 
         def cond_fun(val: Tuple):
             diff, num_iter, alpha_o = val

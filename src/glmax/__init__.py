@@ -3,6 +3,7 @@ from importlib.metadata import version  # pragma: no cover
 import jax
 
 from .family import (
+    Binomial as Binomial,
     ExponentialFamily as ExponentialFamily,
     Gaussian as Gaussian,
     Identity as Identity,
