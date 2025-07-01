@@ -72,7 +72,7 @@ class ExponentialFamily(eqx.Module):
         mu_k = self.glink.inverse(eta)
         g_deriv_k = self.glink.deriv(mu_k)
         phi = self.scale(X, y, mu_k)
-        weight_k = 1.0 / (phi * self.variance(mu_k, alpha) * g_deriv_k**2)
+        weight_k = jnp.reciprocal(phi * self.variance(mu_k, alpha) * g_deriv_k**2)
 
         return mu_k, g_deriv_k, weight_k
 

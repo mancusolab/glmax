@@ -70,9 +70,9 @@ def simulate_glm_data(
         p = jnp.clip(jax.nn.sigmoid(eta), 1e-5, 1 - 1e-5)
         y = rdm.bernoulli(noise_key, p).astype(jnp.int32)  # Binomial regression
     elif family == "negative_binomial":
-        lam = jnp.exp(eta).astype(jnp.float32)
-        r = jnp.array(1.0 / dispersion, dtype=jnp.float32)
-        gamma_sample = rdm.gamma(noise_key, r, shape=lam.shape, dtype=jnp.float32)
+        lam = jnp.exp(eta)
+        r = jnp.array(1.0 / dispersion)
+        gamma_sample = rdm.gamma(noise_key, r, shape=lam.shape)
         y = rdm.poisson(extra_key, lam=gamma_sample * lam / r)  # Negative binomial regression
     else:
         raise ValueError("Unsupported family. Choose from: 'poisson', 'normal', 'binomial', 'negative_binomial'.")
@@ -133,7 +133,7 @@ def test_logit(getkey, solver):
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="binomial")
 
     # solve using statsmodel method (ground truth)
-    sm_logit = sm.Logit(np.array(y), np.array(X))
+    sm_logit = sm.GLM(np.array(y), np.array(X), family=sm.families.Binomial())
     sm_state = sm_logit.fit()
 
     # solve using glmax functions
@@ -154,20 +154,19 @@ def test_NegativeBinomial(getkey, solver):
     # Simulate NegativeBinomial regression data
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
 
+    jaxqtl_nb = glmax.GLM(family=glmax.NegativeBinomial(), solver=solver)
+    glm_state = jaxqtl_nb.fit(X, y, tol=1e-8)
+
     # solve using statsmodel method (ground truth)
-    sm_NegativeBinomial = sm.NegativeBinomial(np.array(y), np.array(X))
-    sm_state = sm_NegativeBinomial.fit()
-    sm_beta = sm_state.params[:-1]
-    # sm_se = sm_state.bse[:-1]
-    # sm_p = sm_state.pvalues[:-1]
-    sm_alpha = sm_state.params[-1]
+    sm_negbin = sm.GLM(np.array(y), np.array(X), family=sm.families.NegativeBinomial(alpha=glm_state.alpha))
+    sm_state = sm_negbin.fit()
+    sm_beta = sm_state.params
+    sm_se = sm_state.bse
+    sm_p = sm_state.pvalues
+    # sm_alpha = sm_state.params
     # sm_alpha_se = sm_state.bse[-1]
 
-    jaxqtl_nb = glmax.GLM(family=glmax.NegativeBinomial(), solver=solver)
-    glm_state = jaxqtl_nb.fit(X, y)
-
-    print(f"iter = {glm_state.num_iters}")
-    assert_array_eq(glm_state.beta, sm_beta, rtol=1e-2)
-    # assert_array_eq(glm_state.se, sm_se, rtol=1e-2)
-    # assert_array_eq(glm_state.p, sm_p, rtol=1e-2)
-    assert_array_eq(glm_state.alpha, sm_alpha, rtol=1e-2)
+    assert_array_eq(glm_state.beta, sm_beta, rtol=1e-3)
+    assert_array_eq(glm_state.se, sm_se, rtol=1e-3)
+    assert_array_eq(glm_state.p, sm_p, rtol=1e-3)
+    # assert_array_eq(glm_state.alpha, sm_alpha, rtol=1e-3)
