@@ -163,10 +163,7 @@ def test_NegativeBinomial(getkey, solver):
     sm_beta = sm_state.params
     sm_se = sm_state.bse
     sm_p = sm_state.pvalues
-    # sm_alpha = sm_state.params
-    # sm_alpha_se = sm_state.bse[-1]
 
     assert_array_eq(glm_state.beta, sm_beta, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_se, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_p, rtol=1e-3)
-    # assert_array_eq(glm_state.alpha, sm_alpha, rtol=1e-3)
