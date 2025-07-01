@@ -133,7 +133,7 @@ class GLM(eqx.Module):
         y: ArrayLike,
         offset_eta: ArrayLike = 0.0,
         init: ArrayLike = None,
-        alpha_init: ScalarLike = 0.0,
+        alpha_init: ScalarLike = None,
         se_estimator: AbstractStdErrEstimator = FisherInfoError(),
         max_iter: int = 1000,
         tol: float = 1e-3,
@@ -161,6 +161,9 @@ class GLM(eqx.Module):
         -  A [`glmax.GLMState`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
+        if init is None or alpha_init is None:
+            init, alpha_init = self.calc_eta_and_dispersion(X, y, offset_eta)
+
         beta, n_iter, converged, alpha = irls(
             X,
             y,

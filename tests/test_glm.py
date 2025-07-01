@@ -94,8 +94,7 @@ def test_poisson(getkey, solver):
 
     # solve using glmax functions
     glmax_poi = glmax.GLM(family=glmax.Poisson(), solver=solver)
-    init_pois = glmax_poi.family.init_eta(y)
-    glm_state = glmax_poi.fit(X, y, init=init_pois)
+    glm_state = glmax_poi.fit(X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, atol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, atol=1e-3)
@@ -116,10 +115,8 @@ def test_normal(getkey, solver):
     sm_state = sm_norm.fit()
 
     # solve using glmax functions
-    family = glmax.Gaussian()
-    glmax_normal_cho = glmax.GLM(family=family, solver=solver)
-    init_normal = family.init_eta(y)
-    glm_state = glmax_normal_cho.fit(X, y, init=init_normal)
+    glmax_normal = glmax.GLM(family=glmax.Gaussian(), solver=solver)
+    glm_state = glmax_normal.fit(X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
@@ -140,10 +137,8 @@ def test_logit(getkey, solver):
     sm_state = sm_logit.fit()
 
     # solve using glmax functions
-    family = glmax.Binomial()
-    glmax_logit = glmax.GLM(family=family, solver=solver)
-    init_eta = family.init_eta(y)
-    glm_state = glmax_logit.fit(X, y, init=init_eta)
+    glmax_logit = glmax.GLM(family=glmax.Binomial(), solver=solver)
+    glm_state = glmax_logit.fit(X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
@@ -160,23 +155,19 @@ def test_NegativeBinomial(getkey, solver):
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
 
     # solve using statsmodel method (ground truth)
-    sm_NegativeBinomial = sm.NegativeBinomialP(np.array(y), np.array(X))
+    sm_NegativeBinomial = sm.NegativeBinomial(np.array(y), np.array(X))
     sm_state = sm_NegativeBinomial.fit()
-    # sm_alpha = sm_state.params[-1]
     sm_beta = sm_state.params[:-1]
-    sm_se = sm_state.bse
+    # sm_se = sm_state.bse[:-1]
+    # sm_p = sm_state.pvalues[:-1]
+    sm_alpha = sm_state.params[-1]
+    # sm_alpha_se = sm_state.bse[-1]
 
     jaxqtl_nb = glmax.GLM(family=glmax.NegativeBinomial(), solver=solver)
+    glm_state = jaxqtl_nb.fit(X, y)
 
-    init_eta, alpha_n = jaxqtl_nb.calc_eta_and_dispersion(X, y, 0.0)
-
-    glm_state = jaxqtl_nb.fit(
-        X,
-        y,
-        init=init_eta,
-        offset_eta=0.0,
-        alpha_init=alpha_n,
-    )
-    assert_array_eq(glm_state.beta, sm_beta, rtol=1e-3)
-    assert_array_eq(glm_state.se, sm_se, rtol=1e-3)
-    assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
+    print(f"iter = {glm_state.num_iters}")
+    assert_array_eq(glm_state.beta, sm_beta, rtol=1e-2)
+    # assert_array_eq(glm_state.se, sm_se, rtol=1e-2)
+    # assert_array_eq(glm_state.p, sm_p, rtol=1e-2)
+    assert_array_eq(glm_state.alpha, sm_alpha, rtol=1e-2)

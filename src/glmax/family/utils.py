@@ -7,7 +7,7 @@ from jaxtyping import ArrayLike
 
 def _clipped_expit(x):
     finfo = jnp.finfo(jnp.result_type(x))
-    return jnp.clip(expit(x), a_min=finfo.tiny, a_max=1.0 - finfo.eps)
+    return jnp.clip(expit(x), min=finfo.tiny, max=1.0 - finfo.eps)
 
 
 def _grad_per_sample(func, x):
