@@ -22,6 +22,7 @@ from .glm import (
 )
 from .infer import (
     AbstractFitter as AbstractFitter,
+    AbstractHypothesisTest as AbstractHypothesisTest,
     CGSolver as CGSolver,
     CholeskySolver as CholeskySolver,
     DefaultFitter as DefaultFitter,
@@ -31,6 +32,7 @@ from .infer import (
     irls as irls,
     IRLSState as IRLSState,
     QRSolver as QRSolver,
+    WaldTest as WaldTest,
 )
 
 

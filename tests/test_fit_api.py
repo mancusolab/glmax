@@ -51,6 +51,12 @@ class _IdentityCovariance(infer.AbstractStdErrEstimator):
         return jnp.eye(X.shape[1])
 
 
+class _ZeroPValueTestHook(infer.AbstractHypothesisTest):
+    def __call__(self, statistic, df, family):
+        del df, family
+        return jnp.zeros_like(statistic)
+
+
 def test_gx_fit_returns_glmstate_for_gaussian():
     X, y = _basic_data()
 
@@ -111,6 +117,28 @@ def test_gx_fit_accepts_covariance_strategy_swap():
 def test_infer_state_contracts_are_exported():
     assert glmax.GLMState is infer.GLMState
     assert "beta" in infer.IRLSState._fields
+
+
+def test_gx_fit_default_pipeline_exposes_complete_fields():
+    X, y = _basic_data()
+
+    state = glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
+
+    assert state.beta.shape == (X.shape[1],)
+    assert state.se.shape == (X.shape[1],)
+    assert state.p.shape == (X.shape[1],)
+    assert state.eta.shape == y.shape
+    assert state.mu.shape == y.shape
+    assert state.num_iters >= 0
+    assert bool(state.converged) in (True, False)
+
+
+def test_gx_fit_accepts_custom_hypothesis_test_hook():
+    X, y = _basic_data()
+
+    state = glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, tests=_ZeroPValueTestHook())
+
+    assert jnp.allclose(state.p, jnp.zeros_like(state.p))
 
 
 def test_gx_fit_rejects_non_2d_X():
@@ -226,5 +254,5 @@ def test_gx_fit_rejects_unsupported_fitter_strategy():
 def test_gx_fit_rejects_unsupported_tests_strategy():
     X, y = _basic_data()
 
-    with pytest.raises(TypeError, match="tests strategy is not supported"):
+    with pytest.raises(TypeError, match="tests must implement AbstractHypothesisTest"):
         glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, tests=object())

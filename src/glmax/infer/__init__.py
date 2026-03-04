@@ -21,3 +21,7 @@ from .stderr import (
     FisherInfoError as FisherInfoError,
     HuberError as HuberError,
 )
+from .tests import (
+    AbstractHypothesisTest as AbstractHypothesisTest,
+    WaldTest as WaldTest,
+)

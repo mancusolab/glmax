@@ -5,9 +5,11 @@ from jaxtyping import ArrayLike
 
 from .family.dist import ExponentialFamily
 from .glm import GLM, GLMState
-from .infer.fitter import AbstractFitter, DefaultFitter
+from .infer.fitter import AbstractFitter
+from .infer.optimize import irls
 from .infer.solve import AbstractLinearSolver
-from .infer.stderr import AbstractStdErrEstimator
+from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
+from .infer.tests import AbstractHypothesisTest, WaldTest
 
 
 def _to_numeric_array(name: str, value: ArrayLike) -> jnp.ndarray:
@@ -15,6 +17,75 @@ def _to_numeric_array(name: str, value: ArrayLike) -> jnp.ndarray:
     if np_value.dtype.kind not in ("i", "u", "f"):
         raise TypeError(f"{name} must have a numeric dtype")
     return jnp.asarray(value)
+
+
+def _run_default_pipeline(
+    model: GLM,
+    X: jnp.ndarray,
+    y: jnp.ndarray,
+    offset: jnp.ndarray,
+    *,
+    init: ArrayLike | None,
+    covariance: AbstractStdErrEstimator | None,
+    tests: AbstractHypothesisTest | None,
+    options: dict[str, object],
+) -> GLMState:
+    max_iter = int(options.pop("max_iter", 1000))
+    tol = float(options.pop("tol", 1e-3))
+    step_size = float(options.pop("step_size", 1.0))
+    alpha_init = options.pop("alpha_init", None)
+    if options:
+        unknown_keys = ", ".join(sorted(options.keys()))
+        raise TypeError(f"Unknown fit options: {unknown_keys}")
+
+    if init is None or alpha_init is None:
+        eta_init, alpha_init = model.calc_eta_and_dispersion(X, y, offset, max_iter=max_iter)
+    else:
+        eta_init = jnp.asarray(init)
+
+    beta, n_iter, converged, alpha = irls(
+        X,
+        y,
+        model.family,
+        model.solver,
+        eta_init,
+        max_iter,
+        tol,
+        step_size,
+        offset,
+        alpha_init,
+    )
+
+    eta = X @ beta + offset
+    mu = model.family.glink.inverse(eta)
+    resid = (y - mu) * model.family.glink.deriv(mu)
+    _, _, weight = model.family.calc_weight(X, y, eta, alpha)
+
+    se_estimator = FisherInfoError() if covariance is None else covariance
+    resid_covar = se_estimator(model.family, X, y, eta, mu, weight, alpha)
+    beta_se = jnp.sqrt(jnp.diag(resid_covar))
+
+    df = X.shape[0] - X.shape[1]
+    beta = beta.squeeze()
+    stat = beta / beta_se
+
+    hypothesis_test = WaldTest() if tests is None else tests
+    pval = hypothesis_test(stat, df, model.family)
+
+    return GLMState(
+        beta,
+        beta_se,
+        stat,
+        pval,
+        eta,
+        mu,
+        weight,
+        n_iter,
+        converged,
+        resid_covar,
+        resid,
+        alpha,
+    )
 
 
 def fit(
@@ -32,8 +103,8 @@ def fit(
 ) -> GLMState:
     if fitter is not None and not isinstance(fitter, AbstractFitter):
         raise TypeError("fitter must implement AbstractFitter")
-    if tests is not None:
-        raise TypeError("tests strategy is not supported")
+    if tests is not None and not isinstance(tests, AbstractHypothesisTest):
+        raise TypeError("tests must implement AbstractHypothesisTest")
     if solver is not None and not isinstance(solver, AbstractLinearSolver):
         raise TypeError("solver must implement AbstractLinearSolver")
     if covariance is not None and not isinstance(covariance, AbstractStdErrEstimator):
@@ -77,8 +148,24 @@ def fit(
         model = GLM(family=model.family, solver=solver)
 
     fit_options = {} if options is None else dict(options)
-    if covariance is not None:
-        fit_options["se_estimator"] = covariance
+    option_covariance = fit_options.pop("se_estimator", None)
+    if option_covariance is not None and covariance is not None:
+        raise ValueError("Specify covariance either via `covariance` or `options['se_estimator']`, not both")
+    if covariance is None and option_covariance is not None:
+        if not isinstance(option_covariance, AbstractStdErrEstimator):
+            raise TypeError("options['se_estimator'] must implement AbstractStdErrEstimator")
+        covariance = option_covariance
 
-    fit_strategy = DefaultFitter() if fitter is None else fitter
-    return fit_strategy(model, X_arr, y_arr, offset_arr, init=init, options=fit_options)
+    if fitter is not None:
+        return fitter(model, X_arr, y_arr, offset_arr, init=init, options=fit_options)
+
+    return _run_default_pipeline(
+        model,
+        X_arr,
+        y_arr,
+        offset_arr,
+        init=init,
+        covariance=covariance,
+        tests=tests,
+        options=fit_options,
+    )
