@@ -1,4 +1,4 @@
-from typing import NamedTuple, Tuple
+from typing import Tuple
 
 import equinox as eqx
 
@@ -9,46 +9,9 @@ from jaxtyping import ArrayLike, ScalarLike
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
 from .family.utils import t_cdf
 from .infer.optimize import irls
+from .infer.result import GLMState
 from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
-
-
-class GLMState(NamedTuple):
-    """
-    Represents the state of a Generalized Linear Model (GLM) during fitting.
-    This class stores the key parameters and intermediate results from
-    a GLM estimation process.
-
-    **Attributes:**
-
-    - `beta`: Estimated regression coefficients.
-    - `se`: Standard errors of the estimated coefficients.
-    - `z`: Z-scores for hypothesis testing of each coefficient, computed as `beta / se`.
-    - `p`: P-values associated with each coefficient.
-    - `eta`: the transformed mean response, linear component eta.
-    - `mu`: The **fitted mean response**, derived from the inverse link function applied to - `eta`.
-    - `glm_wt`: weights used in the iterative weighted least squares procedure The weights used in the iterative
-        weighted least squares (IWLS) procedure during GLM fitting.
-    - `num_iters`: number of iterations taken for the optimization algorithm to converge.
-    - `converged`: boolean indicating whether the optimization converged.
-    - `infor_inv`: **inverse of the Fisher Information matrix**, used for score tests  # for score test
-    - `resid`: The **residuals** from the model, used in score tests.
-         ⚠ **Note** These are not the working residuals from the IWLS algorithm
-    - `alpha`: The **dispersion parameter** in the Negative Binomial (NB) model, controlling overdispersion
-    """
-
-    beta: Array
-    se: Array
-    z: Array
-    p: Array
-    eta: Array
-    mu: Array
-    glm_wt: Array
-    num_iters: Array
-    converged: Array
-    infor_inv: Array  # for score test
-    resid: Array  # for score test, not the working resid!
-    alpha: Array  # dispersion parameter in NB model
 
 
 class GLM(eqx.Module):
