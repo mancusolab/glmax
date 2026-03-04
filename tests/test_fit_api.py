@@ -285,6 +285,49 @@ def test_gx_fit_forwards_test_hook_to_custom_fitter():
     assert jnp.allclose(state.p, jnp.zeros_like(state.p))
 
 
+def test_gx_fit_respects_init_when_alpha_init_is_omitted(monkeypatch):
+    X, y = _basic_data()
+    init = jnp.array([0.3, -0.2])
+    model = glmax.GLM(family=glmax.Gaussian())
+
+    def _fake_calc_eta_and_dispersion(self, X, y, offset_eta=0.0, max_iter=1000):
+        del self, X, y, offset_eta, max_iter
+        return jnp.full((4,), 99.0), jnp.asarray(7.0)
+
+    fit_module = importlib.import_module("glmax.fit")
+    original_irls = fit_module.irls
+
+    def _fake_irls(X, y, family, solver, eta, max_iter, tol, step_size, offset_eta, alpha_init):
+        del y, family, solver, max_iter, tol, step_size, offset_eta
+        assert jnp.allclose(eta, init)
+        assert float(alpha_init) == 7.0
+        return infer.IRLSState(
+            beta=jnp.zeros((X.shape[1],)),
+            num_iters=0,
+            converged=jnp.asarray(True),
+            alpha=jnp.asarray(alpha_init),
+        )
+
+    monkeypatch.setattr(glmax.GLM, "calc_eta_and_dispersion", _fake_calc_eta_and_dispersion)
+    monkeypatch.setattr(fit_module, "irls", _fake_irls)
+
+    try:
+        state = glmax.fit(model, X, y, init=init)
+    finally:
+        monkeypatch.setattr(fit_module, "irls", original_irls)
+
+    assert isinstance(state, glmax.GLMState)
+
+
+def test_default_fitter_accepts_tests_option_without_error():
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Gaussian())
+
+    state = glmax.fit(model, X, y, fitter=glmax.DefaultFitter(), tests=_ZeroPValueTestHook())
+
+    assert isinstance(state, glmax.GLMState)
+
+
 def test_gx_fit_matches_glm_fit_convergence_metadata():
     X, y = _basic_data()
     model = glmax.GLM(family=glmax.Gaussian())

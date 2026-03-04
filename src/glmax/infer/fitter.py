@@ -34,4 +34,5 @@ class DefaultFitter(AbstractFitter, strict=True):
         options: dict[str, object] | None = None,
     ) -> GLMState:
         fit_options = {} if options is None else dict(options)
+        fit_options.pop("test_hook", None)
         return model.fit(X, y, offset_eta=offset, init=init, **fit_options)

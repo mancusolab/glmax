@@ -101,3 +101,5 @@ This phase implements and tests:
 - `mkdocs build`: passed.
 - `pytest -p no:capture tests/test_glm.py`: passed (12 tests).
 - `pytest -p no:capture tests`: passed (56 tests).
+- Verification context: local worktree `/Users/nicholas/Projects/glmax/.worktrees/glm-fit-api`.
+- Runtime context: Python 3.11.8, pytest 9.0.2 (from command output).
