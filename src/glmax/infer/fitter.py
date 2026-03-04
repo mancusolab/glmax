@@ -34,5 +34,17 @@ class DefaultFitter(AbstractFitter, strict=True):
         options: dict[str, object] | None = None,
     ) -> GLMState:
         fit_options = {} if options is None else dict(options)
-        fit_options.pop("test_hook", None)
-        return model.fit(X, y, offset_eta=offset, init=init, **fit_options)
+        from ..fit import _run_default_pipeline
+
+        covariance = fit_options.pop("se_estimator", None)
+        test_hook = fit_options.pop("test_hook", None)
+        return _run_default_pipeline(
+            model,
+            X,
+            y,
+            offset,
+            init=init,
+            covariance=covariance,
+            tests=test_hook,
+            options=fit_options,
+        )

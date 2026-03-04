@@ -326,6 +326,7 @@ def test_default_fitter_accepts_tests_option_without_error():
     state = glmax.fit(model, X, y, fitter=glmax.DefaultFitter(), tests=_ZeroPValueTestHook())
 
     assert isinstance(state, glmax.GLMState)
+    assert jnp.allclose(state.p, jnp.zeros_like(state.p))
 
 
 def test_gx_fit_matches_glm_fit_convergence_metadata():
