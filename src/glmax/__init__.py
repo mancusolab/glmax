@@ -19,14 +19,17 @@ from .fit import (
 )
 from .glm import (
     GLM as GLM,
-    GLMState as GLMState,
 )
 from .infer import (
+    AbstractFitter as AbstractFitter,
     CGSolver as CGSolver,
     CholeskySolver as CholeskySolver,
+    DefaultFitter as DefaultFitter,
     FisherInfoError as FisherInfoError,
+    GLMState as GLMState,
     HuberError as HuberError,
     irls as irls,
+    IRLSState as IRLSState,
     QRSolver as QRSolver,
 )
 

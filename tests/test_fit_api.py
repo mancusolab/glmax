@@ -5,6 +5,7 @@ import equinox as eqx
 import jax.numpy as jnp
 
 import glmax
+import glmax.infer as infer
 
 
 def _basic_data():
@@ -18,6 +19,36 @@ def _basic_data():
     )
     y = jnp.array([1.0, 2.0, 3.0, 4.0])
     return X, y
+
+
+class _SentinelFitter(glmax.AbstractFitter):
+    def __call__(
+        self,
+        model,
+        X,
+        y,
+        offset,
+        *,
+        init=None,
+        options=None,
+    ):
+        state = model.fit(X, y, offset_eta=offset, init=init, **(options or {}))
+        return state._replace(num_iters=jnp.asarray(-1))
+
+
+class _IdentityCovariance(infer.AbstractStdErrEstimator):
+    def __call__(
+        self,
+        family,
+        X,
+        y,
+        eta,
+        mu,
+        weight,
+        alpha=0.0,
+    ):
+        del family, y, eta, mu, weight, alpha
+        return jnp.eye(X.shape[1])
 
 
 def test_gx_fit_returns_glmstate_for_gaussian():
@@ -51,6 +82,35 @@ def test_gx_fit_smoke_for_poisson_defaults():
     state = glmax.fit(glmax.GLM(family=glmax.Poisson()), X, y)
 
     assert isinstance(state, glmax.GLMState)
+
+
+def test_gx_fit_accepts_custom_fitter_strategy():
+    X, y = _basic_data()
+
+    state = glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, fitter=_SentinelFitter())
+
+    assert state.num_iters == -1
+
+
+def test_gx_fit_accepts_solver_strategy_swap():
+    X, y = _basic_data()
+
+    state = glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, solver=glmax.QRSolver())
+
+    assert isinstance(state, glmax.GLMState)
+
+
+def test_gx_fit_accepts_covariance_strategy_swap():
+    X, y = _basic_data()
+
+    state = glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, covariance=_IdentityCovariance())
+
+    assert jnp.allclose(state.se, jnp.ones_like(state.se))
+
+
+def test_infer_state_contracts_are_exported():
+    assert glmax.GLMState is infer.GLMState
+    assert "beta" in infer.IRLSState._fields
 
 
 def test_gx_fit_rejects_non_2d_X():
@@ -159,7 +219,7 @@ def test_gx_fit_rejects_invalid_covariance_strategy():
 def test_gx_fit_rejects_unsupported_fitter_strategy():
     X, y = _basic_data()
 
-    with pytest.raises(TypeError, match="fitter strategy is not supported"):
+    with pytest.raises(TypeError, match="fitter must implement AbstractFitter"):
         glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, fitter=object())
 
 
