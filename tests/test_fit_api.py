@@ -201,6 +201,28 @@ def test_gx_fit_matches_glm_fit_convergence_metadata():
     assert bool(gx_state.converged) == bool(glm_state.converged)
 
 
+def test_gx_fit_matches_glm_fit_nb_with_non_default_max_iter():
+    X = jnp.array(
+        [
+            [1.0, 0.1],
+            [1.0, 0.2],
+            [1.0, 0.4],
+            [1.0, 0.8],
+            [1.0, 1.6],
+            [1.0, 3.2],
+        ]
+    )
+    y = jnp.array([1.0, 1.0, 2.0, 3.0, 6.0, 8.0])
+    model = glmax.GLM(family=glmax.NegativeBinomial())
+
+    gx_state = glmax.fit(model, X, y, options={"max_iter": 7})
+    glm_state = model.fit(X, y, max_iter=7)
+
+    assert jnp.allclose(gx_state.beta, glm_state.beta)
+    assert gx_state.num_iters == glm_state.num_iters
+    assert bool(gx_state.converged) == bool(glm_state.converged)
+
+
 def test_gx_fit_rejects_non_2d_X():
     _, y = _basic_data()
     X = jnp.array([1.0, 2.0, 3.0, 4.0])

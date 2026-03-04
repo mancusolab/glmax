@@ -39,7 +39,7 @@ def _run_default_pipeline(
         raise TypeError(f"Unknown fit options: {unknown_keys}")
 
     if init is None or alpha_init is None:
-        eta_init, alpha_init = model.calc_eta_and_dispersion(X, y, offset, max_iter=max_iter)
+        eta_init, alpha_init = model.calc_eta_and_dispersion(X, y, offset)
     else:
         eta_init = jnp.asarray(init)
 
