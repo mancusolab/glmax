@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pytest
 
@@ -19,6 +21,22 @@ def _basic_data():
     )
     y = jnp.array([1.0, 2.0, 3.0, 4.0])
     return X, y
+
+
+def _state_parity_fields():
+    return (
+        "beta",
+        "se",
+        "p",
+        "eta",
+        "mu",
+        "glm_wt",
+        "num_iters",
+        "converged",
+        "infor_inv",
+        "resid",
+        "alpha",
+    )
 
 
 class _SentinelFitter(glmax.AbstractFitter):
@@ -109,6 +127,45 @@ def test_gx_fit_smoke_for_poisson_defaults():
     state = glmax.fit(glmax.GLM(family=glmax.Poisson()), X, y)
 
     assert isinstance(state, glmax.GLMState)
+
+
+@pytest.mark.parametrize(
+    "family",
+    (
+        glmax.Gaussian(),
+        glmax.Poisson(),
+        glmax.Binomial(),
+        glmax.NegativeBinomial(),
+    ),
+)
+def test_wrapper_and_direct_entrypoints_have_output_parity(family):
+    X = jnp.array(
+        [
+            [1.0, 0.1],
+            [1.0, 0.3],
+            [1.0, 0.7],
+            [1.0, 1.1],
+            [1.0, 1.7],
+            [1.0, 2.3],
+        ]
+    )
+    if isinstance(family, glmax.Binomial):
+        y = jnp.array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
+    elif isinstance(family, glmax.NegativeBinomial):
+        y = jnp.array([1.0, 1.0, 2.0, 3.0, 6.0, 8.0])
+    elif isinstance(family, glmax.Poisson):
+        y = jnp.array([1.0, 1.0, 2.0, 3.0, 4.0, 6.0])
+    else:
+        y = jnp.array([1.0, 1.4, 2.0, 2.8, 3.2, 4.1])
+
+    model = glmax.GLM(family=family)
+    direct_state = glmax.fit(model, X, y)
+    wrapped_state = model.fit(X, y)
+
+    for field in _state_parity_fields():
+        direct_value = getattr(direct_state, field)
+        wrapped_value = getattr(wrapped_state, field)
+        assert jnp.allclose(direct_value, wrapped_value)
 
 
 def test_gx_fit_accepts_custom_fitter_strategy():
@@ -221,6 +278,68 @@ def test_gx_fit_matches_glm_fit_nb_with_non_default_max_iter():
     assert jnp.allclose(gx_state.beta, glm_state.beta)
     assert gx_state.num_iters == glm_state.num_iters
     assert bool(gx_state.converged) == bool(glm_state.converged)
+
+
+def test_wrapper_and_direct_entrypoints_shape_failure_parity():
+    model = glmax.GLM(family=glmax.Gaussian())
+    X = jnp.array([1.0, 2.0, 3.0])
+    y = jnp.array([1.0, 2.0, 3.0])
+
+    with pytest.raises(Exception) as direct_error:
+        glmax.fit(model, X, y)
+    with pytest.raises(Exception) as wrapped_error:
+        model.fit(X, y)
+
+    assert isinstance(wrapped_error.value, type(direct_error.value))
+    assert str(direct_error.value) == str(wrapped_error.value)
+
+
+def test_wrapper_and_direct_entrypoints_invalid_runtime_parity():
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Poisson())
+    model = eqx.tree_at(lambda m: m.family.glink, model, glmax.Logit())
+
+    with pytest.raises(Exception) as direct_error:
+        glmax.fit(model, X, y)
+    with pytest.raises(Exception) as wrapped_error:
+        model.fit(X, y)
+
+    assert isinstance(wrapped_error.value, type(direct_error.value))
+    assert str(direct_error.value) == str(wrapped_error.value)
+
+
+def test_wrapper_and_direct_entrypoints_strategy_failure_parity():
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Gaussian())
+
+    with pytest.raises(Exception) as direct_error:
+        glmax.fit(model, X, y, covariance=object())
+    with pytest.raises(Exception) as wrapped_error:
+        model.fit(X, y, se_estimator=object())
+
+    assert isinstance(wrapped_error.value, type(direct_error.value))
+    assert str(direct_error.value) == str(wrapped_error.value)
+
+
+def test_glm_fit_emits_no_warning_by_default(monkeypatch):
+    monkeypatch.delenv("GLMAX_WARN_GLM_FIT_COMPAT", raising=False)
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Gaussian())
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        model.fit(X, y)
+
+    assert captured == []
+
+
+def test_glm_fit_emits_opt_in_compat_warning(monkeypatch):
+    monkeypatch.setenv("GLMAX_WARN_GLM_FIT_COMPAT", "1")
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Gaussian())
+
+    with pytest.warns(UserWarning, match="GLM.fit is a compatibility wrapper over glmax.fit"):
+        model.fit(X, y)
 
 
 def test_gx_fit_rejects_non_2d_X():
