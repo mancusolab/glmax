@@ -1,17 +1,11 @@
-from typing import NamedTuple, Tuple
+from typing import Tuple
 
-from jax import Array, lax, numpy as jnp
+from jax import lax, numpy as jnp
 from jaxtyping import ArrayLike, ScalarLike
 
 from ..family.dist import ExponentialFamily
 from .solve import AbstractLinearSolver
-
-
-class IRLSState(NamedTuple):
-    beta: Array
-    num_iters: int
-    converged: Array
-    alpha: Array
+from .state import IRLSState
 
 
 # @eqx.filter_jit

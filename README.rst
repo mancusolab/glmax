@@ -49,7 +49,23 @@ Users can download the latest repository and then use ``pip``:
 
 Get Started with Example
 ========================
-TBD
+.. code:: python
+
+    import glmax as gx
+
+    model = gx.GLM(family=gx.Gaussian())
+    state = gx.fit(model, X, y)
+
+Use ``gx.fit(...)`` as the preferred API for new code.
+
+Migration guidance for legacy callers:
+
+* ``model.fit(X, y, offset_eta=offset)`` -> ``gx.fit(model, X, y, offset=offset)``
+* ``model.fit(..., se_estimator=est)`` -> ``gx.fit(..., covariance=est)``
+* ``model.fit(..., max_iter=..., tol=..., step_size=..., alpha_init=...)`` -> ``gx.fit(..., options={...})``
+
+``GLM.fit(...)`` remains available as a compatibility wrapper and can emit an opt-in
+compatibility warning when ``GLMAX_WARN_GLM_FIT_COMPAT=1``.
 
 .. _Notes:
 .. |Notes| replace:: **Notes**

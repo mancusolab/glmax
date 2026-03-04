@@ -1,4 +1,10 @@
-from typing import NamedTuple, Tuple
+import os
+import warnings
+
+from contextvars import ContextVar
+from typing import Tuple
+
+import numpy as np
 
 import equinox as eqx
 
@@ -8,47 +14,13 @@ from jaxtyping import ArrayLike, ScalarLike
 
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
 from .family.utils import t_cdf
-from .infer.optimize import irls
+from .infer.result import GLMState
 from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
+from .infer.tests import AbstractHypothesisTest
 
 
-class GLMState(NamedTuple):
-    """
-    Represents the state of a Generalized Linear Model (GLM) during fitting.
-    This class stores the key parameters and intermediate results from
-    a GLM estimation process.
-
-    **Attributes:**
-
-    - `beta`: Estimated regression coefficients.
-    - `se`: Standard errors of the estimated coefficients.
-    - `z`: Z-scores for hypothesis testing of each coefficient, computed as `beta / se`.
-    - `p`: P-values associated with each coefficient.
-    - `eta`: the transformed mean response, linear component eta.
-    - `mu`: The **fitted mean response**, derived from the inverse link function applied to - `eta`.
-    - `glm_wt`: weights used in the iterative weighted least squares procedure The weights used in the iterative
-        weighted least squares (IWLS) procedure during GLM fitting.
-    - `num_iters`: number of iterations taken for the optimization algorithm to converge.
-    - `converged`: boolean indicating whether the optimization converged.
-    - `infor_inv`: **inverse of the Fisher Information matrix**, used for score tests  # for score test
-    - `resid`: The **residuals** from the model, used in score tests.
-         ⚠ **Note** These are not the working residuals from the IWLS algorithm
-    - `alpha`: The **dispersion parameter** in the Negative Binomial (NB) model, controlling overdispersion
-    """
-
-    beta: Array
-    se: Array
-    z: Array
-    p: Array
-    eta: Array
-    mu: Array
-    glm_wt: Array
-    num_iters: Array
-    converged: Array
-    infor_inv: Array  # for score test
-    resid: Array  # for score test, not the working resid!
-    alpha: Array  # dispersion parameter in NB model
+_compat_warning_active: ContextVar[bool] = ContextVar("_compat_warning_active", default=False)
 
 
 class GLM(eqx.Module):
@@ -100,33 +72,6 @@ class GLM(eqx.Module):
 
         return eta, disp
 
-    def wald_test(self, statistic: ArrayLike, df: int) -> Array:
-        """
-        Computes the Wald test statistic and corresponding p-value.
-
-        The Wald test is used to assess the significance of estimated coefficients
-        in a regression model. It tests the null hypothesis that a parameter (or
-        set of parameters) is equal to zero.
-
-        Under the assumption that the **Maximum Likelihood Estimator (MLE)** follows:
-
-        `statistic: The test statistic, typically beta / SE(beta), where `SE` is
-        the standard error of the estimated coefficient.
-
-        `df: The degrees of freedom associated with the test.
-        For a single coefficient, `df=1`, whereas for a joint test involving multiple coefficients,
-        `df` corresponds to the number of parameters tested.
-
-        Returns:
-        :return: The Wald test statistic's corresponding p-value.
-        """
-        if isinstance(self.family, Gaussian):
-            pval = 2 * t_cdf(-abs(statistic), df)
-        else:
-            pval = 2 * norm.sf(abs(statistic))
-
-        return pval
-
     def fit(
         self,
         X: ArrayLike,
@@ -161,51 +106,65 @@ class GLM(eqx.Module):
         -  A [`glmax.GLMState`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
-        if init is None or alpha_init is None:
-            init, alpha_init = self.calc_eta_and_dispersion(X, y, offset_eta)
+        warn_enabled = os.environ.get("GLMAX_WARN_GLM_FIT_COMPAT", "").lower() in {"1", "true", "yes"}
+        should_warn = warn_enabled and not _compat_warning_active.get()
+        if should_warn:
+            warnings.warn(
+                "GLM.fit is a compatibility wrapper over glmax.fit; prefer glmax.fit for new code.",
+                UserWarning,
+                stacklevel=2,
+            )
 
-        beta, n_iter, converged, alpha = irls(
-            X,
-            y,
-            self.family,
-            self.solver,
-            init,
-            max_iter,
-            tol,
-            step_size,
-            offset_eta,
-            alpha_init,
-        )
+        from .fit import fit as gx_fit
 
-        eta = X @ beta + offset_eta
-        mu = self.family.glink.inverse(eta)
-        resid = (y - mu) * self.family.glink.deriv(mu)  # note: this is the working resid
+        class _ModelWaldHook(AbstractHypothesisTest):
+            model: "GLM"
 
-        _, _, weight = self.family.calc_weight(X, y, eta, alpha)
+            def __call__(self, statistic: Array, df: int, family: ExponentialFamily) -> Array:
+                del family
+                return self.model.wald_test(statistic, df)
 
-        resid_covar = se_estimator(self.family, X, y, eta, mu, weight, alpha)
-        beta_se = jnp.sqrt(jnp.diag(resid_covar))
+        if jnp.ndim(offset_eta) == 0:
+            offset_value = np.asarray(offset_eta)
+            if offset_value.dtype.kind in ("i", "u", "f"):
+                offset_scalar = offset_value.item()
+                x_shape = np.shape(X)
+                if len(x_shape) >= 1:
+                    offset = None if offset_scalar == 0.0 else jnp.full((x_shape[0],), offset_scalar)
+                else:
+                    offset = offset_eta
+            else:
+                offset = offset_eta
+        else:
+            offset = offset_eta
 
-        df = X.shape[0] - X.shape[1]
-        beta = beta.squeeze()  # (p,)
-        stat = beta / beta_se
+        token = None
+        if should_warn:
+            token = _compat_warning_active.set(True)
+        try:
+            return gx_fit(
+                self,
+                X,
+                y,
+                offset=offset,
+                covariance=se_estimator,
+                tests=_ModelWaldHook(self),
+                init=init,
+                options={
+                    "alpha_init": alpha_init,
+                    "max_iter": max_iter,
+                    "tol": tol,
+                    "step_size": step_size,
+                },
+            )
+        finally:
+            if token is not None:
+                _compat_warning_active.reset(token)
 
-        pval_wald = self.wald_test(stat, df)
-
-        return GLMState(
-            beta,
-            beta_se,
-            stat,
-            pval_wald,
-            eta,
-            mu,
-            weight,
-            n_iter,
-            converged,
-            resid_covar,
-            resid,
-            alpha,
-        )
+    def wald_test(self, statistic: ArrayLike, df: int) -> Array:
+        if isinstance(self.family, Gaussian):
+            return 2 * t_cdf(-abs(statistic), df)
+        return 2 * norm.sf(abs(statistic))
 
 
 GLM.__init__.__doc__ = r"""**Arguments:**

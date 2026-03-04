@@ -28,7 +28,15 @@ pip install .
 
 ## Get Started with Example
 
-TBD
+```python
+import glmax as gx
+
+model = gx.GLM(family=gx.Gaussian())
+state = gx.fit(model, X, y)
+```
+
+`gx.fit(...)` is the recommended API for new code.
+`GLM.fit(...)` remains available as a compatibility wrapper.
 
 ## Notes
 

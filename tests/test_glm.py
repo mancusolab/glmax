@@ -93,8 +93,7 @@ def test_poisson(getkey, solver):
     sm_state = sm_poi.fit()
 
     # solve using glmax functions
-    glmax_poi = glmax.GLM(family=glmax.Poisson(), solver=solver)
-    glm_state = glmax_poi.fit(X, y)
+    glm_state = glmax.fit(glmax.GLM(family=glmax.Poisson(), solver=solver), X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, atol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, atol=1e-3)
@@ -115,8 +114,7 @@ def test_normal(getkey, solver):
     sm_state = sm_norm.fit()
 
     # solve using glmax functions
-    glmax_normal = glmax.GLM(family=glmax.Gaussian(), solver=solver)
-    glm_state = glmax_normal.fit(X, y)
+    glm_state = glmax.fit(glmax.GLM(family=glmax.Gaussian(), solver=solver), X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
@@ -137,8 +135,7 @@ def test_logit(getkey, solver):
     sm_state = sm_logit.fit()
 
     # solve using glmax functions
-    glmax_logit = glmax.GLM(family=glmax.Binomial(), solver=solver)
-    glm_state = glmax_logit.fit(X, y)
+    glm_state = glmax.fit(glmax.GLM(family=glmax.Binomial(), solver=solver), X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
@@ -154,8 +151,12 @@ def test_NegativeBinomial(getkey, solver):
     # Simulate NegativeBinomial regression data
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
 
-    jaxqtl_nb = glmax.GLM(family=glmax.NegativeBinomial(), solver=solver)
-    glm_state = jaxqtl_nb.fit(X, y, tol=1e-8)
+    glm_state = glmax.fit(
+        glmax.GLM(family=glmax.NegativeBinomial(), solver=solver),
+        X,
+        y,
+        options={"tol": 1e-8},
+    )
 
     # solve using statsmodel method (ground truth)
     sm_negbin = sm.GLM(np.array(y), np.array(X), family=sm.families.NegativeBinomial(alpha=glm_state.alpha))
@@ -167,3 +168,5 @@ def test_NegativeBinomial(getkey, solver):
     assert_array_eq(glm_state.beta, sm_beta, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_se, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_p, rtol=1e-3)
+    assert glm_state.num_iters >= 0
+    assert bool(glm_state.converged) in (True, False)
