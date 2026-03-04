@@ -3,15 +3,22 @@ import warnings
 
 from typing import Tuple
 
+import numpy as np
+
 import equinox as eqx
 
 from jax import Array, numpy as jnp
+from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
+from .family.utils import t_cdf
 from .infer.result import GLMState
 from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
+
+
+_compat_warning_active = False
 
 
 class GLM(eqx.Module):
@@ -97,7 +104,10 @@ class GLM(eqx.Module):
         -  A [`glmax.GLMState`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
-        if os.environ.get("GLMAX_WARN_GLM_FIT_COMPAT", "").lower() in {"1", "true", "yes"}:
+        global _compat_warning_active
+        warn_enabled = os.environ.get("GLMAX_WARN_GLM_FIT_COMPAT", "").lower() in {"1", "true", "yes"}
+        should_warn = warn_enabled and not _compat_warning_active
+        if should_warn:
             warnings.warn(
                 "GLM.fit is a compatibility wrapper over glmax.fit; prefer glmax.fit for new code.",
                 UserWarning,
@@ -107,24 +117,40 @@ class GLM(eqx.Module):
         from .fit import fit as gx_fit
 
         if jnp.ndim(offset_eta) == 0:
-            offset = None if float(offset_eta) == 0.0 else jnp.full((X.shape[0],), offset_eta)
+            offset_value = np.asarray(offset_eta)
+            if offset_value.dtype.kind in ("i", "u", "f"):
+                offset_scalar = offset_value.item()
+                offset = None if offset_scalar == 0.0 else jnp.full((X.shape[0],), offset_scalar)
+            else:
+                offset = offset_eta
         else:
             offset = offset_eta
 
-        return gx_fit(
-            self,
-            X,
-            y,
-            offset=offset,
-            covariance=se_estimator,
-            init=init,
-            options={
-                "alpha_init": alpha_init,
-                "max_iter": max_iter,
-                "tol": tol,
-                "step_size": step_size,
-            },
-        )
+        if should_warn:
+            _compat_warning_active = True
+        try:
+            return gx_fit(
+                self,
+                X,
+                y,
+                offset=offset,
+                covariance=se_estimator,
+                init=init,
+                options={
+                    "alpha_init": alpha_init,
+                    "max_iter": max_iter,
+                    "tol": tol,
+                    "step_size": step_size,
+                },
+            )
+        finally:
+            if should_warn:
+                _compat_warning_active = False
+
+    def wald_test(self, statistic: ArrayLike, df: int) -> Array:
+        if isinstance(self.family, Gaussian):
+            return 2 * t_cdf(-abs(statistic), df)
+        return 2 * norm.sf(abs(statistic))
 
 
 GLM.__init__.__doc__ = r"""**Arguments:**

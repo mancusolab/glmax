@@ -335,6 +335,19 @@ def test_wrapper_and_direct_entrypoints_offset_failure_parity():
     assert str(direct_error.value) == str(wrapped_error.value)
 
 
+def test_wrapper_and_direct_entrypoints_invalid_scalar_offset_parity():
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Gaussian())
+
+    with pytest.raises(Exception) as direct_error:
+        glmax.fit(model, X, y, offset="invalid")
+    with pytest.raises(Exception) as wrapped_error:
+        model.fit(X, y, offset_eta="invalid")
+
+    assert isinstance(wrapped_error.value, type(direct_error.value))
+    assert str(direct_error.value) == str(wrapped_error.value)
+
+
 def test_glm_fit_emits_no_warning_by_default(monkeypatch):
     monkeypatch.delenv("GLMAX_WARN_GLM_FIT_COMPAT", raising=False)
     X, y = _basic_data()
@@ -363,6 +376,36 @@ def test_glm_fit_emits_opt_in_compat_warning_for_true(monkeypatch):
 
     with pytest.warns(UserWarning, match="GLM.fit is a compatibility wrapper over glmax.fit"):
         model.fit(X, y)
+
+
+def test_glm_fit_emits_single_warning_for_nb_call(monkeypatch):
+    monkeypatch.setenv("GLMAX_WARN_GLM_FIT_COMPAT", "1")
+    X = jnp.array(
+        [
+            [1.0, 0.1],
+            [1.0, 0.2],
+            [1.0, 0.4],
+            [1.0, 0.8],
+        ]
+    )
+    y = jnp.array([1.0, 1.0, 2.0, 3.0])
+    model = glmax.GLM(family=glmax.NegativeBinomial())
+
+    with pytest.warns(UserWarning, match="GLM.fit is a compatibility wrapper over glmax.fit") as record:
+        model.fit(X, y)
+
+    assert len(record) == 1
+
+
+def test_wrapper_and_direct_hypothesis_method_parity():
+    model = glmax.GLM(family=glmax.Gaussian())
+    statistic = jnp.array([0.7, 1.2, -0.3])
+    df = 10
+
+    wrapper_p = model.wald_test(statistic, df)
+    direct_hook_p = infer.WaldTest()(statistic, df, model.family)
+
+    assert jnp.allclose(wrapper_p, direct_hook_p)
 
 
 def test_gx_fit_rejects_non_2d_X():
