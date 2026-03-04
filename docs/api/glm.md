@@ -28,7 +28,7 @@ state = gx.fit(
 ```
 
 `state` is a `gx.GLMState` with fields:
-`beta`, `se`, `p`, `eta`, `mu`, `glm_wt`, `num_iters`, `converged`, `infor_inv`, `resid`, `alpha`.
+`beta`, `se`, `z`, `p`, `eta`, `mu`, `glm_wt`, `num_iters`, `converged`, `infor_inv`, `resid`, `alpha`.
 
 ## Migration From `GLM.fit`
 

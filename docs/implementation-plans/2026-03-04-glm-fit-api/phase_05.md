@@ -32,7 +32,7 @@ This phase implements and tests:
 **Files:**
 - Create: `docs/api/glm.md`
 - Modify: `docs/index.md:1-120`
-- Modify: `mkdocs.yml:100-130`
+- Verify: `mkdocs.yml` nav already references `api/glm.md` (no edit required)
 
 **Implementation:**
 - Create API page content showing `gx.fit(...)` as preferred usage.
