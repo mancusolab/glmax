@@ -1,3 +1,4 @@
+import importlib
 import warnings
 
 import numpy as np
@@ -168,6 +169,38 @@ def test_wrapper_and_direct_entrypoints_have_output_parity(family):
         assert jnp.allclose(direct_value, wrapped_value)
 
 
+def test_glm_fit_delegates_to_package_fit(monkeypatch):
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Gaussian())
+    expected = glmax.fit(model, X, y)
+    fit_module = importlib.import_module("glmax.fit")
+    calls = {"count": 0}
+
+    def _fake_fit(*args, **kwargs):
+        calls["count"] += 1
+        assert args[0] is model
+        return expected
+
+    monkeypatch.setattr(fit_module, "fit", _fake_fit)
+
+    state = model.fit(X, y)
+    assert calls["count"] == 1
+    assert state == expected
+
+
+def test_wrapper_successfully_maps_offset_and_covariance_parameters():
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Gaussian())
+    offset = jnp.array([0.1, 0.0, -0.1, 0.2])
+    covariance = _IdentityCovariance()
+
+    direct_state = glmax.fit(model, X, y, offset=offset, covariance=covariance)
+    wrapped_state = model.fit(X, y, offset_eta=offset, se_estimator=covariance)
+
+    for field in _state_parity_fields():
+        assert jnp.allclose(getattr(direct_state, field), getattr(wrapped_state, field))
+
+
 def test_gx_fit_accepts_custom_fitter_strategy():
     X, y = _basic_data()
 
@@ -285,9 +318,9 @@ def test_wrapper_and_direct_entrypoints_shape_failure_parity():
     X = jnp.array([1.0, 2.0, 3.0])
     y = jnp.array([1.0, 2.0, 3.0])
 
-    with pytest.raises(Exception) as direct_error:
+    with pytest.raises(ValueError) as direct_error:
         glmax.fit(model, X, y)
-    with pytest.raises(Exception) as wrapped_error:
+    with pytest.raises(ValueError) as wrapped_error:
         model.fit(X, y)
 
     assert isinstance(wrapped_error.value, type(direct_error.value))
@@ -299,9 +332,9 @@ def test_wrapper_and_direct_entrypoints_invalid_runtime_parity():
     model = glmax.GLM(family=glmax.Poisson())
     model = eqx.tree_at(lambda m: m.family.glink, model, glmax.Logit())
 
-    with pytest.raises(Exception) as direct_error:
+    with pytest.raises(ValueError) as direct_error:
         glmax.fit(model, X, y)
-    with pytest.raises(Exception) as wrapped_error:
+    with pytest.raises(ValueError) as wrapped_error:
         model.fit(X, y)
 
     assert isinstance(wrapped_error.value, type(direct_error.value))
@@ -312,9 +345,9 @@ def test_wrapper_and_direct_entrypoints_strategy_failure_parity():
     X, y = _basic_data()
     model = glmax.GLM(family=glmax.Gaussian())
 
-    with pytest.raises(Exception) as direct_error:
+    with pytest.raises(TypeError) as direct_error:
         glmax.fit(model, X, y, covariance=object())
-    with pytest.raises(Exception) as wrapped_error:
+    with pytest.raises(TypeError) as wrapped_error:
         model.fit(X, y, se_estimator=object())
 
     assert isinstance(wrapped_error.value, type(direct_error.value))
@@ -326,9 +359,9 @@ def test_wrapper_and_direct_entrypoints_offset_failure_parity():
     offset = jnp.array([0.0, 0.0, 0.0])
     model = glmax.GLM(family=glmax.Gaussian())
 
-    with pytest.raises(Exception) as direct_error:
+    with pytest.raises(ValueError) as direct_error:
         glmax.fit(model, X, y, offset=offset)
-    with pytest.raises(Exception) as wrapped_error:
+    with pytest.raises(ValueError) as wrapped_error:
         model.fit(X, y, offset_eta=offset)
 
     assert isinstance(wrapped_error.value, type(direct_error.value))
@@ -339,9 +372,9 @@ def test_wrapper_and_direct_entrypoints_invalid_scalar_offset_parity():
     X, y = _basic_data()
     model = glmax.GLM(family=glmax.Gaussian())
 
-    with pytest.raises(Exception) as direct_error:
+    with pytest.raises(TypeError) as direct_error:
         glmax.fit(model, X, y, offset="invalid")
-    with pytest.raises(Exception) as wrapped_error:
+    with pytest.raises(TypeError) as wrapped_error:
         model.fit(X, y, offset_eta="invalid")
 
     assert isinstance(wrapped_error.value, type(direct_error.value))

@@ -1,6 +1,7 @@
 import os
 import warnings
 
+from contextvars import ContextVar
 from typing import Tuple
 
 import numpy as np
@@ -18,7 +19,7 @@ from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
 
-_compat_warning_active = False
+_compat_warning_active: ContextVar[bool] = ContextVar("_compat_warning_active", default=False)
 
 
 class GLM(eqx.Module):
@@ -104,9 +105,8 @@ class GLM(eqx.Module):
         -  A [`glmax.GLMState`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
-        global _compat_warning_active
         warn_enabled = os.environ.get("GLMAX_WARN_GLM_FIT_COMPAT", "").lower() in {"1", "true", "yes"}
-        should_warn = warn_enabled and not _compat_warning_active
+        should_warn = warn_enabled and not _compat_warning_active.get()
         if should_warn:
             warnings.warn(
                 "GLM.fit is a compatibility wrapper over glmax.fit; prefer glmax.fit for new code.",
@@ -120,14 +120,19 @@ class GLM(eqx.Module):
             offset_value = np.asarray(offset_eta)
             if offset_value.dtype.kind in ("i", "u", "f"):
                 offset_scalar = offset_value.item()
-                offset = None if offset_scalar == 0.0 else jnp.full((X.shape[0],), offset_scalar)
+                x_shape = np.shape(X)
+                if len(x_shape) >= 1:
+                    offset = None if offset_scalar == 0.0 else jnp.full((x_shape[0],), offset_scalar)
+                else:
+                    offset = offset_eta
             else:
                 offset = offset_eta
         else:
             offset = offset_eta
 
+        token = None
         if should_warn:
-            _compat_warning_active = True
+            token = _compat_warning_active.set(True)
         try:
             return gx_fit(
                 self,
@@ -144,8 +149,8 @@ class GLM(eqx.Module):
                 },
             )
         finally:
-            if should_warn:
-                _compat_warning_active = False
+            if token is not None:
+                _compat_warning_active.reset(token)
 
     def wald_test(self, statistic: ArrayLike, df: int) -> Array:
         if isinstance(self.family, Gaussian):
