@@ -1,14 +1,14 @@
+import os
+import warnings
+
 from typing import Tuple
 
 import equinox as eqx
 
 from jax import Array, numpy as jnp
-from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
-from .family.utils import t_cdf
-from .infer.optimize import irls
 from .infer.result import GLMState
 from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
@@ -63,33 +63,6 @@ class GLM(eqx.Module):
 
         return eta, disp
 
-    def wald_test(self, statistic: ArrayLike, df: int) -> Array:
-        """
-        Computes the Wald test statistic and corresponding p-value.
-
-        The Wald test is used to assess the significance of estimated coefficients
-        in a regression model. It tests the null hypothesis that a parameter (or
-        set of parameters) is equal to zero.
-
-        Under the assumption that the **Maximum Likelihood Estimator (MLE)** follows:
-
-        `statistic: The test statistic, typically beta / SE(beta), where `SE` is
-        the standard error of the estimated coefficient.
-
-        `df: The degrees of freedom associated with the test.
-        For a single coefficient, `df=1`, whereas for a joint test involving multiple coefficients,
-        `df` corresponds to the number of parameters tested.
-
-        Returns:
-        :return: The Wald test statistic's corresponding p-value.
-        """
-        if isinstance(self.family, Gaussian):
-            pval = 2 * t_cdf(-abs(statistic), df)
-        else:
-            pval = 2 * norm.sf(abs(statistic))
-
-        return pval
-
     def fit(
         self,
         X: ArrayLike,
@@ -124,50 +97,33 @@ class GLM(eqx.Module):
         -  A [`glmax.GLMState`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
-        if init is None or alpha_init is None:
-            init, alpha_init = self.calc_eta_and_dispersion(X, y, offset_eta)
+        if os.environ.get("GLMAX_WARN_GLM_FIT_COMPAT", "").lower() in {"1", "true", "yes"}:
+            warnings.warn(
+                "GLM.fit is a compatibility wrapper over glmax.fit; prefer glmax.fit for new code.",
+                UserWarning,
+                stacklevel=2,
+            )
 
-        beta, n_iter, converged, alpha = irls(
+        from .fit import fit as gx_fit
+
+        if jnp.ndim(offset_eta) == 0:
+            offset = None if float(offset_eta) == 0.0 else jnp.full((X.shape[0],), offset_eta)
+        else:
+            offset = offset_eta
+
+        return gx_fit(
+            self,
             X,
             y,
-            self.family,
-            self.solver,
-            init,
-            max_iter,
-            tol,
-            step_size,
-            offset_eta,
-            alpha_init,
-        )
-
-        eta = X @ beta + offset_eta
-        mu = self.family.glink.inverse(eta)
-        resid = (y - mu) * self.family.glink.deriv(mu)  # note: this is the working resid
-
-        _, _, weight = self.family.calc_weight(X, y, eta, alpha)
-
-        resid_covar = se_estimator(self.family, X, y, eta, mu, weight, alpha)
-        beta_se = jnp.sqrt(jnp.diag(resid_covar))
-
-        df = X.shape[0] - X.shape[1]
-        beta = beta.squeeze()  # (p,)
-        stat = beta / beta_se
-
-        pval_wald = self.wald_test(stat, df)
-
-        return GLMState(
-            beta,
-            beta_se,
-            stat,
-            pval_wald,
-            eta,
-            mu,
-            weight,
-            n_iter,
-            converged,
-            resid_covar,
-            resid,
-            alpha,
+            offset=offset,
+            covariance=se_estimator,
+            init=init,
+            options={
+                "alpha_init": alpha_init,
+                "max_iter": max_iter,
+                "tol": tol,
+                "step_size": step_size,
+            },
         )
 
 
