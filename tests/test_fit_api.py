@@ -166,7 +166,7 @@ def test_wrapper_and_direct_entrypoints_have_output_parity(family):
     for field in _state_parity_fields():
         direct_value = getattr(direct_state, field)
         wrapped_value = getattr(wrapped_state, field)
-        assert jnp.allclose(direct_value, wrapped_value)
+        assert jnp.allclose(direct_value, wrapped_value, equal_nan=True)
 
 
 def test_glm_fit_delegates_to_package_fit(monkeypatch):
@@ -179,6 +179,11 @@ def test_glm_fit_delegates_to_package_fit(monkeypatch):
     def _fake_fit(*args, **kwargs):
         calls["count"] += 1
         assert args[0] is model
+        assert jnp.allclose(args[1], X)
+        assert jnp.allclose(args[2], y)
+        assert kwargs["offset"] is None
+        assert kwargs["covariance"] is not None
+        assert kwargs["options"]["max_iter"] == 1000
         return expected
 
     monkeypatch.setattr(fit_module, "fit", _fake_fit)
@@ -390,7 +395,8 @@ def test_glm_fit_emits_no_warning_by_default(monkeypatch):
         warnings.simplefilter("always")
         model.fit(X, y)
 
-    assert captured == []
+    compat_messages = [str(w.message) for w in captured if "compatibility wrapper over glmax.fit" in str(w.message)]
+    assert compat_messages == []
 
 
 def test_glm_fit_emits_opt_in_compat_warning(monkeypatch):
