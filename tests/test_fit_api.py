@@ -141,6 +141,17 @@ def test_gx_fit_accepts_custom_hypothesis_test_hook():
     assert jnp.allclose(state.p, jnp.zeros_like(state.p))
 
 
+def test_gx_fit_matches_glm_fit_convergence_metadata():
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Gaussian())
+
+    gx_state = glmax.fit(model, X, y)
+    glm_state = model.fit(X, y)
+
+    assert gx_state.num_iters == glm_state.num_iters
+    assert bool(gx_state.converged) == bool(glm_state.converged)
+
+
 def test_gx_fit_rejects_non_2d_X():
     _, y = _basic_data()
     X = jnp.array([1.0, 2.0, 3.0, 4.0])
