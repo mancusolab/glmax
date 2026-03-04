@@ -157,6 +157,10 @@ def fit(
         covariance = option_covariance
 
     if fitter is not None:
+        if covariance is not None:
+            fit_options["se_estimator"] = covariance
+        if tests is not None:
+            fit_options["test_hook"] = tests
         return fitter(model, X_arr, y_arr, offset_arr, init=init, options=fit_options)
 
     return _run_default_pipeline(

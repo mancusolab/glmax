@@ -36,6 +36,27 @@ class _SentinelFitter(glmax.AbstractFitter):
         return state._replace(num_iters=jnp.asarray(-1))
 
 
+class _OptionsAwareFitter(glmax.AbstractFitter):
+    def __call__(
+        self,
+        model,
+        X,
+        y,
+        offset,
+        *,
+        init=None,
+        options=None,
+    ):
+        options = {} if options is None else dict(options)
+        se_estimator = options.pop("se_estimator", infer.FisherInfoError())
+        test_hook = options.pop("test_hook", None)
+        state = model.fit(X, y, offset_eta=offset, init=init, se_estimator=se_estimator, **options)
+        if test_hook is not None:
+            p = test_hook(state.z, X.shape[0] - X.shape[1], model.family)
+            state = state._replace(p=p)
+        return state
+
+
 class _IdentityCovariance(infer.AbstractStdErrEstimator):
     def __call__(
         self,
@@ -114,6 +135,20 @@ def test_gx_fit_accepts_covariance_strategy_swap():
     assert jnp.allclose(state.se, jnp.ones_like(state.se))
 
 
+def test_gx_fit_forwards_covariance_to_custom_fitter():
+    X, y = _basic_data()
+
+    state = glmax.fit(
+        glmax.GLM(family=glmax.Gaussian()),
+        X,
+        y,
+        fitter=_OptionsAwareFitter(),
+        covariance=_IdentityCovariance(),
+    )
+
+    assert jnp.allclose(state.se, jnp.ones_like(state.se))
+
+
 def test_infer_state_contracts_are_exported():
     assert glmax.GLMState is infer.GLMState
     assert "beta" in infer.IRLSState._fields
@@ -137,6 +172,20 @@ def test_gx_fit_accepts_custom_hypothesis_test_hook():
     X, y = _basic_data()
 
     state = glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, tests=_ZeroPValueTestHook())
+
+    assert jnp.allclose(state.p, jnp.zeros_like(state.p))
+
+
+def test_gx_fit_forwards_test_hook_to_custom_fitter():
+    X, y = _basic_data()
+
+    state = glmax.fit(
+        glmax.GLM(family=glmax.Gaussian()),
+        X,
+        y,
+        fitter=_OptionsAwareFitter(),
+        tests=_ZeroPValueTestHook(),
+    )
 
     assert jnp.allclose(state.p, jnp.zeros_like(state.p))
 
