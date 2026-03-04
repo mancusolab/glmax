@@ -14,6 +14,9 @@ from .family import (
     Poisson as Poisson,
     Power as Power,
 )
+from .fit import (
+    fit as fit,
+)
 from .glm import (
     GLM as GLM,
     GLMState as GLMState,
