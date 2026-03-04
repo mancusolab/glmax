@@ -37,6 +37,22 @@ def test_gx_fit_accepts_optional_offset():
     assert isinstance(state, glmax.GLMState)
 
 
+def test_gx_fit_smoke_for_poisson_defaults():
+    X = jnp.array(
+        [
+            [1.0, 0.0],
+            [1.0, 1.0],
+            [1.0, 0.5],
+            [1.0, 1.5],
+        ]
+    )
+    y = jnp.array([1.0, 2.0, 2.0, 3.0])
+
+    state = glmax.fit(glmax.GLM(family=glmax.Poisson()), X, y)
+
+    assert isinstance(state, glmax.GLMState)
+
+
 def test_gx_fit_rejects_non_2d_X():
     _, y = _basic_data()
     X = jnp.array([1.0, 2.0, 3.0, 4.0])
