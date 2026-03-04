@@ -5,6 +5,7 @@ from jaxtyping import ArrayLike
 
 from .family.dist import ExponentialFamily
 from .glm import GLM, GLMState
+from .infer.fitter import AbstractFitter, DefaultFitter
 from .infer.solve import AbstractLinearSolver
 from .infer.stderr import AbstractStdErrEstimator
 
@@ -29,8 +30,8 @@ def fit(
     init: ArrayLike | None = None,
     options: dict[str, object] | None = None,
 ) -> GLMState:
-    if fitter is not None:
-        raise TypeError("fitter strategy is not supported")
+    if fitter is not None and not isinstance(fitter, AbstractFitter):
+        raise TypeError("fitter must implement AbstractFitter")
     if tests is not None:
         raise TypeError("tests strategy is not supported")
     if solver is not None and not isinstance(solver, AbstractLinearSolver):
@@ -78,4 +79,6 @@ def fit(
     fit_options = {} if options is None else dict(options)
     if covariance is not None:
         fit_options["se_estimator"] = covariance
-    return model.fit(X_arr, y_arr, offset_eta=offset_arr, init=init, **fit_options)
+
+    fit_strategy = DefaultFitter() if fitter is None else fitter
+    return fit_strategy(model, X_arr, y_arr, offset_arr, init=init, options=fit_options)
