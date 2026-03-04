@@ -75,7 +75,7 @@ def fit(
     if solver is not None:
         model = GLM(family=model.family, solver=solver)
 
-    fit_options = options or {}
+    fit_options = {} if options is None else dict(options)
     if covariance is not None:
         fit_options["se_estimator"] = covariance
     return model.fit(X_arr, y_arr, offset_eta=offset_arr, init=init, **fit_options)

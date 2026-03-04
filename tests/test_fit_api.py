@@ -117,6 +117,22 @@ def test_gx_fit_rejects_non_numeric_X():
         glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
 
 
+def test_gx_fit_rejects_non_numeric_y():
+    X, y = _basic_data()
+    y = np.array(["1.0", "2.0", "3.0", "4.0"], dtype=str)
+
+    with pytest.raises(TypeError, match="y must have a numeric dtype"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
+
+
+def test_gx_fit_rejects_non_numeric_offset():
+    X, y = _basic_data()
+    offset = np.array(["0.0", "0.0", "0.0", "0.0"], dtype=str)
+
+    with pytest.raises(TypeError, match="offset must have a numeric dtype"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, offset=offset)
+
+
 def test_gx_fit_rejects_invalid_family_link_pair():
     X, y = _basic_data()
     model = glmax.GLM(family=glmax.Poisson())
