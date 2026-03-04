@@ -321,6 +321,20 @@ def test_wrapper_and_direct_entrypoints_strategy_failure_parity():
     assert str(direct_error.value) == str(wrapped_error.value)
 
 
+def test_wrapper_and_direct_entrypoints_offset_failure_parity():
+    X, y = _basic_data()
+    offset = jnp.array([0.0, 0.0, 0.0])
+    model = glmax.GLM(family=glmax.Gaussian())
+
+    with pytest.raises(Exception) as direct_error:
+        glmax.fit(model, X, y, offset=offset)
+    with pytest.raises(Exception) as wrapped_error:
+        model.fit(X, y, offset_eta=offset)
+
+    assert isinstance(wrapped_error.value, type(direct_error.value))
+    assert str(direct_error.value) == str(wrapped_error.value)
+
+
 def test_glm_fit_emits_no_warning_by_default(monkeypatch):
     monkeypatch.delenv("GLMAX_WARN_GLM_FIT_COMPAT", raising=False)
     X, y = _basic_data()
@@ -335,6 +349,15 @@ def test_glm_fit_emits_no_warning_by_default(monkeypatch):
 
 def test_glm_fit_emits_opt_in_compat_warning(monkeypatch):
     monkeypatch.setenv("GLMAX_WARN_GLM_FIT_COMPAT", "1")
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Gaussian())
+
+    with pytest.warns(UserWarning, match="GLM.fit is a compatibility wrapper over glmax.fit"):
+        model.fit(X, y)
+
+
+def test_glm_fit_emits_opt_in_compat_warning_for_true(monkeypatch):
+    monkeypatch.setenv("GLMAX_WARN_GLM_FIT_COMPAT", "true")
     X, y = _basic_data()
     model = glmax.GLM(family=glmax.Gaussian())
 
