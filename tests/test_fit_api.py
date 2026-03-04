@@ -1,9 +1,13 @@
+import numpy as np
+import pytest
+
+import equinox as eqx
 import jax.numpy as jnp
 
 import glmax
 
 
-def test_gx_fit_returns_glmstate_for_gaussian():
+def _basic_data():
     X = jnp.array(
         [
             [1.0, 0.0],
@@ -13,7 +17,122 @@ def test_gx_fit_returns_glmstate_for_gaussian():
         ]
     )
     y = jnp.array([1.0, 2.0, 3.0, 4.0])
+    return X, y
+
+
+def test_gx_fit_returns_glmstate_for_gaussian():
+    X, y = _basic_data()
 
     state = glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
 
     assert isinstance(state, glmax.GLMState)
+
+
+def test_gx_fit_accepts_optional_offset():
+    X, y = _basic_data()
+    offset = jnp.array([0.0, 0.1, -0.1, 0.0])
+
+    state = glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, offset=offset)
+
+    assert isinstance(state, glmax.GLMState)
+
+
+def test_gx_fit_rejects_non_2d_X():
+    _, y = _basic_data()
+    X = jnp.array([1.0, 2.0, 3.0, 4.0])
+
+    with pytest.raises(ValueError, match="X must be a 2D array"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
+
+
+def test_gx_fit_rejects_non_1d_y():
+    X, y = _basic_data()
+    y = y[:, None]
+
+    with pytest.raises(ValueError, match="y must be a 1D array"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
+
+
+def test_gx_fit_rejects_mismatched_sample_count():
+    X, y = _basic_data()
+    y = y[:3]
+
+    with pytest.raises(ValueError, match="X and y must have the same number of rows"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
+
+
+def test_gx_fit_rejects_mismatched_offset_length():
+    X, y = _basic_data()
+    offset = jnp.array([0.0, 0.0, 0.0])
+
+    with pytest.raises(ValueError, match="offset must have length equal to the number of rows in X"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, offset=offset)
+
+
+def test_gx_fit_rejects_non_finite_X():
+    X, y = _basic_data()
+    X = X.at[0, 0].set(jnp.inf)
+
+    with pytest.raises(ValueError, match="X must contain only finite values"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
+
+
+def test_gx_fit_rejects_non_finite_y():
+    X, y = _basic_data()
+    y = y.at[0].set(jnp.nan)
+
+    with pytest.raises(ValueError, match="y must contain only finite values"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
+
+
+def test_gx_fit_rejects_non_finite_offset():
+    X, y = _basic_data()
+    offset = jnp.array([0.0, 0.0, 0.0, jnp.nan])
+
+    with pytest.raises(ValueError, match="offset must contain only finite values"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, offset=offset)
+
+
+def test_gx_fit_rejects_non_numeric_X():
+    X, y = _basic_data()
+    X = np.array([["1.0", "0.0"], ["1.0", "1.0"], ["1.0", "2.0"], ["1.0", "3.0"]], dtype=str)
+
+    with pytest.raises(TypeError, match="X must have a numeric dtype"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y)
+
+
+def test_gx_fit_rejects_invalid_family_link_pair():
+    X, y = _basic_data()
+    model = glmax.GLM(family=glmax.Poisson())
+    model = eqx.tree_at(lambda m: m.family.glink, model, glmax.Logit())
+
+    with pytest.raises(ValueError, match="Invalid family/link combination"):
+        glmax.fit(model, X, y)
+
+
+def test_gx_fit_rejects_invalid_solver_strategy():
+    X, y = _basic_data()
+
+    with pytest.raises(TypeError, match="solver must implement AbstractLinearSolver"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, solver=object())
+
+
+def test_gx_fit_rejects_invalid_covariance_strategy():
+    X, y = _basic_data()
+
+    with pytest.raises(TypeError, match="covariance must implement AbstractStdErrEstimator"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, covariance=object())
+
+
+def test_gx_fit_rejects_unsupported_fitter_strategy():
+    X, y = _basic_data()
+
+    with pytest.raises(TypeError, match="fitter strategy is not supported"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, fitter=object())
+
+
+def test_gx_fit_rejects_unsupported_tests_strategy():
+    X, y = _basic_data()
+
+    with pytest.raises(TypeError, match="tests strategy is not supported"):
+        glmax.fit(glmax.GLM(family=glmax.Gaussian()), X, y, tests=object())
