@@ -1,5 +1,7 @@
 import numpy as np
 
+import equinox as eqx
+
 from jax import numpy as jnp
 from jaxtyping import ArrayLike
 
@@ -150,7 +152,7 @@ def fit(
             raise ValueError("Invalid family/link combination") from exc
 
     if solver is not None:
-        model = GLM(family=model.family, solver=solver)
+        model = eqx.tree_at(lambda m: m.solver, model, solver)
 
     fit_options = {} if options is None else dict(options)
     option_covariance = fit_options.pop("se_estimator", None)

@@ -17,6 +17,7 @@ from .family.utils import t_cdf
 from .infer.result import GLMState
 from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
+from .infer.tests import AbstractHypothesisTest
 
 
 _compat_warning_active: ContextVar[bool] = ContextVar("_compat_warning_active", default=False)
@@ -116,6 +117,13 @@ class GLM(eqx.Module):
 
         from .fit import fit as gx_fit
 
+        class _ModelWaldHook(AbstractHypothesisTest):
+            model: "GLM"
+
+            def __call__(self, statistic: Array, df: int, family: ExponentialFamily) -> Array:
+                del family
+                return self.model.wald_test(statistic, df)
+
         if jnp.ndim(offset_eta) == 0:
             offset_value = np.asarray(offset_eta)
             if offset_value.dtype.kind in ("i", "u", "f"):
@@ -140,6 +148,7 @@ class GLM(eqx.Module):
                 y,
                 offset=offset,
                 covariance=se_estimator,
+                tests=_ModelWaldHook(self),
                 init=init,
                 options={
                     "alpha_init": alpha_init,

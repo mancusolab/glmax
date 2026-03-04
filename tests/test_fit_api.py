@@ -97,6 +97,18 @@ class _ZeroPValueTestHook(infer.AbstractHypothesisTest):
         return jnp.zeros_like(statistic)
 
 
+class _CustomWaldGLM(glmax.GLM):
+    def wald_test(self, statistic, df):
+        del df
+        return jnp.zeros_like(statistic)
+
+
+class _RaisingInitGLM(glmax.GLM):
+    def calc_eta_and_dispersion(self, X, y, offset_eta=0.0, max_iter=1000):
+        del X, y, offset_eta, max_iter
+        raise RuntimeError("custom-calc-called")
+
+
 def test_gx_fit_returns_glmstate_for_gaussian():
     X, y = _basic_data()
 
@@ -338,6 +350,23 @@ def test_gx_fit_matches_glm_fit_convergence_metadata():
 
     assert gx_state.num_iters == glm_state.num_iters
     assert bool(gx_state.converged) == bool(glm_state.converged)
+
+
+def test_glm_fit_preserves_overridden_wald_behavior():
+    X, y = _basic_data()
+    model = _CustomWaldGLM(family=glmax.Gaussian())
+
+    state = model.fit(X, y)
+
+    assert jnp.allclose(state.p, jnp.zeros_like(state.p))
+
+
+def test_solver_override_preserves_model_subclass_behavior():
+    X, y = _basic_data()
+    model = _RaisingInitGLM(family=glmax.Gaussian())
+
+    with pytest.raises(RuntimeError, match="custom-calc-called"):
+        glmax.fit(model, X, y, solver=glmax.QRSolver())
 
 
 def test_gx_fit_matches_glm_fit_nb_with_non_default_max_iter():
