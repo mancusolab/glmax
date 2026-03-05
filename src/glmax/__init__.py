@@ -1,3 +1,5 @@
+# pattern: Imperative Shell
+
 from importlib.metadata import version  # pragma: no cover
 
 import jax

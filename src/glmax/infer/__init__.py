@@ -1,3 +1,6 @@
+# pattern: Imperative Shell
+
+
 def infer(*args, **kwargs):
     """Canonical infer verb entrypoint."""
     from .inference import infer as _infer

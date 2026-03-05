@@ -1,3 +1,5 @@
+# pattern: Functional Core
+
 from typing import Tuple
 
 import equinox as eqx
