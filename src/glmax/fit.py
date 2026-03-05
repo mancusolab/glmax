@@ -37,6 +37,37 @@ def _normalize_fit_inputs(
     init_array = None if init is None else _to_numeric_array("init", init)
     alpha_array = None if alpha_init is None else _to_numeric_array("alpha_init", alpha_init)
 
+    if X_array.ndim != 2:
+        raise ValueError("X must be a 2D array")
+    if y_array.ndim != 1:
+        raise ValueError("y must be a 1D array")
+    if X_array.shape[0] != y_array.shape[0]:
+        raise ValueError("X and y must have the same number of rows")
+
+    n_samples = X_array.shape[0]
+
+    if offset_array.ndim == 0:
+        offset_array = jnp.full((n_samples,), offset_array, dtype=offset_array.dtype)
+    elif offset_array.ndim != 1 or offset_array.shape[0] != n_samples:
+        raise ValueError("offset_eta must be a scalar or a 1D array with length equal to the number of rows in X")
+
+    if init_array is not None and (init_array.ndim != 1 or init_array.shape[0] != n_samples):
+        raise ValueError("init must be a 1D array with length equal to the number of rows in X")
+
+    if alpha_array is not None and alpha_array.ndim > 0:
+        raise ValueError("alpha_init must be a scalar value")
+
+    if not bool(jnp.all(jnp.isfinite(X_array))):
+        raise ValueError("X must contain only finite values")
+    if not bool(jnp.all(jnp.isfinite(y_array))):
+        raise ValueError("y must contain only finite values")
+    if not bool(jnp.all(jnp.isfinite(offset_array))):
+        raise ValueError("offset_eta must contain only finite values")
+    if init_array is not None and not bool(jnp.all(jnp.isfinite(init_array))):
+        raise ValueError("init must contain only finite values")
+    if alpha_array is not None and not bool(jnp.all(jnp.isfinite(alpha_array))):
+        raise ValueError("alpha_init must contain only finite values")
+
     return X_array, y_array, offset_array, init_array, alpha_array
 
 
