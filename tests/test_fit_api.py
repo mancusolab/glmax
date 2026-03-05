@@ -159,6 +159,32 @@ def test_default_fitter_validates_init_beta_shape() -> None:
         glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
 
 
+def test_default_fitter_validates_scalar_disp() -> None:
+    X = jnp.ones((4, 2))
+    y = jnp.ones(4)
+    bad_init = Params(beta=jnp.ones(2), disp=jnp.ones(2))
+
+    with pytest.raises(ValueError, match="Params.disp"):
+        glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
+
+
+def test_default_fitter_validates_X_y_and_offset_shapes() -> None:
+    with pytest.raises(ValueError, match="GLMData.X"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones(4), y=jnp.ones(4)))
+
+    with pytest.raises(ValueError, match="GLMData.y"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones((4, 1))))
+
+    with pytest.raises(ValueError, match="GLMData.y"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones(3)))
+
+    with pytest.raises(ValueError, match="GLMData.offset"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones(4), offset=jnp.ones((4, 1))))
+
+    with pytest.raises(ValueError, match="GLMData.offset"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones(4), offset=jnp.ones(3)))
+
+
 def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:
     model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
