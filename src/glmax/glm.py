@@ -165,12 +165,16 @@ class GLM(eqx.Module):
         """
         from .fit import fit as module_fit
 
+        selected_fitter = self.fitter if fitter is None else fitter
+        if not isinstance(selected_fitter, AbstractGLMFitter):
+            raise TypeError("fitter must implement AbstractGLMFitter")
+
         return module_fit(
             X,
             y,
             family=self.family,
             solver=self.solver,
-            fitter=self.fitter if fitter is None else fitter,
+            fitter=selected_fitter,
             offset_eta=offset_eta,
             init=init,
             alpha_init=alpha_init,

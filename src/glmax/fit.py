@@ -71,6 +71,9 @@ def fit(
     tol: float = 1e-3,
     step_size: float = 1.0,
 ) -> GLMState:
+    if not isinstance(fitter, AbstractGLMFitter):
+        raise TypeError("fitter must implement AbstractGLMFitter")
+
     if init is None or alpha_init is None:
         init, alpha_init = _calc_eta_and_dispersion(
             X,
