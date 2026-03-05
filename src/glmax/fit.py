@@ -43,6 +43,8 @@ DEFAULT_FITTER: Fitter = _ModelFitter()
 
 def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Fitter = DEFAULT_FITTER) -> FitResult:
     """Canonical fit verb surface."""
+    if not isinstance(model, GLM):
+        raise TypeError("fit(...) expects `model` to be a GLM instance.")
     if not isinstance(data, GLMData):
         raise TypeError("fit(...) expects `data` to be a GLMData instance.")
     if init is not None and not isinstance(init, Params):

@@ -8,7 +8,7 @@ import jax.tree_util as jtu
 import glmax
 
 from glmax import Diagnostics, FitResult, Fitter, GLMData, InferenceResult, Params
-from glmax.family import Gaussian
+from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 from glmax.glm import specify
 
 
@@ -91,36 +91,19 @@ def test_fit_returns_fitresult_using_injected_fitter() -> None:
 
 
 def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
-    expected = _make_fit_result()
-
-    class DummyModel:
-        def __init__(self) -> None:
-            self.seen: dict[str, object] = {}
-
-        def fit(
-            self,
-            data: GLMData,
-            init: jnp.ndarray | None = None,
-            alpha_init: jnp.ndarray | None = None,
-        ) -> FitResult:
-            self.seen["data"] = data
-            self.seen["init"] = init
-            self.seen["alpha_init"] = alpha_init
-            return expected
-
-    model = DummyModel()
+    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]])
     y = jnp.array([1.0, 0.0, 1.0])
     offset = jnp.array([0.2, 0.1, 0.3])
     init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
 
     data = GLMData(X=X, y=y, offset=offset)
+    expected = model.fit(data, init=X @ init.beta, alpha_init=init.disp)
     result = glmax.fit(model, data, init=init)
 
-    assert result is expected
-    assert model.seen["data"] is data
-    assert jnp.allclose(model.seen["init"], X @ init.beta)
-    assert jnp.allclose(model.seen["alpha_init"], init.disp)
+    assert isinstance(result, FitResult)
+    assert jnp.allclose(result.beta, expected.beta)
+    assert jnp.allclose(result.params.disp, expected.params.disp)
 
 
 def test_contract_dataclasses_are_pytrees() -> None:
@@ -148,11 +131,35 @@ def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
 
 
 def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
+    with pytest.raises(TypeError, match="GLM"):
+        glmax.fit(object(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)))
+
     with pytest.raises(TypeError, match="GLMData"):
         glmax.fit(glmax.GLM(), jnp.ones((3, 1)))
 
     with pytest.raises(TypeError, match="Params"):
         glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
+
+
+@pytest.mark.parametrize(
+    ("family", "y"),
+    [
+        (Gaussian(), jnp.array([0.1, 1.0, 2.1, 2.9, 4.2])),
+        (Poisson(), jnp.array([0.0, 1.0, 1.0, 2.0, 3.0])),
+        (Binomial(), jnp.array([0.0, 0.0, 1.0, 1.0, 1.0])),
+        (NegativeBinomial(), jnp.array([0.0, 1.0, 2.0, 1.0, 4.0])),
+    ],
+)
+def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), y=y)
+    result = glmax.fit(glmax.GLM(family=family), data)
+
+    assert isinstance(result, FitResult)
+    assert isinstance(result.params, Params)
+    if isinstance(family, NegativeBinomial):
+        assert result.params.disp > 0
+    else:
+        assert jnp.allclose(result.params.disp, jnp.array(0.0))
 
 
 def test_fit_boundary_rejects_non_finite_params_init() -> None:
