@@ -33,36 +33,6 @@ class GLM(eqx.Module):
     family: ExponentialFamily = Gaussian()
     solver: AbstractLinearSolver = CholeskySolver()
 
-    def _coerce_fit_data(
-        self,
-        data: GLMData | ArrayLike,
-        y: ArrayLike | None,
-        offset_eta: ArrayLike,
-    ) -> GLMData:
-        if isinstance(data, GLMData):
-            if y is not None:
-                raise TypeError("GLM.fit(...) does not accept `y` when `data` is already a GLMData instance.")
-            if jnp.asarray(offset_eta).ndim != 0 or not bool(jnp.all(jnp.asarray(offset_eta) == 0)):
-                raise TypeError("GLM.fit(...) does not accept `offset_eta` when `data` is already a GLMData instance.")
-            return data
-        if y is None:
-            raise TypeError("GLM.fit(...) expects either `data=GLMData(...)` or legacy `(X, y, ...)` inputs.")
-        return GLMData(X=data, y=y, offset=offset_eta)
-
-    def _normalize_fit_init(
-        self,
-        *,
-        legacy_init: ArrayLike | None,
-        legacy_alpha_init: ScalarLike | None,
-        init_eta: ArrayLike | None,
-        disp_init: ScalarLike | None,
-    ) -> tuple[ArrayLike | None, ScalarLike | None]:
-        if legacy_init is not None and init_eta is not None:
-            raise TypeError("GLM.fit(...) received both `init` and `init_eta`; use only one.")
-        if legacy_alpha_init is not None and disp_init is not None:
-            raise TypeError("GLM.fit(...) received both `alpha_init` and `disp_init`; use only one.")
-        return legacy_init if init_eta is None else init_eta, legacy_alpha_init if disp_init is None else disp_init
-
     def calc_eta_and_dispersion(
         self,
         data: GLMData,
@@ -127,11 +97,7 @@ class GLM(eqx.Module):
 
     def fit(
         self,
-        data: GLMData | ArrayLike,
-        y: ArrayLike | None = None,
-        offset_eta: ArrayLike = 0.0,
-        init: ArrayLike = None,
-        alpha_init: ScalarLike = None,
+        data: GLMData,
         *,
         init_eta: ArrayLike = None,
         disp_init: ScalarLike = None,
@@ -148,11 +114,7 @@ class GLM(eqx.Module):
 
         **Arguments:**
 
-        - `data`: canonical covariate/response noun or legacy `X` matrix.
-        - `y`: legacy outcome vector used only with raw `X` input.
-        - `offset_eta`: legacy offset vector used only with raw `X` input.
-        - `init`: legacy initial linear predictor alias.
-        - `alpha_init`: legacy dispersion alias.
+        - `data`: canonical covariate/response noun.
         - `init_eta`: optional initial linear predictor.
         - `disp_init`: optional canonical dispersion initial value.
         - `max_iter`: maximum number of iterations, default to 1000.
@@ -164,13 +126,8 @@ class GLM(eqx.Module):
         -  A [`glmax.FitResult`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
-        data = self._coerce_fit_data(data, y, offset_eta)
-        init_eta, disp_init = self._normalize_fit_init(
-            legacy_init=init,
-            legacy_alpha_init=alpha_init,
-            init_eta=init_eta,
-            disp_init=disp_init,
-        )
+        if not isinstance(data, GLMData):
+            raise TypeError("GLM.fit(...) expects `data` to be a GLMData instance.")
         if data.weights is not None:
             raise ValueError("GLMData.weights is not supported in GLM.fit yet.")
         X_array, y_array, offset_array, _, _ = data.canonical_arrays()

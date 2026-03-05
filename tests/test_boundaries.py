@@ -79,15 +79,13 @@ def test_top_level_fit_rejects_raw_x_y_inputs() -> None:
         glmax.fit(GLM(family=Gaussian()), jnp.ones((4, 1)))
 
 
-def test_glm_fit_accepts_legacy_alpha_init_and_new_disp_init_keywords() -> None:
+def test_glm_fit_accepts_canonical_disp_init_keyword() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 1.0, 2.0]))
     model = GLM(family=NegativeBinomial())
 
     fit_result = model.fit(data, disp_init=jnp.array(0.4))
-    legacy_result = model.fit(data.X, data.y, alpha_init=jnp.array(0.4))
 
     assert fit_result.params.beta.shape == (1,)
-    assert legacy_result.params.beta.shape == (1,)
 
 
 def test_glm_fit_rejects_all_false_mask_with_deterministic_error() -> None:

@@ -225,19 +225,39 @@ def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
         glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
 
 
-def test_glm_method_preserves_legacy_direct_x_y_call_compatibility() -> None:
+def test_glm_fit_signature_exposes_only_canonical_public_keywords() -> None:
+    sig = inspect.signature(glmax.GLM.fit)
+
+    assert list(sig.parameters) == [
+        "self",
+        "data",
+        "init_eta",
+        "disp_init",
+        "se_estimator",
+        "max_iter",
+        "tol",
+        "step_size",
+    ]
+    assert sig.parameters["data"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert sig.parameters["init_eta"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert sig.parameters["disp_init"].kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_glm_fit_rejects_legacy_public_alias_inputs() -> None:
     model = glmax.GLM(family=Gaussian())
-    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
-    y = jnp.array([0.5, 1.1, 1.8, 2.2])
-    offset_eta = jnp.array([0.1, 0.1, 0.1, 0.1])
-    init = jnp.array([0.2, 0.4, 0.6, 0.8])
+    data = GLMData(
+        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
+        y=jnp.array([0.5, 1.1, 1.8, 2.2]),
+    )
 
-    result = model.fit(X, y, offset_eta=offset_eta, init=init, alpha_init=jnp.array(0.0))
+    with pytest.raises(TypeError):
+        model.fit(data.X, data.y)
 
-    assert isinstance(result, FitResult)
-    assert isinstance(result.params, Params)
-    assert result.eta.shape == y.shape
-    assert result.params.beta.shape == (X.shape[1],)
+    with pytest.raises(TypeError):
+        model.fit(data, init=jnp.array([0.2, 0.4, 0.6, 0.8]))
+
+    with pytest.raises(TypeError):
+        model.fit(data, alpha_init=jnp.array(0.0))
 
 
 @pytest.mark.parametrize(
