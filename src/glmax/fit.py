@@ -8,12 +8,12 @@ from jaxtyping import ArrayLike, ScalarLike
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
 from .glm import GLMState
 from .infer.contracts import AbstractLinearSolver
+from .infer.fitters import AbstractGLMFitter, IRLSFitter
 from .infer.inference import (
     AbstractStdErrEstimator,
     FisherInfoError,
     wald_test as inference_wald_test,
 )
-from .infer.optimize import irls
 from .infer.solvers import CholeskySolver
 
 
@@ -62,6 +62,7 @@ def fit(
     y: ArrayLike,
     family: ExponentialFamily = Gaussian(),
     solver: AbstractLinearSolver = CholeskySolver(),
+    fitter: AbstractGLMFitter = IRLSFitter(),
     offset_eta: ArrayLike = 0.0,
     init: ArrayLike = None,
     alpha_init: ScalarLike = None,
@@ -83,18 +84,22 @@ def fit(
             step_size=step_size,
         )
 
-    beta, n_iter, converged, alpha = irls(
+    fit_state = fitter(
         X,
         y,
         family,
         solver,
         init,
-        max_iter,
-        tol,
-        step_size,
-        offset_eta,
-        alpha_init,
+        max_iter=max_iter,
+        tol=tol,
+        step_size=step_size,
+        offset_eta=offset_eta,
+        alpha_init=alpha_init,
     )
+    beta = fit_state.beta
+    n_iter = fit_state.num_iters
+    converged = fit_state.converged
+    alpha = fit_state.alpha
 
     eta = X @ beta + offset_eta
     mu = family.glink.inverse(eta)

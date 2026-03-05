@@ -9,6 +9,7 @@ from jaxtyping import ArrayLike, ScalarLike
 
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
 from .infer.contracts import AbstractLinearSolver
+from .infer.fitters import AbstractGLMFitter, IRLSFitter
 from .infer.inference import (
     AbstractStdErrEstimator,
     FisherInfoError,
@@ -69,6 +70,7 @@ class GLM(eqx.Module):
 
     family: ExponentialFamily = Gaussian()
     solver: AbstractLinearSolver = CholeskySolver()
+    fitter: AbstractGLMFitter = IRLSFitter()
 
     def calc_eta_and_dispersion(
         self,
@@ -134,6 +136,7 @@ class GLM(eqx.Module):
         init: ArrayLike = None,
         alpha_init: ScalarLike = None,
         se_estimator: AbstractStdErrEstimator = FisherInfoError(),
+        fitter: AbstractGLMFitter | None = None,
         max_iter: int = 1000,
         tol: float = 1e-3,
         step_size: float = 1.0,
@@ -167,6 +170,7 @@ class GLM(eqx.Module):
             y,
             family=self.family,
             solver=self.solver,
+            fitter=self.fitter if fitter is None else fitter,
             offset_eta=offset_eta,
             init=init,
             alpha_init=alpha_init,

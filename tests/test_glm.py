@@ -207,6 +207,7 @@ def test_glm_fit_delegates_to_module_entrypoint(monkeypatch):
         y,
         family,
         solver,
+        fitter=None,
         offset_eta=0.0,
         init=None,
         alpha_init=None,
@@ -217,6 +218,7 @@ def test_glm_fit_delegates_to_module_entrypoint(monkeypatch):
     ):
         recorded["family"] = family
         recorded["solver"] = solver
+        recorded["fitter"] = fitter
         recorded["offset_eta"] = offset_eta
         recorded["init"] = init
         recorded["alpha_init"] = alpha_init
@@ -234,6 +236,7 @@ def test_glm_fit_delegates_to_module_entrypoint(monkeypatch):
     assert actual is expected
     assert recorded["family"] is model.family
     assert recorded["solver"] is model.solver
+    assert isinstance(recorded["fitter"], importlib.import_module("glmax.infer.fitters").IRLSFitter)
     assert recorded["offset_eta"] == 1.5
     assert recorded["max_iter"] == 22
     assert recorded["tol"] == 1e-5

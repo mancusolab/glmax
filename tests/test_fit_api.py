@@ -86,3 +86,38 @@ def test_canonical_fit_routes_pvalues_through_inference_strategy(monkeypatch, ge
     state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
 
     assert_array_eq(state.p, jnp.full_like(state.p, 0.2222), rtol=0.0, atol=1e-12)
+
+
+def test_custom_fitter_strategy_injection_for_canonical_and_glm(getkey):
+    fitters = importlib.import_module("glmax.infer.fitters")
+    calls = {"count": 0}
+
+    class CustomFitter(fitters.AbstractGLMFitter):
+        def __call__(
+            self,
+            X,
+            y,
+            family,
+            solver,
+            eta,
+            max_iter=1000,
+            tol=1e-3,
+            step_size=1.0,
+            offset_eta=0.0,
+            alpha_init=0.0,
+        ):
+            del y, family, solver, max_iter, tol, step_size, offset_eta, alpha_init
+            calls["count"] += 1
+            beta = jnp.zeros((X.shape[1],), dtype=eta.dtype)
+            return fitters.IRLSState(beta=beta, num_iters=3, converged=jnp.asarray(True), alpha=jnp.asarray(0.0))
+
+    X, y = simulate_glm_data(getkey(), family="poisson")
+    custom = CustomFitter()
+
+    state_direct = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver(), fitter=custom)
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver(), fitter=custom)
+    state_wrapper = model.fit(X, y)
+
+    assert calls["count"] == 2
+    assert int(state_direct.num_iters) == 3
+    assert int(state_wrapper.num_iters) == 3
