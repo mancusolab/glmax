@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 
 import jax.numpy as jnp
@@ -72,3 +74,24 @@ def test_predict_rejects_non_finite_and_non_numeric_params() -> None:
 
     with pytest.raises(TypeError, match="Params.disp must be numeric"):
         glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad"), data)
+
+
+def test_predict_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
+    model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
+    params = Params(beta=jnp.array([1.0]), disp=jnp.array(0.0))
+
+    def fail_fit(*_args, **_kwargs):
+        raise AssertionError("GLM.fit should never be called by predict(...).")
+
+    def fail_irls(*_args, **_kwargs):
+        raise AssertionError("infer.optimize.irls should never be called by predict(...).")
+
+    monkeypatch.setattr(glmax.GLM, "fit", fail_fit)
+
+    infer_optimize = importlib.import_module("glmax.infer.optimize")
+    monkeypatch.setattr(infer_optimize, "irls", fail_irls)
+
+    pred = glmax.predict(model, params, data)
+
+    assert pred.shape == data.y.shape

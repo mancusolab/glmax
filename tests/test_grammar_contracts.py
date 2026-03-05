@@ -38,14 +38,14 @@ def test_grammar_contract_matrix_across_all_verbs(family, y) -> None:
 
 def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
     model = glmax.specify(family=Gaussian())
-    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.2, 1.8, 3.1]))
     fit_result = glmax.fit(model, data)
 
     with pytest.raises(TypeError, match="GLM"):
         glmax.fit(object(), data)
 
     with pytest.raises(TypeError, match="GLMData"):
-        glmax.fit(model, jnp.ones((3, 1)))
+        glmax.fit(model, jnp.ones((4, 1)))
 
     with pytest.raises(TypeError, match="Params"):
         glmax.predict(model, jnp.array([1.0]), data)

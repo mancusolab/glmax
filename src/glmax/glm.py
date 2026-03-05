@@ -20,6 +20,93 @@ from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
 
+def _fit_model(
+    model: "GLM",
+    data: GLMData,
+    *,
+    init_eta: ArrayLike = None,
+    disp_init: ScalarLike = None,
+    se_estimator: AbstractStdErrEstimator = FisherInfoError(),
+    max_iter: int = 1000,
+    tol: float = 1e-3,
+    step_size: float = 1.0,
+) -> FitResult:
+    """Canonical GLM fit kernel shared by the grammar verb and `GLM.fit`."""
+    if not isinstance(data, GLMData):
+        raise TypeError("GLM.fit(...) expects `data` to be a GLMData instance.")
+    if data.weights is not None:
+        raise ValueError("GLMData.weights is not supported in GLM.fit yet.")
+    X_array, y_array, offset_array, _, _ = data.canonical_arrays()
+    if X_array.shape[0] == 0:
+        raise ValueError("GLMData.mask removes all samples; at least one effective sample is required.")
+    effective_data = GLMData(X=X_array, y=y_array, offset=offset_array)
+
+    if init_eta is not None:
+        init_eta = jnp.asarray(init_eta)
+        if init_eta.ndim != 1 or init_eta.shape[0] != X_array.shape[0]:
+            raise ValueError("init_eta must be a one-dimensional vector with length equal to sample count.")
+        if not bool(jnp.all(jnp.isfinite(init_eta))):
+            raise ValueError("init_eta must contain only finite values.")
+
+    if disp_init is not None:
+        disp_init = jnp.asarray(disp_init)
+        if disp_init.ndim > 0 and disp_init.size != 1:
+            raise ValueError("disp_init must be a scalar dispersion value.")
+        if not bool(jnp.all(jnp.isfinite(disp_init))):
+            raise ValueError("disp_init must contain only finite values.")
+
+    if init_eta is None or disp_init is None:
+        inferred_eta, inferred_disp = model.calc_eta_and_dispersion(effective_data, max_iter=max_iter)
+        if init_eta is None:
+            init_eta = inferred_eta
+        if disp_init is None:
+            disp_init = inferred_disp
+
+    beta, n_iter, converged, disp, objective, objective_delta = irls(
+        X_array,
+        y_array,
+        model.family,
+        model.solver,
+        init_eta,
+        max_iter,
+        tol,
+        step_size,
+        offset_array,
+        disp_init=disp_init,
+    )
+
+    eta = X_array @ beta + offset_array
+    mu = model.family.glink.inverse(eta)
+    score_residual = (y_array - mu) * model.family.glink.deriv(mu)
+
+    _, _, weight = model.family.calc_weight(X_array, y_array, eta, disp)
+    curvature = se_estimator(model.family, X_array, y_array, eta, mu, weight, disp)
+    beta_se = jnp.sqrt(jnp.diag(curvature))
+
+    df = X_array.shape[0] - X_array.shape[1]
+    beta = jnp.ravel(beta)
+    stat = beta / beta_se
+    pval_wald = model.wald_test(stat, df)
+
+    return FitResult(
+        params=Params(beta=beta, disp=model.family.canonical_dispersion(disp)),
+        se=beta_se,
+        z=stat,
+        p=pval_wald,
+        eta=eta,
+        mu=mu,
+        glm_wt=weight,
+        diagnostics=Diagnostics(
+            converged=converged,
+            num_iters=n_iter,
+            objective=objective,
+            objective_delta=objective_delta,
+        ),
+        curvature=curvature,
+        score_residual=score_residual,
+    )
+
+
 class GLM(eqx.Module):
     """
     This class provides a flexible framework for fitting Generalized Linear Models (GLMs),
@@ -146,80 +233,15 @@ class GLM(eqx.Module):
         if legacy_kwargs:
             unexpected = ", ".join(f"`{name}`" for name in sorted(legacy_kwargs))
             raise TypeError(f"GLM.fit(...) got unexpected keyword argument(s): {unexpected}.")
-        if not isinstance(data, GLMData):
-            raise TypeError("GLM.fit(...) expects `data` to be a GLMData instance.")
-        if data.weights is not None:
-            raise ValueError("GLMData.weights is not supported in GLM.fit yet.")
-        X_array, y_array, offset_array, _, _ = data.canonical_arrays()
-        if X_array.shape[0] == 0:
-            raise ValueError("GLMData.mask removes all samples; at least one effective sample is required.")
-        effective_data = GLMData(X=X_array, y=y_array, offset=offset_array)
-
-        if init_eta is not None:
-            init_eta = jnp.asarray(init_eta)
-            if init_eta.ndim != 1 or init_eta.shape[0] != X_array.shape[0]:
-                raise ValueError("init_eta must be a one-dimensional vector with length equal to sample count.")
-            if not bool(jnp.all(jnp.isfinite(init_eta))):
-                raise ValueError("init_eta must contain only finite values.")
-
-        if disp_init is not None:
-            disp_init = jnp.asarray(disp_init)
-            if disp_init.ndim > 0 and disp_init.size != 1:
-                raise ValueError("disp_init must be a scalar dispersion value.")
-            if not bool(jnp.all(jnp.isfinite(disp_init))):
-                raise ValueError("disp_init must contain only finite values.")
-
-        if init_eta is None or disp_init is None:
-            inferred_eta, inferred_disp = self.calc_eta_and_dispersion(effective_data, max_iter=max_iter)
-            if init_eta is None:
-                init_eta = inferred_eta
-            if disp_init is None:
-                disp_init = inferred_disp
-
-        beta, n_iter, converged, disp, objective, objective_delta = irls(
-            X_array,
-            y_array,
-            self.family,
-            self.solver,
-            init_eta,
-            max_iter,
-            tol,
-            step_size,
-            offset_array,
+        return _fit_model(
+            self,
+            data,
+            init_eta=init_eta,
             disp_init=disp_init,
-        )
-
-        eta = X_array @ beta + offset_array
-        mu = self.family.glink.inverse(eta)
-        score_residual = (y_array - mu) * self.family.glink.deriv(mu)  # note: this is the working residual
-
-        _, _, weight = self.family.calc_weight(X_array, y_array, eta, disp)
-
-        curvature = se_estimator(self.family, X_array, y_array, eta, mu, weight, disp)
-        beta_se = jnp.sqrt(jnp.diag(curvature))
-
-        df = X_array.shape[0] - X_array.shape[1]
-        beta = jnp.ravel(beta)  # (p,)
-        stat = beta / beta_se
-
-        pval_wald = self.wald_test(stat, df)
-
-        return FitResult(
-            params=Params(beta=beta, disp=self.family.canonical_dispersion(disp)),
-            se=beta_se,
-            z=stat,
-            p=pval_wald,
-            eta=eta,
-            mu=mu,
-            glm_wt=weight,
-            diagnostics=Diagnostics(
-                converged=converged,
-                num_iters=n_iter,
-                objective=objective,
-                objective_delta=objective_delta,
-            ),
-            curvature=curvature,
-            score_residual=score_residual,
+            se_estimator=se_estimator,
+            max_iter=max_iter,
+            tol=tol,
+            step_size=step_size,
         )
 
 

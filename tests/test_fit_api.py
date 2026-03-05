@@ -164,16 +164,13 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     assert jnp.allclose(result_1.params.disp, result_2.params.disp)
 
 
-def test_default_fitter_explicitly_forwards_disp_init_through_top_level_router() -> None:
-    seen: dict[str, object] = {}
-
-    class RecordingGLM(glmax.GLM):
+def test_default_top_level_fit_does_not_dispatch_through_model_fit_override() -> None:
+    class OverrideRaisesGLM(glmax.GLM):
         def fit(self, data, **kwargs):
-            seen["data"] = data
-            seen["kwargs"] = kwargs
-            return _make_fit_result()
+            del data, kwargs
+            raise AssertionError("top-level fit should not dispatch through GLM.fit overrides")
 
-    model = RecordingGLM(family=Gaussian())
+    model = OverrideRaisesGLM(family=Gaussian())
     data = GLMData(
         X=jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]]),
         y=jnp.array([1.0, 0.0, 1.0]),
@@ -184,9 +181,8 @@ def test_default_fitter_explicitly_forwards_disp_init_through_top_level_router()
     result = glmax.fit(model, data, init=init)
 
     assert isinstance(result, FitResult)
-    assert seen["data"] is data
-    assert jnp.allclose(seen["kwargs"]["init_eta"], data.X @ init.beta + data.offset)
-    assert jnp.allclose(seen["kwargs"]["disp_init"], init.disp)
+    assert result.params.beta.shape == (2,)
+    assert jnp.ndim(result.params.disp) == 0
 
 
 def test_contract_dataclasses_are_pytrees() -> None:
@@ -205,13 +201,16 @@ def test_contract_dataclasses_are_pytrees() -> None:
 
 
 def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
-    X = jnp.array([[0.0], [1.0], [2.0]])
-    y = jnp.array([0.0, 1.0, 2.0])
+    X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
+    y = jnp.array([0.2, 0.9, 2.2, 2.8])
 
     with pytest.raises(ValueError, match="weights"):
-        glmax.fit(glmax.GLM(), GLMData(X=X, y=y, weights=jnp.ones(3)))
+        glmax.fit(glmax.GLM(), GLMData(X=X, y=y, weights=jnp.ones(4)))
 
-    masked_result = glmax.fit(glmax.GLM(family=Gaussian()), GLMData(X=X, y=y, mask=jnp.array([True, False, True])))
+    masked_result = glmax.fit(
+        glmax.GLM(family=Gaussian()),
+        GLMData(X=X, y=y, mask=jnp.array([True, False, True, True])),
+    )
     assert isinstance(masked_result, FitResult)
 
 
@@ -330,6 +329,36 @@ def test_default_fitter_validates_scalar_disp() -> None:
 
     with pytest.raises(ValueError, match="Params.disp"):
         glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
+
+
+def test_fit_rejects_malformed_fitresult_from_custom_fitter() -> None:
+    class BadFitter:
+        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
+            del model, data, init
+            return FitResult(
+                params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
+                se=jnp.array([0.5]),
+                z=jnp.array([2.0]),
+                p=jnp.array([0.05]),
+                eta=jnp.array([1.0]),
+                mu=jnp.array([1.0]),
+                glm_wt=jnp.array([1.0]),
+                diagnostics=Diagnostics(
+                    converged=jnp.array(True),
+                    num_iters=jnp.array(1),
+                    objective=jnp.array(0.0),
+                    objective_delta=jnp.array(-1e-3),
+                ),
+                curvature=jnp.array([[jnp.nan]]),
+                score_residual=jnp.array([0.0]),
+            )
+
+    with pytest.raises(ValueError, match="FitResult.curvature"):
+        glmax.fit(
+            glmax.GLM(),
+            GLMData(X=jnp.array([[1.0]]), y=jnp.array([1.0])),
+            fitter=BadFitter(),
+        )
 
 
 def test_predict_rejects_invalid_params_contracts_deterministically() -> None:

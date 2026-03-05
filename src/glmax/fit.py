@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from .contracts import FitResult, Fitter, GLMData, Params
-from .glm import GLM
+from .contracts import FitResult, Fitter, GLMData, Params, validate_fit_result
+from .glm import _fit_model, GLM
 
 
 def _canonicalize_init(init: Params | None, n_features: int) -> tuple[jnp.ndarray | None, jnp.ndarray | None]:
@@ -38,16 +38,13 @@ def _canonicalize_init(init: Params | None, n_features: int) -> tuple[jnp.ndarra
 
 
 class _ModelFitter:
-    """Bridge canonical fit verb calls into the existing GLM.fit implementation."""
+    """Bridge canonical fit verb calls into the canonical GLM fit kernel."""
 
     def __call__(self, model: GLM, data: GLMData, init: Params | None = None) -> FitResult:
         X_array, _, offset_array, _, _ = data.canonical_arrays()
         init_beta, init_disp = _canonicalize_init(init, X_array.shape[1])
-        if init_beta is None:
-            return model.fit(data)
-
-        eta_init = X_array @ init_beta + offset_array
-        return model.fit(data, init_eta=eta_init, disp_init=init_disp)
+        init_eta = None if init_beta is None else X_array @ init_beta + offset_array
+        return _fit_model(model, data, init_eta=init_eta, disp_init=init_disp)
 
 
 DEFAULT_FITTER: Fitter = _ModelFitter()
@@ -65,6 +62,7 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Fitter
     result = fitter(model, data, init)
     if not isinstance(result, FitResult):
         raise TypeError("fit(...) expects `fitter` to return a FitResult instance.")
+    validate_fit_result(result)
     return result
 
 
