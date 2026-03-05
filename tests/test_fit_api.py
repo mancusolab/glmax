@@ -165,3 +165,22 @@ def test_equivalent_custom_fitter_preserves_regression_parity(getkey):
 
     assert_glm_state_parity(injected, baseline, rtol=1e-7, atol=1e-8)
     assert_glm_state_parity(wrapper_injected, baseline, rtol=1e-7, atol=1e-8)
+
+
+def test_wrapper_and_canonical_share_boundary_normalization(monkeypatch, getkey):
+    fit_module = importlib.import_module("glmax.fit")
+    calls = {"count": 0}
+
+    original = fit_module._normalize_fit_inputs
+
+    def spy_normalize(*args, **kwargs):
+        calls["count"] += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(fit_module, "_normalize_fit_inputs", spy_normalize)
+
+    X, y = simulate_glm_data(getkey(), family="poisson")
+    glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
+    glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver()).fit(X, y)
+
+    assert calls["count"] >= 2

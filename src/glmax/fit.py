@@ -17,6 +17,29 @@ from .infer.inference import (
 from .infer.solvers import CholeskySolver
 
 
+def _to_numeric_array(name: str, value: ArrayLike) -> Array:
+    array = jnp.asarray(value)
+    if not jnp.issubdtype(array.dtype, jnp.number):
+        raise TypeError(f"{name} must have a numeric dtype")
+    return array
+
+
+def _normalize_fit_inputs(
+    X: ArrayLike,
+    y: ArrayLike,
+    offset_eta: ArrayLike = 0.0,
+    init: ArrayLike = None,
+    alpha_init: ScalarLike = None,
+) -> Tuple[Array, Array, Array, Array | None, Array | None]:
+    X_array = _to_numeric_array("X", X)
+    y_array = _to_numeric_array("y", y)
+    offset_array = _to_numeric_array("offset_eta", offset_eta)
+    init_array = None if init is None else _to_numeric_array("init", init)
+    alpha_array = None if alpha_init is None else _to_numeric_array("alpha_init", alpha_init)
+
+    return X_array, y_array, offset_array, init_array, alpha_array
+
+
 def _calc_eta_and_dispersion(
     X: ArrayLike,
     y: ArrayLike,
@@ -73,6 +96,7 @@ def fit(
 ) -> GLMState:
     if not isinstance(fitter, AbstractGLMFitter):
         raise TypeError("fitter must implement AbstractGLMFitter")
+    X, y, offset_eta, init, alpha_init = _normalize_fit_inputs(X, y, offset_eta, init, alpha_init)
 
     if init is None or alpha_init is None:
         init, alpha_init = _calc_eta_and_dispersion(
