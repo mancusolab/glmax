@@ -11,7 +11,7 @@ class IRLSState(NamedTuple):
     beta: Array
     num_iters: int
     converged: Array
-    alpha: Array
+    disp: Array
 
 
 # @eqx.filter_jit
@@ -25,7 +25,7 @@ def irls(
     tol: float = 1e-3,
     step_size: float = 1.0,
     offset_eta: ArrayLike = 0.0,
-    alpha_init: ScalarLike = 0.0,
+    disp_init: ScalarLike = 0.0,
 ) -> IRLSState:
     """IRLS to solve GLM
 
@@ -38,36 +38,36 @@ def irls(
     :param tol: tolerance for stopping, default to 0.001
     :param step_size: step size to update the parameter at each step, default to 1.0
     :param offset_eta: offset (nx1)
-    :param alpha_init: initial value for dispersion parameter alpha
+    :param disp_init: initial value for the canonical dispersion parameter
     :return: IRLSState
     """
     n, p = X.shape
 
     def body_fun(val: Tuple):
-        likelihood_o, diff, num_iter, beta_o, eta_o, alpha_o = val
+        likelihood_o, diff, num_iter, beta_o, eta_o, disp_o = val
 
-        mu_k, g_deriv_k, weight = family.calc_weight(X, y, eta_o, alpha_o)
+        mu_k, g_deriv_k, weight = family.calc_weight(X, y, eta_o, disp_o)
         r = eta_o + g_deriv_k * (y - mu_k) * step_size - offset_eta
 
         beta = solver(X, r, weight)
 
         eta_n = X @ beta + offset_eta
 
-        alpha_n = family.update_dispersion(X, y, eta_n, alpha_o, step_size)
-        likelihood_n = family.negloglikelihood(X, y, eta_n, alpha_n)
+        disp_n = family.update_dispersion(X, y, eta_n, disp_o, step_size)
+        likelihood_n = family.negloglikelihood(X, y, eta_n, disp_n)
         diff = likelihood_n - likelihood_o
 
-        return likelihood_n, diff, num_iter + 1, beta, eta_n, alpha_n
+        return likelihood_n, diff, num_iter + 1, beta, eta_n, disp_n
 
     def cond_fun(val: Tuple):
-        likelihood_o, diff, num_iter, beta, eta, alpha = val
+        likelihood_o, diff, num_iter, beta, eta, disp = val
         cond_l = jnp.logical_and(jnp.fabs(diff) > tol, num_iter <= max_iter)
         return cond_l
 
     init_beta = jnp.zeros((p,))
-    init_tuple = (10000.0, 10000.0, 0, init_beta, eta + offset_eta, alpha_init)
+    init_tuple = (10000.0, 10000.0, 0, init_beta, eta + offset_eta, disp_init)
 
-    likelihood_n, diff, num_iters, beta, eta, alpha = lax.while_loop(cond_fun, body_fun, init_tuple)
+    likelihood_n, diff, num_iters, beta, eta, disp = lax.while_loop(cond_fun, body_fun, init_tuple)
     converged = jnp.logical_and(jnp.fabs(diff) < tol, num_iters <= max_iter)
 
-    return IRLSState(beta, num_iters, converged, alpha)
+    return IRLSState(beta, num_iters, converged, disp)

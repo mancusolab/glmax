@@ -87,7 +87,7 @@ class ExponentialFamily(eqx.Module):
         alpha: ScalarLike = 0.01,
         step_size: ScalarLike = 1.0,
     ) -> Array:
-        return jnp.asarray(0.0)
+        return self.canonical_dispersion(0.0)
 
     def estimate_dispersion(
         self,
@@ -100,6 +100,10 @@ class ExponentialFamily(eqx.Module):
         max_iter: int = 1000,
         offset_eta: ScalarLike = 0.0,
     ) -> Array:
+        return self.canonical_dispersion(0.0)
+
+    def canonical_dispersion(self, disp: ScalarLike = 0.0) -> Array:
+        del disp
         return jnp.asarray(0.0)
 
     def _hlink(self, eta: ArrayLike, alpha: ScalarLike = 0.0) -> Array:
@@ -335,6 +339,9 @@ class NegativeBinomial(ExponentialFamily):
         diff, num_iters, alpha = lax.while_loop(cond_fun, body_fun, init_tuple)
 
         return alpha
+
+    def canonical_dispersion(self, disp: ScalarLike = 0.0) -> Array:
+        return jnp.asarray(disp)
 
     def _hlink(self, eta: ArrayLike, alpha: ScalarLike = 0.0) -> Array:
         """

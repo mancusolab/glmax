@@ -161,7 +161,7 @@ def test_NegativeBinomial(getkey, solver):
     glm_state = jaxqtl_nb.fit(X, y, tol=1e-8)
 
     # solve using statsmodel method (ground truth)
-    sm_negbin = sm.GLM(np.array(y), np.array(X), family=sm.families.NegativeBinomial(alpha=glm_state.alpha))
+    sm_negbin = sm.GLM(np.array(y), np.array(X), family=sm.families.NegativeBinomial(alpha=glm_state.params.disp))
     sm_state = sm_negbin.fit()
     sm_beta = sm_state.params
     sm_se = sm_state.bse

@@ -1,9 +1,11 @@
+from dataclasses import fields
+
 import pytest
 
 import jax.numpy as jnp
 
 from glmax import GLM, GLMData
-from glmax.family import Gaussian
+from glmax.family import Binomial, Gaussian, Poisson
 
 
 def test_glmdata_accepts_valid_inputs_and_canonicalizes_optional_vectors() -> None:
@@ -68,3 +70,23 @@ def test_glm_fit_accepts_glmdata_noun() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.0, 2.0, 2.9]))
     fit_result = GLM(family=Gaussian()).fit(data)
     assert fit_result.params.beta.shape == (1,)
+
+
+def test_params_schema_is_beta_and_disp_only() -> None:
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.0, 2.0, 2.9]))
+    fit_result = GLM(family=Gaussian()).fit(data)
+
+    assert [field.name for field in fields(fit_result.params)] == ["beta", "disp"]
+    assert not hasattr(fit_result, "alpha")
+
+
+@pytest.mark.parametrize("family", [Gaussian(), Poisson(), Binomial()])
+def test_fixed_dispersion_families_emit_deterministic_disp(family) -> None:
+    X = jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]])
+    if isinstance(family, Binomial):
+        y = jnp.array([0.0, 0.0, 1.0, 1.0, 1.0])
+    else:
+        y = jnp.array([0.0, 1.0, 2.0, 3.0, 4.0])
+
+    fit_result = GLM(family=family).fit(GLMData(X=X, y=y))
+    assert jnp.allclose(fit_result.params.disp, jnp.array(0.0))

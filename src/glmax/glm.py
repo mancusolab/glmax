@@ -40,12 +40,12 @@ class GLM(eqx.Module):
         offset_eta: ArrayLike = 0.0,
         max_iter: int = 1000,
     ) -> Tuple[Array, Array]:
-        """Calculate eta and dispersion parameter alpha
+        """Calculate eta and canonical dispersion value.
 
         :param X: covariate data matrix (nxp)
         :param y: outcome vector (nx1)
         :param offset_eta: offset (nx1)
-        :return: eta, dispersion (alpha)
+        :return: eta and canonical dispersion value
         """
         n, p = X.shape
         init_val = self.family.init_eta(y)
@@ -59,11 +59,11 @@ class GLM(eqx.Module):
             disp = self.family.estimate_dispersion(X, y, eta, alpha=1.0 / alpha_init, max_iter=max_iter)
 
             # convert disp to 0.1 if bad initialization
-            disp = jnp.nan_to_num(disp, nan=0.1)
+            disp = self.family.canonical_dispersion(jnp.nan_to_num(disp, nan=0.1))
 
         else:
             eta = init_val
-            disp = jnp.asarray(0.0)  # alpha is non-zero only in NB model
+            disp = self.family.canonical_dispersion(jnp.asarray(0.0))
 
         return eta, disp
 
@@ -121,7 +121,7 @@ class GLM(eqx.Module):
         - `tol`: tolerance for convergence, default to 1e-3.
         - `step_size`: step size, default to 1.0.
         - `offset_eta`: offset.
-        - `alpha_init`: initial value for alpha in NB model, default to 0s.
+        - `alpha_init`: initial value for the dispersion parameter, default to 0s.
 
         **Returns:**
 
@@ -134,10 +134,11 @@ class GLM(eqx.Module):
         if not bool(jnp.allclose(weights_array, jnp.ones_like(weights_array))):
             raise ValueError("GLMData.weights is not supported in GLM.fit yet.")
 
-        if init is None or alpha_init is None:
-            init, alpha_init = self.calc_eta_and_dispersion(X_array, y_array, offset_array)
+        disp_init = alpha_init
+        if init is None or disp_init is None:
+            init, disp_init = self.calc_eta_and_dispersion(X_array, y_array, offset_array)
 
-        beta, n_iter, converged, alpha = irls(
+        beta, n_iter, converged, disp = irls(
             X_array,
             y_array,
             self.family,
@@ -147,16 +148,16 @@ class GLM(eqx.Module):
             tol,
             step_size,
             offset_array,
-            alpha_init,
+            disp_init=disp_init,
         )
 
         eta = X_array @ beta + offset_array
         mu = self.family.glink.inverse(eta)
         resid = (y_array - mu) * self.family.glink.deriv(mu)  # note: this is the working resid
 
-        _, _, weight = self.family.calc_weight(X_array, y_array, eta, alpha)
+        _, _, weight = self.family.calc_weight(X_array, y_array, eta, disp)
 
-        resid_covar = se_estimator(self.family, X_array, y_array, eta, mu, weight, alpha)
+        resid_covar = se_estimator(self.family, X_array, y_array, eta, mu, weight, disp)
         beta_se = jnp.sqrt(jnp.diag(resid_covar))
 
         df = X_array.shape[0] - X_array.shape[1]
@@ -166,7 +167,7 @@ class GLM(eqx.Module):
         pval_wald = self.wald_test(stat, df)
 
         return GLMState(
-            params=Params(beta=beta, disp=alpha),
+            params=Params(beta=beta, disp=self.family.canonical_dispersion(disp)),
             se=beta_se,
             z=stat,
             p=pval_wald,

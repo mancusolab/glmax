@@ -173,10 +173,6 @@ class FitResult:
         return self.params.beta
 
     @property
-    def alpha(self) -> Array:
-        return self.params.disp
-
-    @property
     def num_iters(self) -> Array:
         return self.diagnostics.num_iters
 
