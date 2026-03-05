@@ -18,7 +18,10 @@ def _is_numeric_dtype(array: Array) -> bool:
 
 
 def _as_numeric_array(name: str, value: ArrayLike) -> Array:
-    array = jnp.asarray(value)
+    try:
+        array = jnp.asarray(value)
+    except TypeError as exc:
+        raise TypeError(f"GLMData.{name} must be numeric.") from exc
     if not _is_numeric_dtype(array):
         raise TypeError(f"GLMData.{name} must be numeric.")
     return array
@@ -30,7 +33,10 @@ def _require_finite(name: str, array: Array) -> None:
 
 
 def _as_contract_numeric_array(name: str, value: ArrayLike) -> Array:
-    array = jnp.asarray(value)
+    try:
+        array = jnp.asarray(value)
+    except TypeError as exc:
+        raise TypeError(f"{name} must be numeric.") from exc
     if not _is_numeric_dtype(array):
         raise TypeError(f"{name} must be numeric.")
     return array

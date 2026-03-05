@@ -10,13 +10,23 @@ def _canonicalize_init(init: Params | None, n_features: int) -> tuple[jnp.ndarra
     if init is None:
         return None, None
 
-    beta = jnp.asarray(init.beta)
+    try:
+        beta = jnp.asarray(init.beta)
+    except TypeError as exc:
+        raise TypeError("Params.beta must be numeric.") from exc
+    if not jnp.issubdtype(beta.dtype, jnp.number):
+        raise TypeError("Params.beta must be numeric.")
     if beta.ndim != 1 or beta.shape[0] != n_features:
         raise ValueError("Params.beta must be a one-dimensional vector with length equal to X.shape[1].")
     if not bool(jnp.all(jnp.isfinite(beta))):
         raise ValueError("Params.beta must contain only finite values.")
 
-    disp = jnp.asarray(init.disp)
+    try:
+        disp = jnp.asarray(init.disp)
+    except TypeError as exc:
+        raise TypeError("Params.disp must be numeric.") from exc
+    if not jnp.issubdtype(disp.dtype, jnp.number):
+        raise TypeError("Params.disp must be numeric.")
     if disp.ndim > 0 and disp.size != 1:
         raise ValueError("Params.disp must be a scalar.")
     if not bool(jnp.all(jnp.isfinite(disp))):

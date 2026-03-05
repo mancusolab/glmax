@@ -199,6 +199,23 @@ def test_default_fitter_validates_scalar_disp() -> None:
         glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
 
 
+def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
+    model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
+
+    with pytest.raises(ValueError, match="Params.beta"):
+        glmax.predict(model, Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0)), data)
+
+    with pytest.raises(ValueError, match="Params.beta"):
+        glmax.predict(model, Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)), data)
+
+    with pytest.raises(TypeError, match="Params.beta must be numeric"):
+        glmax.predict(model, Params(beta=["bad"], disp=jnp.array(0.0)), data)
+
+    with pytest.raises(TypeError, match="Params.disp must be numeric"):
+        glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad"), data)
+
+
 def test_default_fitter_validates_X_y_and_offset_shapes() -> None:
     with pytest.raises(ValueError, match="GLMData.X"):
         glmax.fit(glmax.GLM(), GLMData(X=jnp.ones(4), y=jnp.ones(4)))

@@ -53,7 +53,25 @@ def test_infer_rejects_invalid_fit_artifacts_deterministically() -> None:
     with pytest.raises(ValueError, match="FitResult.params.beta"):
         glmax.infer(
             model,
+            replace(fit_result, params=Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0))),
+        )
+
+    with pytest.raises(ValueError, match="FitResult.params.beta"):
+        glmax.infer(
+            model,
             replace(fit_result, params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0))),
+        )
+
+    with pytest.raises(TypeError, match="FitResult.params.beta must be numeric"):
+        glmax.infer(
+            model,
+            replace(fit_result, params=Params(beta=["bad"], disp=jnp.array(0.0))),
+        )
+
+    with pytest.raises(TypeError, match="FitResult.params.disp must be numeric"):
+        glmax.infer(
+            model,
+            replace(fit_result, params=Params(beta=jnp.array([1.0]), disp="bad")),
         )
 
 

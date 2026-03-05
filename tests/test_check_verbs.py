@@ -54,6 +54,15 @@ def test_check_rejects_invalid_fit_artifacts_deterministically() -> None:
     with pytest.raises(ValueError, match="FitResult.diagnostics.objective"):
         glmax.check(model, bad_result)
 
+    with pytest.raises(TypeError, match="FitResult.params.beta must be numeric"):
+        glmax.check(
+            model,
+            replace(
+                fit_result,
+                params=glmax.Params(beta=["bad"], disp=jnp.array(0.0)),
+            ),
+        )
+
 
 def test_check_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
     model, fit_result = _make_fit_result()
