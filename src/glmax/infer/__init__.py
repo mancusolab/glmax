@@ -21,6 +21,7 @@ def infer(*args, **kwargs):
 
 
 def check(*args, **kwargs):
-    """Canonical check verb placeholder until Phase 4 implementation lands."""
-    del args, kwargs
-    raise NotImplementedError("`check` is not implemented yet. Planned in implementation plan Phase 4.")
+    """Canonical check verb entrypoint."""
+    from .diagnostics import check as _check
+
+    return _check(*args, **kwargs)
