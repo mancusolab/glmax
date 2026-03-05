@@ -377,6 +377,12 @@ def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
     with pytest.raises(TypeError, match="Params.disp must be numeric"):
         glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad"), data)
 
+    with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
+        glmax.predict(model, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0)), data)
+
+    with pytest.raises(TypeError, match="Params.disp must have an inexact dtype"):
+        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32)), data)
+
 
 def test_default_fitter_validates_X_y_and_offset_shapes() -> None:
     with pytest.raises(ValueError, match="GLMData.X"):

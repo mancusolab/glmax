@@ -49,6 +49,11 @@ def _require_contract_finite(name: str, array: Array) -> None:
         raise ValueError(f"{name} must contain only finite values.")
 
 
+def _require_contract_inexact_dtype(name: str, array: Array) -> None:
+    if not bool(jnp.issubdtype(array.dtype, jnp.inexact)):
+        raise TypeError(f"{name} must have an inexact dtype.")
+
+
 def _canonicalize_numeric_vector(name: str, value: ArrayLike, n_samples: int) -> Array:
     array = _as_numeric_array(name, value)
     if array.ndim == 0:
@@ -240,11 +245,13 @@ def validate_fit_result(result: FitResult) -> None:
     beta = _as_contract_numeric_array("FitResult.params.beta", result.params.beta)
     if beta.ndim != 1:
         raise ValueError("FitResult.params.beta must be a rank-1 vector.")
+    _require_contract_inexact_dtype("FitResult.params.beta", beta)
     _require_contract_finite("FitResult.params.beta", beta)
 
     disp = _as_contract_numeric_array("FitResult.params.disp", result.params.disp)
     if disp.ndim > 0 and disp.size != 1:
         raise ValueError("FitResult.params.disp must be a scalar.")
+    _require_contract_inexact_dtype("FitResult.params.disp", disp)
     _require_contract_finite("FitResult.params.disp", disp)
 
     expected_p = beta.shape[0]

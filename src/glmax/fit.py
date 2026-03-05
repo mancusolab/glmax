@@ -20,6 +20,8 @@ def _canonicalize_init(init: Params | None, n_features: int) -> tuple[jnp.ndarra
         raise TypeError("Params.beta must be numeric.")
     if beta.ndim != 1 or beta.shape[0] != n_features:
         raise ValueError("Params.beta must be a one-dimensional vector with length equal to X.shape[1].")
+    if not bool(jnp.issubdtype(beta.dtype, jnp.inexact)):
+        raise TypeError("Params.beta must have an inexact dtype.")
     if not bool(jnp.all(jnp.isfinite(beta))):
         raise ValueError("Params.beta must contain only finite values.")
 
@@ -31,6 +33,8 @@ def _canonicalize_init(init: Params | None, n_features: int) -> tuple[jnp.ndarra
         raise TypeError("Params.disp must be numeric.")
     if disp.ndim > 0 and disp.size != 1:
         raise ValueError("Params.disp must be a scalar.")
+    if not bool(jnp.issubdtype(disp.dtype, jnp.inexact)):
+        raise TypeError("Params.disp must have an inexact dtype.")
     if not bool(jnp.all(jnp.isfinite(disp))):
         raise ValueError("Params.disp must contain only finite values.")
 

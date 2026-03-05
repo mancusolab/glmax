@@ -1,3 +1,5 @@
+# pattern: Imperative Shell
+
 from dataclasses import replace
 
 import pytest
@@ -63,4 +65,13 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
         glmax.infer(
             model,
             replace(fit_result, params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0))),
+        )
+
+    with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
+        glmax.predict(model, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0)), data)
+
+    with pytest.raises(TypeError, match="FitResult.params.beta must have an inexact dtype"):
+        glmax.infer(
+            model,
+            replace(fit_result, params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0))),
         )

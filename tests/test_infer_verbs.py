@@ -1,3 +1,5 @@
+# pattern: Imperative Shell
+
 import importlib
 
 from dataclasses import replace
@@ -78,6 +80,18 @@ def test_infer_rejects_invalid_fit_artifacts_deterministically() -> None:
         glmax.infer(
             model,
             replace(fit_result, params=Params(beta=jnp.array([1.0]), disp=jnp.array(jnp.inf))),
+        )
+
+    with pytest.raises(TypeError, match="FitResult.params.beta must have an inexact dtype"):
+        glmax.infer(
+            model,
+            replace(fit_result, params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0))),
+        )
+
+    with pytest.raises(TypeError, match="FitResult.params.disp must have an inexact dtype"):
+        glmax.infer(
+            model,
+            replace(fit_result, params=Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32))),
         )
 
 
