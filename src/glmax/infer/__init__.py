@@ -13,11 +13,14 @@ from .stderr import (
 )
 
 
-def infer(*_args, **_kwargs):
-    """Canonical infer verb placeholder until Phase 4 implementation lands."""
-    raise NotImplementedError("`infer` is not implemented yet. Planned in implementation plan Phase 4.")
+def infer(*args, **kwargs):
+    """Canonical infer verb entrypoint."""
+    from .inference import infer as _infer
+
+    return _infer(*args, **kwargs)
 
 
-def check(*_args, **_kwargs):
+def check(*args, **kwargs):
     """Canonical check verb placeholder until Phase 4 implementation lands."""
+    del args, kwargs
     raise NotImplementedError("`check` is not implemented yet. Planned in implementation plan Phase 4.")

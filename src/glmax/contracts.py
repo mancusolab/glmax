@@ -29,6 +29,18 @@ def _require_finite(name: str, array: Array) -> None:
         raise ValueError(f"GLMData.{name} must contain only finite values.")
 
 
+def _as_contract_numeric_array(name: str, value: ArrayLike) -> Array:
+    array = jnp.asarray(value)
+    if not _is_numeric_dtype(array):
+        raise TypeError(f"{name} must be numeric.")
+    return array
+
+
+def _require_contract_finite(name: str, array: Array) -> None:
+    if not bool(jnp.all(jnp.isfinite(array))):
+        raise ValueError(f"{name} must contain only finite values.")
+
+
 def _canonicalize_numeric_vector(name: str, value: ArrayLike, n_samples: int) -> Array:
     array = _as_numeric_array(name, value)
     if array.ndim == 0:
@@ -216,3 +228,91 @@ class Fitter(Protocol):
 
     def __call__(self, model: GLM, data: GLMData, init: Params | None = None) -> FitResult:
         ...
+
+
+def validate_fit_result(result: FitResult) -> None:
+    """Validate FitResult artifacts used by infer/check verbs."""
+    if not isinstance(result.params, Params):
+        raise TypeError("FitResult.params must be a Params instance.")
+    if not isinstance(result.diagnostics, Diagnostics):
+        raise TypeError("FitResult.diagnostics must be a Diagnostics instance.")
+
+    beta = _as_contract_numeric_array("FitResult.params.beta", result.params.beta)
+    if beta.ndim != 1:
+        raise ValueError("FitResult.params.beta must be a rank-1 vector.")
+    _require_contract_finite("FitResult.params.beta", beta)
+
+    disp = _as_contract_numeric_array("FitResult.params.disp", result.params.disp)
+    if disp.ndim > 0 and disp.size != 1:
+        raise ValueError("FitResult.params.disp must be a scalar.")
+    _require_contract_finite("FitResult.params.disp", disp)
+
+    expected_p = beta.shape[0]
+
+    se = _as_contract_numeric_array("FitResult.se", result.se)
+    if se.ndim != 1 or se.shape[0] != expected_p:
+        raise ValueError("FitResult.se must be a rank-1 vector aligned with FitResult.params.beta.")
+    _require_contract_finite("FitResult.se", se)
+
+    z = _as_contract_numeric_array("FitResult.z", result.z)
+    if z.ndim != 1 or z.shape[0] != expected_p:
+        raise ValueError("FitResult.z must be a rank-1 vector aligned with FitResult.params.beta.")
+    _require_contract_finite("FitResult.z", z)
+
+    p = _as_contract_numeric_array("FitResult.p", result.p)
+    if p.ndim != 1 or p.shape[0] != expected_p:
+        raise ValueError("FitResult.p must be a rank-1 vector aligned with FitResult.params.beta.")
+    _require_contract_finite("FitResult.p", p)
+
+    curvature = _as_contract_numeric_array("FitResult.curvature", result.curvature)
+    if curvature.ndim != 2 or curvature.shape[0] != curvature.shape[1]:
+        raise ValueError("FitResult.curvature must be a square rank-2 matrix.")
+    if curvature.shape[0] != expected_p:
+        raise ValueError("FitResult.curvature shape must match FitResult.params.beta length.")
+    _require_contract_finite("FitResult.curvature", curvature)
+
+    eta = _as_contract_numeric_array("FitResult.eta", result.eta)
+    if eta.ndim != 1:
+        raise ValueError("FitResult.eta must be a rank-1 vector.")
+    _require_contract_finite("FitResult.eta", eta)
+
+    expected_n = eta.shape[0]
+
+    mu = _as_contract_numeric_array("FitResult.mu", result.mu)
+    if mu.ndim != 1 or mu.shape[0] != expected_n:
+        raise ValueError("FitResult.mu must be a rank-1 vector aligned with FitResult.eta.")
+    _require_contract_finite("FitResult.mu", mu)
+
+    glm_wt = _as_contract_numeric_array("FitResult.glm_wt", result.glm_wt)
+    if glm_wt.ndim != 1 or glm_wt.shape[0] != expected_n:
+        raise ValueError("FitResult.glm_wt must be a rank-1 vector aligned with FitResult.eta.")
+    _require_contract_finite("FitResult.glm_wt", glm_wt)
+
+    score_residual = _as_contract_numeric_array("FitResult.score_residual", result.score_residual)
+    if score_residual.ndim != 1 or score_residual.shape[0] != expected_n:
+        raise ValueError("FitResult.score_residual must be a rank-1 vector aligned with FitResult.eta.")
+    _require_contract_finite("FitResult.score_residual", score_residual)
+
+    converged = jnp.asarray(result.diagnostics.converged)
+    if not jnp.issubdtype(converged.dtype, jnp.bool_):
+        raise TypeError("FitResult.diagnostics.converged must be boolean.")
+    if converged.ndim > 0 and converged.size != 1:
+        raise ValueError("FitResult.diagnostics.converged must be scalar.")
+
+    num_iters = _as_contract_numeric_array("FitResult.diagnostics.num_iters", result.diagnostics.num_iters)
+    if num_iters.ndim > 0 and num_iters.size != 1:
+        raise ValueError("FitResult.diagnostics.num_iters must be scalar.")
+    _require_contract_finite("FitResult.diagnostics.num_iters", num_iters)
+
+    objective = _as_contract_numeric_array("FitResult.diagnostics.objective", result.diagnostics.objective)
+    if objective.ndim > 0 and objective.size != 1:
+        raise ValueError("FitResult.diagnostics.objective must be scalar.")
+    _require_contract_finite("FitResult.diagnostics.objective", objective)
+
+    objective_delta = _as_contract_numeric_array(
+        "FitResult.diagnostics.objective_delta",
+        result.diagnostics.objective_delta,
+    )
+    if objective_delta.ndim > 0 and objective_delta.size != 1:
+        raise ValueError("FitResult.diagnostics.objective_delta must be scalar.")
+    _require_contract_finite("FitResult.diagnostics.objective_delta", objective_delta)
