@@ -1,8 +1,10 @@
+import importlib
+
 from typing import Tuple
 
 import pytest
 
-from utils import assert_glm_state_parity
+from utils import assert_array_eq, assert_glm_state_parity
 
 import jax.nn
 import jax.numpy as jnp
@@ -69,3 +71,18 @@ def test_wrapper_and_canonical_fit_parity(getkey, family_name, family, fit_kwarg
     wrapper_state = glmax.GLM(family=family, solver=solver).fit(X, y, **fit_kwargs)
 
     assert_glm_state_parity(wrapper_state, direct_state, rtol=1e-7, atol=1e-8)
+
+
+def test_canonical_fit_routes_pvalues_through_inference_strategy(monkeypatch, getkey):
+    fit_module = importlib.import_module("glmax.fit")
+
+    def fake_wald_test(statistic, df, family):
+        del df, family
+        return jnp.full_like(statistic, 0.2222)
+
+    monkeypatch.setattr(fit_module, "inference_wald_test", fake_wald_test, raising=False)
+
+    X, y = simulate_glm_data(getkey(), family="poisson")
+    state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    assert_array_eq(state.p, jnp.full_like(state.p, 0.2222), rtol=0.0, atol=1e-12)

@@ -3,21 +3,18 @@
 from typing import Tuple
 
 from jax import Array, numpy as jnp
-from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
-from .family.utils import t_cdf
 from .glm import GLMState
+from .infer.contracts import AbstractLinearSolver
+from .infer.inference import (
+    AbstractStdErrEstimator,
+    FisherInfoError,
+    wald_test as inference_wald_test,
+)
 from .infer.optimize import irls
-from .infer.solve import AbstractLinearSolver, CholeskySolver
-from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
-
-
-def _wald_test(statistic: ArrayLike, df: int, family: ExponentialFamily) -> Array:
-    if isinstance(family, Gaussian):
-        return 2 * t_cdf(-abs(statistic), df)
-    return 2 * norm.sf(abs(statistic))
+from .infer.solvers import CholeskySolver
 
 
 def _calc_eta_and_dispersion(
@@ -112,7 +109,7 @@ def fit(
     beta = beta.squeeze()
     stat = beta / beta_se
 
-    pval_wald = _wald_test(stat, df, family)
+    pval_wald = inference_wald_test(stat, df, family)
 
     return GLMState(
         beta,

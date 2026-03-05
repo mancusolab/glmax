@@ -8,9 +8,13 @@ from jax import Array, numpy as jnp
 from jaxtyping import ArrayLike, ScalarLike
 
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
-from .infer.inference import wald_test as inference_wald_test
-from .infer.solve import AbstractLinearSolver, CholeskySolver
-from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
+from .infer.contracts import AbstractLinearSolver
+from .infer.inference import (
+    AbstractStdErrEstimator,
+    FisherInfoError,
+    wald_test as inference_wald_test,
+)
+from .infer.solvers import CholeskySolver
 
 
 class GLMState(NamedTuple):
