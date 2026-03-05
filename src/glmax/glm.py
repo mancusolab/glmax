@@ -154,7 +154,7 @@ class GLM(eqx.Module):
         beta_se = jnp.sqrt(jnp.diag(resid_covar))
 
         df = X.shape[0] - X.shape[1]
-        beta = beta.squeeze()  # (p,)
+        beta = jnp.ravel(beta)  # (p,)
         stat = beta / beta_se
 
         pval_wald = self.wald_test(stat, df)

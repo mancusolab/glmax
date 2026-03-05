@@ -1,11 +1,14 @@
 import inspect
 
+import pytest
+
 import jax.numpy as jnp
 import jax.tree_util as jtu
 
 import glmax
 
 from glmax import Diagnostics, FitResult, Fitter, GLMData, InferenceResult, Params
+from glmax.family import Gaussian
 from glmax.glm import specify
 
 
@@ -134,6 +137,38 @@ def test_contract_dataclasses_are_pytrees() -> None:
     result = _make_fit_result()
     fit_leaves, _ = jtu.tree_flatten(result)
     assert len(fit_leaves) == 12
+
+
+def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
+    X = jnp.ones((3, 1))
+    y = jnp.ones(3)
+
+    with pytest.raises(ValueError, match="weights"):
+        glmax.fit(glmax.GLM(), GLMData(X=X, y=y, weights=jnp.ones(3)))
+
+    with pytest.raises(ValueError, match="mask"):
+        glmax.fit(glmax.GLM(), GLMData(X=X, y=y, mask=jnp.array([True, False, True])))
+
+
+def test_default_fitter_validates_init_beta_shape() -> None:
+    X = jnp.ones((4, 2))
+    y = jnp.ones(4)
+    bad_init = Params(beta=jnp.ones((2, 1)), disp=jnp.array(0.0))
+
+    with pytest.raises(ValueError, match="Params.beta"):
+        glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
+
+
+def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:
+    model = glmax.GLM(family=Gaussian())
+    X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
+    y = jnp.array([1.2, 1.9, 3.1, 4.0])
+
+    first = model.fit(X, y, tol=1e-6)
+    assert first.beta.shape == (1,)
+
+    second = glmax.fit(model, GLMData(X=X, y=y), init=first.params)
+    assert second.beta.shape == (1,)
 
 
 def test_specify_returns_glm_instance() -> None:
