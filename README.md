@@ -41,7 +41,7 @@ diagnostics = glmax.check(model, fit_result)
 
 ## Testing
 
-Use the repository-standard pytest invocation:
+Use the repository-standard pytest invocation (also wired into project scripts):
 
 ```bash
 pytest -p no:capture tests

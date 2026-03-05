@@ -43,7 +43,7 @@ diagnostics = glmax.check(model, fit_result)
 
 ## Verification
 
-Run tests with the repository-standard command:
+Run tests with the repository-standard command used by project scripts:
 
 ```bash
 pytest -p no:capture tests
