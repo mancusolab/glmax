@@ -267,3 +267,16 @@ def test_boundary_rejects_invalid_rank_shape_and_finiteness():
         exc_type=ValueError,
         message="y must contain only finite values",
     )
+
+
+def test_valid_input_parity_is_preserved_after_boundary_cleanup(getkey):
+    X, y = simulate_glm_data(getkey(), family="poisson")
+    X_np = np.asarray(X)
+    y_np = np.asarray(y)
+    offset = 0.25
+    solver = glmax.CholeskySolver()
+
+    direct_state = glmax.fit(X_np, y_np, family=glmax.Poisson(), solver=solver, offset_eta=offset)
+    wrapper_state = glmax.GLM(family=glmax.Poisson(), solver=solver).fit(X_np, y_np, offset_eta=offset)
+
+    assert_glm_state_parity(wrapper_state, direct_state, rtol=1e-7, atol=1e-8)

@@ -343,3 +343,18 @@ def test_wrapper_and_canonical_match_offset_finiteness_boundary_error():
     model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
     with pytest.raises(ValueError, match="offset_eta must contain only finite values"):
         model.fit(X, y, offset_eta=bad_offset)
+
+
+def test_wrapper_and_canonical_remain_aligned_with_numpy_inputs(getkey):
+    X, y, _ = simulate_glm_data(getkey(), n_samples=80, n_features=4, family="poisson")
+    X_np = np.asarray(X)
+    y_np = np.asarray(y)
+    solver = glmax.CholeskySolver()
+
+    direct = glmax.fit(X_np, y_np, family=glmax.Poisson(), solver=solver, offset_eta=0.1)
+    wrapper = glmax.GLM(family=glmax.Poisson(), solver=solver).fit(X_np, y_np, offset_eta=0.1)
+
+    assert_array_eq(wrapper.beta, direct.beta, rtol=1e-7, atol=1e-8)
+    assert_array_eq(wrapper.se, direct.se, rtol=1e-7, atol=1e-8)
+    assert int(wrapper.num_iters) == int(direct.num_iters)
+    assert bool(wrapper.converged) is bool(direct.converged)
