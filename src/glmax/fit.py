@@ -18,7 +18,10 @@ from .infer.solvers import CholeskySolver
 
 
 def _to_numeric_array(name: str, value: ArrayLike) -> Array:
-    array = jnp.asarray(value)
+    try:
+        array = jnp.asarray(value)
+    except TypeError as exc:
+        raise TypeError(f"{name} must have a numeric dtype") from exc
     if not jnp.issubdtype(array.dtype, jnp.number):
         raise TypeError(f"{name} must have a numeric dtype")
     return array

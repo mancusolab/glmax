@@ -330,3 +330,16 @@ def test_fitters_module_provides_irls_contract():
     assert hasattr(fitters, "IRLSState")
     assert callable(fitters.irls)
     assert optimize.irls is fitters.irls
+
+
+def test_wrapper_and_canonical_match_offset_finiteness_boundary_error():
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0]])
+    y = jnp.array([1.0, 0.0])
+    bad_offset = jnp.array([0.0, jnp.inf])
+
+    with pytest.raises(ValueError, match="offset_eta must contain only finite values"):
+        glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver(), offset_eta=bad_offset)
+
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+    with pytest.raises(ValueError, match="offset_eta must contain only finite values"):
+        model.fit(X, y, offset_eta=bad_offset)

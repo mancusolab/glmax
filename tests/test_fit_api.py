@@ -2,6 +2,7 @@ import importlib
 
 from typing import Tuple
 
+import numpy as np
 import pytest
 
 from utils import assert_array_eq, assert_glm_state_parity
@@ -50,6 +51,32 @@ def simulate_glm_data(
         raise ValueError(f"Unsupported family: {family}")
 
     return X, y
+
+
+def _assert_boundary_error_parity(
+    X,
+    y,
+    *,
+    offset_eta=0.0,
+    init=None,
+    alpha_init=None,
+    exc_type=ValueError,
+    message="",
+):
+    with pytest.raises(exc_type, match=message):
+        glmax.fit(
+            X,
+            y,
+            family=glmax.Poisson(),
+            solver=glmax.CholeskySolver(),
+            offset_eta=offset_eta,
+            init=init,
+            alpha_init=alpha_init,
+        )
+
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+    with pytest.raises(exc_type, match=message):
+        model.fit(X, y, offset_eta=offset_eta, init=init, alpha_init=alpha_init)
 
 
 @pytest.mark.parametrize(
@@ -184,3 +211,59 @@ def test_wrapper_and_canonical_share_boundary_normalization(monkeypatch, getkey)
     glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver()).fit(X, y)
 
     assert calls["count"] >= 2
+
+
+def test_boundary_rejects_non_numeric_dtypes_with_deterministic_errors():
+    X = np.array([["a", "b"], ["c", "d"]])
+    y = jnp.array([1.0, 0.0])
+    _assert_boundary_error_parity(X, y, exc_type=TypeError, message="X must have a numeric dtype")
+
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0]])
+    y = np.array(["0", "1"])
+    _assert_boundary_error_parity(X, y, exc_type=TypeError, message="y must have a numeric dtype")
+
+    offset = np.array(["x", "y"])
+    _assert_boundary_error_parity(
+        X, jnp.array([0.0, 1.0]), offset_eta=offset, exc_type=TypeError, message="offset_eta must have a numeric dtype"
+    )
+
+
+def test_boundary_rejects_invalid_rank_shape_and_finiteness():
+    _assert_boundary_error_parity(
+        jnp.array([1.0, 2.0, 3.0]),
+        jnp.array([1.0, 2.0, 3.0]),
+        exc_type=ValueError,
+        message="X must be a 2D array",
+    )
+    _assert_boundary_error_parity(
+        jnp.array([[1.0, 0.0], [1.0, 1.0]]),
+        jnp.array([1.0]),
+        exc_type=ValueError,
+        message="X and y must have the same number of rows",
+    )
+    _assert_boundary_error_parity(
+        jnp.array([[1.0, 0.0], [1.0, 1.0]]),
+        jnp.array([1.0, 0.0]),
+        offset_eta=jnp.array([0.0]),
+        exc_type=ValueError,
+        message="offset_eta must be a scalar or a 1D array with length equal to the number of rows in X",
+    )
+    _assert_boundary_error_parity(
+        jnp.array([[1.0, 0.0], [1.0, 1.0]]),
+        jnp.array([1.0, 0.0]),
+        init=jnp.array([0.0]),
+        exc_type=ValueError,
+        message="init must be a 1D array with length equal to the number of rows in X",
+    )
+    _assert_boundary_error_parity(
+        jnp.array([[1.0, jnp.nan], [1.0, 1.0]]),
+        jnp.array([1.0, 0.0]),
+        exc_type=ValueError,
+        message="X must contain only finite values",
+    )
+    _assert_boundary_error_parity(
+        jnp.array([[1.0, 0.0], [1.0, 1.0]]),
+        jnp.array([1.0, jnp.inf]),
+        exc_type=ValueError,
+        message="y must contain only finite values",
+    )
