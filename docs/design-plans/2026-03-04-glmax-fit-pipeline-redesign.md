@@ -1,7 +1,7 @@
 # GLMAX Fit Pipeline Redesign Design
 
 ## Status
-Draft
+Approved for Implementation
 
 ## Handoff Decision
 - Current decision: blocked
@@ -78,7 +78,7 @@ Not applicable. Path is `existing-codebase-port`.
 ### Source Pin
 | Source ID | Source Type (`local-directory` or `github-url`) | Path/URL | Commit/Tag | Notes |
 | --- | --- | --- | --- | --- |
-| PORT-SRC-1 | local-directory | `/Users/nicholas/Projects/glmax` | `42ef67a` | Working tree includes unrelated untracked files not part of this design |
+| PORT-SRC-1 | local-directory | /Users/nicholas/Projects/glmax | 42ef67a | Working tree includes unrelated untracked files not part of this design |
 
 ### Behavior Inventory And Parity Targets
 | Behavior ID | Surface (`cli`/`api`/`numerics`/`io`) | Current Behavior | Target Behavior | Evidence Plan (tests/golden outputs) |
