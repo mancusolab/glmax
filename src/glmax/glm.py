@@ -1,5 +1,7 @@
 # pattern: Functional Core
 
+from __future__ import annotations
+
 from typing import Tuple
 
 import equinox as eqx
@@ -33,23 +35,24 @@ class GLM(eqx.Module):
 
     def calc_eta_and_dispersion(
         self,
-        X: ArrayLike,
-        y: ArrayLike,
-        offset_eta: ArrayLike = 0.0,
+        data: GLMData,
         max_iter: int = 1000,
     ) -> Tuple[Array, Array]:
         """Calculate eta and canonical dispersion value.
 
-        :param X: covariate data matrix (nxp)
-        :param y: outcome vector (nx1)
-        :param offset_eta: offset (nx1)
+        :param data: canonical GLM data noun
         :return: eta and canonical dispersion value
         """
-        n, p = X.shape
+        X, y, offset_eta, _, _ = data.canonical_arrays()
+        n, _ = X.shape
         init_val = self.family.init_eta(y)
         if isinstance(self.family, NegativeBinomial):
             jaxqtl_pois = GLM(family=Poisson())
-            glm_state_pois = jaxqtl_pois.fit(X, y, init=init_val, offset_eta=offset_eta, max_iter=max_iter)
+            glm_state_pois = jaxqtl_pois.fit(
+                GLMData(X=X, y=y, offset=offset_eta),
+                init_eta=init_val,
+                max_iter=max_iter,
+            )
 
             # fit covariate-only model (null)
             alpha_init = n / jnp.sum((y / self.family.glink.inverse(glm_state_pois.eta) - 1) ** 2)
@@ -94,15 +97,15 @@ class GLM(eqx.Module):
 
     def fit(
         self,
-        X: ArrayLike | GLMData,
-        y: ArrayLike | None = None,
-        offset_eta: ArrayLike = 0.0,
-        init: ArrayLike = None,
-        alpha_init: ScalarLike = None,
+        data: GLMData,
+        *,
+        init_eta: ArrayLike = None,
+        disp_init: ScalarLike = None,
         se_estimator: AbstractStdErrEstimator = FisherInfoError(),
         max_iter: int = 1000,
         tol: float = 1e-3,
         step_size: float = 1.0,
+        **kwargs: ArrayLike,
     ) -> FitResult:
         """
         Represents the fitted state of a Generalized Linear Model (GLM).
@@ -112,51 +115,59 @@ class GLM(eqx.Module):
 
         **Arguments:**
 
-        - `X`: covariate data matrix.
-        - `y`: outcome vector.
-        - `init`: initial value for betas.
+        - `data`: canonical covariate and response noun.
+        - `init_eta`: optional initial linear predictor.
+        - `disp_init`: optional initial value for the canonical dispersion parameter.
         - `max_iter`: maximum number of iterations, default to 1000.
         - `tol`: tolerance for convergence, default to 1e-3.
         - `step_size`: step size, default to 1.0.
-        - `offset_eta`: offset.
-        - `alpha_init`: initial value for the dispersion parameter, default to 0s.
 
         **Returns:**
 
         -  A [`glmax.FitResult`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
-        data = self._coerce_data(X, y, offset_eta)
+        if not isinstance(data, GLMData):
+            raise TypeError("GLM.fit(...) expects `data` to be a GLMData instance.")
+        if "alpha_init" in kwargs:
+            raise TypeError("GLM.fit(...) uses `disp_init`; `alpha_init` is not supported.")
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs))
+            raise TypeError(f"GLM.fit(...) received unexpected keyword arguments: {unexpected}.")
         if data.weights is not None:
             raise ValueError("GLMData.weights is not supported in GLM.fit yet.")
         X_array, y_array, offset_array, _, _ = data.canonical_arrays()
         if X_array.shape[0] == 0:
             raise ValueError("GLMData.mask removes all samples; at least one effective sample is required.")
+        effective_data = GLMData(X=X_array, y=y_array, offset=offset_array)
 
-        disp_init = alpha_init
-        if init is not None:
-            init = jnp.asarray(init)
-            if init.ndim != 1 or init.shape[0] != X_array.shape[0]:
-                raise ValueError("init must be a one-dimensional eta vector with length equal to sample count.")
-            if not bool(jnp.all(jnp.isfinite(init))):
-                raise ValueError("init must contain only finite values.")
+        if init_eta is not None:
+            init_eta = jnp.asarray(init_eta)
+            if init_eta.ndim != 1 or init_eta.shape[0] != X_array.shape[0]:
+                raise ValueError("init_eta must be a one-dimensional vector with length equal to sample count.")
+            if not bool(jnp.all(jnp.isfinite(init_eta))):
+                raise ValueError("init_eta must contain only finite values.")
 
         if disp_init is not None:
             disp_init = jnp.asarray(disp_init)
             if disp_init.ndim > 0 and disp_init.size != 1:
-                raise ValueError("alpha_init must be a scalar dispersion value.")
+                raise ValueError("disp_init must be a scalar dispersion value.")
             if not bool(jnp.all(jnp.isfinite(disp_init))):
-                raise ValueError("alpha_init must contain only finite values.")
+                raise ValueError("disp_init must contain only finite values.")
 
-        if init is None or disp_init is None:
-            init, disp_init = self.calc_eta_and_dispersion(X_array, y_array, offset_array)
+        if init_eta is None or disp_init is None:
+            inferred_eta, inferred_disp = self.calc_eta_and_dispersion(effective_data, max_iter=max_iter)
+            if init_eta is None:
+                init_eta = inferred_eta
+            if disp_init is None:
+                disp_init = inferred_disp
 
         beta, n_iter, converged, disp, objective, objective_delta = irls(
             X_array,
             y_array,
             self.family,
             self.solver,
-            init,
+            init_eta,
             max_iter,
             tol,
             step_size,
@@ -196,21 +207,6 @@ class GLM(eqx.Module):
             curvature=curvature,
             score_residual=score_residual,
         )
-
-    @staticmethod
-    def _coerce_data(X: ArrayLike | GLMData, y: ArrayLike | None, offset_eta: ArrayLike) -> GLMData:
-        if isinstance(X, GLMData):
-            if y is not None:
-                raise TypeError("When GLMData is provided as X, y must be omitted.")
-            offset_array = jnp.asarray(offset_eta)
-            if not bool(jnp.all(offset_array == 0)):
-                raise TypeError("offset_eta must remain default when GLMData is provided.")
-            return X
-
-        if y is None:
-            raise TypeError("y is required when X is not a GLMData object.")
-
-        return GLMData(X=X, y=y, offset=offset_eta)
 
 
 GLM.__init__.__doc__ = r"""**Arguments:**

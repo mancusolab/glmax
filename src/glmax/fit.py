@@ -47,7 +47,7 @@ class _ModelFitter:
             return model.fit(data)
 
         eta_init = X_array @ init_beta
-        return model.fit(data, init=eta_init, alpha_init=init_disp)
+        return model.fit(data, init_eta=eta_init, disp_init=init_disp)
 
 
 DEFAULT_FITTER: Fitter = _ModelFitter()
