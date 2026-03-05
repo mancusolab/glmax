@@ -11,6 +11,13 @@ import jax.random as rdm
 import glmax
 
 
+def test_package_root_fit_export_identity():
+    from glmax import fit as package_fit
+
+    assert callable(glmax.fit)
+    assert package_fit is glmax.fit
+
+
 def simulate_glm_data(
     key: rdm.PRNGKey,
     n_samples: int = 180,
@@ -53,10 +60,12 @@ def simulate_glm_data(
     ],
 )
 def test_wrapper_and_canonical_fit_parity(getkey, family_name, family, fit_kwargs):
+    from glmax import fit as package_fit
+
     X, y = simulate_glm_data(getkey(), family=family_name, dispersion=2.0)
     solver = glmax.CholeskySolver()
 
-    direct_state = glmax.fit(X, y, family=family, solver=solver, **fit_kwargs)
+    direct_state = package_fit(X, y, family=family, solver=solver, **fit_kwargs)
     wrapper_state = glmax.GLM(family=family, solver=solver).fit(X, y, **fit_kwargs)
 
     assert_glm_state_parity(wrapper_state, direct_state, rtol=1e-7, atol=1e-8)

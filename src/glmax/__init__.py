@@ -16,6 +16,8 @@ from .family import (
     Poisson as Poisson,
     Power as Power,
 )
+
+# Public canonical fit API: keep this package-root export stable.
 from .fit import (
     fit as fit,
 )
