@@ -5,7 +5,6 @@ import jax.numpy as jnp
 import glmax
 
 from glmax import Diagnostics, FitResult, Fitter, GLMData, InferenceResult, Params
-from glmax.fit import fit
 from glmax.glm import specify
 
 
@@ -16,6 +15,27 @@ def test_canonical_contract_imports_exist() -> None:
     assert InferenceResult is not None
     assert Diagnostics is not None
     assert Fitter is not None
+
+
+def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
+    assert set(glmax.__all__) == {
+        "GLMData",
+        "Params",
+        "GLM",
+        "Fitter",
+        "FitResult",
+        "InferenceResult",
+        "Diagnostics",
+        "specify",
+        "predict",
+        "fit",
+        "infer",
+        "check",
+    }
+
+
+def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
+    assert callable(glmax.fit)
 
 
 def _make_fit_result() -> FitResult:
@@ -34,7 +54,7 @@ def _make_fit_result() -> FitResult:
 
 
 def test_fit_signature_matches_canonical_surface() -> None:
-    sig = inspect.signature(fit)
+    sig = inspect.signature(glmax.fit)
     assert list(sig.parameters) == ["model", "data", "init", "fitter"]
     assert sig.parameters["model"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["data"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
@@ -57,7 +77,7 @@ def test_fit_returns_fitresult_using_injected_fitter() -> None:
     data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
     init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0))
 
-    result = fit(model, data, init=init, fitter=DummyFitter())
+    result = glmax.fit(model, data, init=init, fitter=DummyFitter())
 
     assert result is expected
     assert isinstance(result, FitResult)

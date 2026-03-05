@@ -17,6 +17,9 @@ import jax.random as rdm
 
 import glmax
 
+from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+from glmax.infer.solve import CGSolver, CholeskySolver, QRSolver
+
 
 def simulate_glm_data(
     key: rdm.PRNGKey,
@@ -80,7 +83,7 @@ def simulate_glm_data(
     return X, y, beta_true
 
 
-@pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
+@pytest.mark.parametrize("solver", (QRSolver(), CGSolver(), CholeskySolver()))
 def test_poisson(getkey, solver):
     n_samples = 200
     n_features = 5
@@ -93,7 +96,7 @@ def test_poisson(getkey, solver):
     sm_state = sm_poi.fit()
 
     # solve using glmax functions
-    glmax_poi = glmax.GLM(family=glmax.Poisson(), solver=solver)
+    glmax_poi = glmax.GLM(family=Poisson(), solver=solver)
     glm_state = glmax_poi.fit(X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, atol=1e-3)
@@ -101,7 +104,7 @@ def test_poisson(getkey, solver):
     assert_array_eq(glm_state.p, sm_state.pvalues, atol=1e-3)
 
 
-@pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
+@pytest.mark.parametrize("solver", (QRSolver(), CGSolver(), CholeskySolver()))
 def test_normal(getkey, solver):
     key = rdm.PRNGKey(42)  # Random seed for reproducibility
     n_samples = 200
@@ -115,7 +118,7 @@ def test_normal(getkey, solver):
     sm_state = sm_norm.fit()
 
     # solve using glmax functions
-    glmax_normal = glmax.GLM(family=glmax.Gaussian(), solver=solver)
+    glmax_normal = glmax.GLM(family=Gaussian(), solver=solver)
     glm_state = glmax_normal.fit(X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
@@ -123,7 +126,7 @@ def test_normal(getkey, solver):
     assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
 
 
-@pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
+@pytest.mark.parametrize("solver", (QRSolver(), CGSolver(), CholeskySolver()))
 def test_logit(getkey, solver):
     key = rdm.PRNGKey(42)  # Random seed for reproducibility
     n_samples = 200
@@ -137,7 +140,7 @@ def test_logit(getkey, solver):
     sm_state = sm_logit.fit()
 
     # solve using glmax functions
-    glmax_logit = glmax.GLM(family=glmax.Binomial(), solver=solver)
+    glmax_logit = glmax.GLM(family=Binomial(), solver=solver)
     glm_state = glmax_logit.fit(X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
@@ -145,7 +148,7 @@ def test_logit(getkey, solver):
     assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
 
 
-@pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
+@pytest.mark.parametrize("solver", (QRSolver(), CGSolver(), CholeskySolver()))
 def test_NegativeBinomial(getkey, solver):
     key = rdm.PRNGKey(42)  # Random seed for reproducibility
     n_samples = 200
@@ -154,7 +157,7 @@ def test_NegativeBinomial(getkey, solver):
     # Simulate NegativeBinomial regression data
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
 
-    jaxqtl_nb = glmax.GLM(family=glmax.NegativeBinomial(), solver=solver)
+    jaxqtl_nb = glmax.GLM(family=NegativeBinomial(), solver=solver)
     glm_state = jaxqtl_nb.fit(X, y, tol=1e-8)
 
     # solve using statsmodel method (ground truth)
