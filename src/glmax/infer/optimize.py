@@ -1,10 +1,12 @@
+# pattern: Functional Core
+
 from typing import NamedTuple, Tuple
 
 from jax import Array, lax, numpy as jnp
 from jaxtyping import ArrayLike, ScalarLike
 
 from ..family.dist import ExponentialFamily
-from .solve import AbstractLinearSolver
+from .contracts import AbstractLinearSolver
 
 
 class IRLSState(NamedTuple):

@@ -288,3 +288,23 @@ def test_infer_public_exports_remain_stable():
     assert AbstractStdErrEstimator is inference.AbstractStdErrEstimator
     assert FisherInfoError is inference.FisherInfoError
     assert HuberError is inference.HuberError
+
+
+def test_legacy_infer_modules_warn_but_preserve_aliases():
+    with pytest.warns(DeprecationWarning):
+        legacy_solve = importlib.reload(importlib.import_module("glmax.infer.solve"))
+    with pytest.warns(DeprecationWarning):
+        legacy_stderr = importlib.reload(importlib.import_module("glmax.infer.stderr"))
+
+    contracts = importlib.import_module("glmax.infer.contracts")
+    solvers = importlib.import_module("glmax.infer.solvers")
+    inference = importlib.import_module("glmax.infer.inference")
+
+    assert legacy_solve.AbstractLinearSolver is contracts.AbstractLinearSolver
+    assert legacy_solve.SolverState is contracts.SolverState
+    assert legacy_solve.QRSolver is solvers.QRSolver
+    assert legacy_solve.CholeskySolver is solvers.CholeskySolver
+    assert legacy_solve.CGSolver is solvers.CGSolver
+    assert legacy_stderr.AbstractStdErrEstimator is inference.AbstractStdErrEstimator
+    assert legacy_stderr.FisherInfoError is inference.FisherInfoError
+    assert legacy_stderr.HuberError is inference.HuberError
