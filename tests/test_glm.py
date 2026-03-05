@@ -238,3 +238,30 @@ def test_glm_fit_delegates_to_module_entrypoint(monkeypatch):
     assert recorded["max_iter"] == 22
     assert recorded["tol"] == 1e-5
     assert recorded["step_size"] == 0.25
+
+
+def test_consolidated_infer_modules_are_available():
+    contracts = importlib.import_module("glmax.infer.contracts")
+    solvers = importlib.import_module("glmax.infer.solvers")
+    inference = importlib.import_module("glmax.infer.inference")
+
+    assert hasattr(contracts, "AbstractLinearSolver")
+    assert hasattr(solvers, "QRSolver")
+    assert hasattr(solvers, "CholeskySolver")
+    assert hasattr(solvers, "CGSolver")
+    assert hasattr(inference, "FisherInfoError")
+    assert hasattr(inference, "HuberError")
+    assert hasattr(inference, "wald_test")
+
+
+def test_glm_wald_test_routes_through_inference_strategy(monkeypatch):
+    glm_module = importlib.import_module("glmax.glm")
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    def fake_wald_test(statistic, df, family):
+        return jnp.asarray([0.123456])
+
+    monkeypatch.setattr(glm_module, "inference_wald_test", fake_wald_test)
+
+    pval = model.wald_test(jnp.asarray([1.0]), 1)
+    assert_array_eq(pval, jnp.asarray([0.123456]), atol=1e-12)

@@ -5,11 +5,10 @@ from typing import NamedTuple, Tuple
 import equinox as eqx
 
 from jax import Array, numpy as jnp
-from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
-from .family.utils import t_cdf
+from .infer.inference import wald_test as inference_wald_test
 from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
@@ -81,7 +80,7 @@ class GLM(eqx.Module):
         :param offset_eta: offset (nx1)
         :return: eta, dispersion (alpha)
         """
-        n, p = X.shape
+        n, _ = X.shape
         init_val = self.family.init_eta(y)
         if isinstance(self.family, NegativeBinomial):
             jaxqtl_pois = GLM(family=Poisson())
@@ -121,12 +120,7 @@ class GLM(eqx.Module):
         Returns:
         :return: The Wald test statistic's corresponding p-value.
         """
-        if isinstance(self.family, Gaussian):
-            pval = 2 * t_cdf(-abs(statistic), df)
-        else:
-            pval = 2 * norm.sf(abs(statistic))
-
-        return pval
+        return inference_wald_test(statistic, df, self.family)
 
     def fit(
         self,
