@@ -1,6 +1,7 @@
 import importlib
 import inspect
 
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
@@ -78,6 +79,10 @@ def _assert_boundary_error_parity(
     model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
     with pytest.raises(exc_type, match=message):
         model.fit(X, y, offset_eta=offset_eta, init=init, alpha_init=alpha_init)
+
+
+def _read_glm_api_doc() -> str:
+    return Path("docs/api/glm.md").read_text()
 
 
 def test_public_entrypoint_docstrings_follow_contract_sections():
@@ -291,5 +296,17 @@ def test_valid_input_parity_is_preserved_after_boundary_cleanup(getkey):
 
     direct_state = glmax.fit(X_np, y_np, family=glmax.Poisson(), solver=solver, offset_eta=offset)
     wrapper_state = glmax.GLM(family=glmax.Poisson(), solver=solver).fit(X_np, y_np, offset_eta=offset)
+
+    assert_glm_state_parity(wrapper_state, direct_state, rtol=1e-7, atol=1e-8)
+
+
+def test_docs_claim_canonical_workflow_is_backed_by_parity_assertions(getkey):
+    doc = _read_glm_api_doc()
+    assert "canonical public entrypoint" in doc
+    assert "compatibility wrapper" in doc
+
+    X, y = simulate_glm_data(getkey(), family="poisson")
+    direct_state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
+    wrapper_state = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver()).fit(X, y)
 
     assert_glm_state_parity(wrapper_state, direct_state, rtol=1e-7, atol=1e-8)

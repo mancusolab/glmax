@@ -6,6 +6,7 @@
 import importlib
 import inspect
 
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
@@ -384,3 +385,16 @@ def test_contract_and_solver_docstrings_follow_required_sections():
         assert "**Arguments:**" in doc
         assert "**Returns:**" in doc
         assert "**Raises:**" in doc or "**Failure Modes:**" in doc
+
+
+def test_docs_claim_shared_boundary_failures_is_backed_by_glm_checks():
+    doc = Path("docs/api/glm.md").read_text()
+    assert "Boundary failures are deterministic" in doc
+
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0]])
+    y = jnp.array([1.0, 0.0])
+    bad_offset = jnp.array([0.0, jnp.inf])
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    with pytest.raises(ValueError, match="offset_eta must contain only finite values"):
+        model.fit(X, y, offset_eta=bad_offset)

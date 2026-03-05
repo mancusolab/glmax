@@ -1,6 +1,8 @@
 import importlib
 import inspect
 
+from pathlib import Path
+
 import pytest
 
 import jax.numpy as jnp
@@ -47,3 +49,12 @@ def test_fitter_and_inference_docstrings_follow_contract_sections():
         assert "**Arguments:**" in doc
         assert "**Returns:**" in doc
         assert "**Raises:**" in doc or "**Failure Modes:**" in doc
+
+
+def test_docs_claim_invalid_fitter_type_is_enforced():
+    doc = Path("docs/api/glm.md").read_text()
+    assert "invalid fitter type" in doc
+
+    X, y = _sample_inputs()
+    with pytest.raises(TypeError, match="fitter must implement AbstractGLMFitter"):
+        glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver(), fitter=object())
