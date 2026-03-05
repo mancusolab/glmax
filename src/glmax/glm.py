@@ -153,7 +153,7 @@ class GLM(eqx.Module):
         if init is None or disp_init is None:
             init, disp_init = self.calc_eta_and_dispersion(X_array, y_array, offset_array)
 
-        beta, n_iter, converged, disp = irls(
+        beta, n_iter, converged, disp, objective, objective_delta = irls(
             X_array,
             y_array,
             self.family,
@@ -168,12 +168,12 @@ class GLM(eqx.Module):
 
         eta = X_array @ beta + offset_array
         mu = self.family.glink.inverse(eta)
-        resid = (y_array - mu) * self.family.glink.deriv(mu)  # note: this is the working resid
+        score_residual = (y_array - mu) * self.family.glink.deriv(mu)  # note: this is the working residual
 
         _, _, weight = self.family.calc_weight(X_array, y_array, eta, disp)
 
-        resid_covar = se_estimator(self.family, X_array, y_array, eta, mu, weight, disp)
-        beta_se = jnp.sqrt(jnp.diag(resid_covar))
+        curvature = se_estimator(self.family, X_array, y_array, eta, mu, weight, disp)
+        beta_se = jnp.sqrt(jnp.diag(curvature))
 
         df = X_array.shape[0] - X_array.shape[1]
         beta = jnp.ravel(beta)  # (p,)
@@ -189,9 +189,14 @@ class GLM(eqx.Module):
             eta=eta,
             mu=mu,
             glm_wt=weight,
-            diagnostics=Diagnostics(converged=converged, num_iters=n_iter),
-            infor_inv=resid_covar,
-            resid=resid,
+            diagnostics=Diagnostics(
+                converged=converged,
+                num_iters=n_iter,
+                objective=objective,
+                objective_delta=objective_delta,
+            ),
+            curvature=curvature,
+            score_residual=score_residual,
         )
 
     @staticmethod

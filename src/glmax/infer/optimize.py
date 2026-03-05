@@ -12,6 +12,8 @@ class IRLSState(NamedTuple):
     num_iters: int
     converged: Array
     disp: Array
+    objective: Array
+    objective_delta: Array
 
 
 # @eqx.filter_jit
@@ -65,9 +67,11 @@ def irls(
         return cond_l
 
     init_beta = jnp.zeros((p,))
-    init_tuple = (10000.0, 10000.0, 0, init_beta, eta + offset_eta, disp_init)
+    init_eta = eta + offset_eta
+    init_likelihood = family.negloglikelihood(X, y, init_eta, disp_init)
+    init_tuple = (init_likelihood, jnp.inf, 0, init_beta, init_eta, disp_init)
 
-    likelihood_n, diff, num_iters, beta, eta, disp = lax.while_loop(cond_fun, body_fun, init_tuple)
-    converged = jnp.logical_and(jnp.fabs(diff) < tol, num_iters <= max_iter)
+    objective, objective_delta, num_iters, beta, eta, disp = lax.while_loop(cond_fun, body_fun, init_tuple)
+    converged = jnp.logical_and(jnp.fabs(objective_delta) < tol, num_iters <= max_iter)
 
-    return IRLSState(beta, num_iters, converged, disp)
+    return IRLSState(beta, num_iters, converged, disp, objective, objective_delta)

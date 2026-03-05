@@ -51,9 +51,14 @@ def _make_fit_result() -> FitResult:
         eta=jnp.array([1.0]),
         mu=jnp.array([1.0]),
         glm_wt=jnp.array([1.0]),
-        diagnostics=Diagnostics(converged=jnp.array(True), num_iters=jnp.array(1)),
-        infor_inv=jnp.array([[1.0]]),
-        resid=jnp.array([0.0]),
+        diagnostics=Diagnostics(
+            converged=jnp.array(True),
+            num_iters=jnp.array(1),
+            objective=jnp.array(0.1),
+            objective_delta=jnp.array(-1e-3),
+        ),
+        curvature=jnp.array([[1.0]]),
+        score_residual=jnp.array([0.0]),
     )
 
 
@@ -116,7 +121,7 @@ def test_contract_dataclasses_are_pytrees() -> None:
 
     result = _make_fit_result()
     fit_leaves, _ = jtu.tree_flatten(result)
-    assert len(fit_leaves) == 12
+    assert len(fit_leaves) == 14
 
 
 def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
@@ -156,6 +161,10 @@ def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
 
     assert isinstance(result, FitResult)
     assert isinstance(result.params, Params)
+    assert result.curvature.shape == (1, 1)
+    assert result.score_residual.shape == (data.n_samples,)
+    assert bool(jnp.isfinite(result.objective))
+    assert bool(jnp.isfinite(result.objective_delta))
     if isinstance(family, NegativeBinomial):
         assert result.params.disp > 0
     else:

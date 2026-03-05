@@ -34,7 +34,7 @@ class AbstractStdErrEstimator(eqx.Module, strict=True):
         The fitted mean response values (expected values of `y`).
     :param weight : ArrayLike
         A weighting vector for each individual observation, used in variance estimation.
-    :param alpha : ScalarLike, optional (default=0.0)
+    :param disp : ScalarLike, optional (default=0.0)
         The dispersion parameter (specific to models like the **Negative Binomial**).
 
     Returns:
@@ -52,7 +52,7 @@ class AbstractStdErrEstimator(eqx.Module, strict=True):
         eta: ArrayLike,
         mu: ArrayLike,
         weight: ArrayLike,
-        alpha: ScalarLike = 0.0,
+        disp: ScalarLike = 0.0,
     ) -> Array:
         """calculate standard errors for SNP
 
@@ -62,7 +62,7 @@ class AbstractStdErrEstimator(eqx.Module, strict=True):
         :param eta: linear component eta
         :param mu: fitted mean
         :param weight: weight for each individual
-        :param alpha: dispersion parameter in NB model
+        :param disp: canonical dispersion parameter in NB model
         """
         pass
 
@@ -88,7 +88,7 @@ class FisherInfoError(AbstractStdErrEstimator, strict=True):
         The mean response values (expected values of `y`).
     :param weight : ArrayLike
         A vector of weights applied to the observations.
-    :param alpha : ScalarLike, optional (default=0.0)
+    :param disp : ScalarLike, optional (default=0.0)
         A regularization parameter.
 
     Returns:
@@ -106,9 +106,9 @@ class FisherInfoError(AbstractStdErrEstimator, strict=True):
         eta: ArrayLike,
         mu: ArrayLike,
         weight: ArrayLike,
-        alpha: ScalarLike = 0.0,
+        disp: ScalarLike = 0.0,
     ) -> Array:
-        del eta, mu, alpha
+        del eta, mu, disp
         infor = (X * weight[:, jnp.newaxis]).T @ X
         asmpt_cov = jnpla.inv(infor)
 
@@ -136,7 +136,7 @@ class HuberError(AbstractStdErrEstimator, strict=True):
         The mean response values (expected values of `y`).
     :param weight : ArrayLike
         A vector of weights applied to the observations.
-    :param alpha : ScalarLike, optional (default=0.0)
+    :param disp : ScalarLike, optional (default=0.0)
         A regularization parameter.
 
     Returns:
@@ -153,17 +153,17 @@ class HuberError(AbstractStdErrEstimator, strict=True):
         eta: ArrayLike,
         mu: ArrayLike,
         weight: ArrayLike,
-        alpha: ScalarLike = 0.0,
+        disp: ScalarLike = 0.0,
     ) -> Array:
         # note: this scaler will cancel out in robust_cov
         phi = family.scale(X, y, mu)
         gprime = family.glink.deriv(mu)
 
         # calculate observed hessian
-        W = 1 / phi * (family._hlink_score(eta, alpha) / gprime - family._hlink_hess(eta, alpha) * (y - mu))
+        W = 1 / phi * (family._hlink_score(eta, disp) / gprime - family._hlink_hess(eta, disp) * (y - mu))
         hess_inv = jnpla.inv(-(X * W).T @ X)
 
-        score_no_x = (y - mu) / (family.variance(mu, alpha) * gprime * phi)
+        score_no_x = (y - mu) / (family.variance(mu, disp) * gprime * phi)
         Bs = (X * (score_no_x**2)).T @ X
         robust_cov = hess_inv @ Bs @ hess_inv
 

@@ -150,6 +150,8 @@ class Diagnostics:
 
     converged: Array
     num_iters: Array
+    objective: Array
+    objective_delta: Array
 
 
 @tree_util.register_dataclass
@@ -165,8 +167,8 @@ class FitResult:
     mu: Array
     glm_wt: Array
     diagnostics: Diagnostics
-    infor_inv: Array
-    resid: Array
+    curvature: Array
+    score_residual: Array
 
     @property
     def beta(self) -> Array:
@@ -179,6 +181,22 @@ class FitResult:
     @property
     def converged(self) -> Array:
         return self.diagnostics.converged
+
+    @property
+    def objective(self) -> Array:
+        return self.diagnostics.objective
+
+    @property
+    def objective_delta(self) -> Array:
+        return self.diagnostics.objective_delta
+
+    @property
+    def infor_inv(self) -> Array:
+        return self.curvature
+
+    @property
+    def resid(self) -> Array:
+        return self.score_residual
 
 
 @tree_util.register_dataclass
