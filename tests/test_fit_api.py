@@ -121,3 +121,47 @@ def test_custom_fitter_strategy_injection_for_canonical_and_glm(getkey):
     assert calls["count"] == 2
     assert int(state_direct.num_iters) == 3
     assert int(state_wrapper.num_iters) == 3
+
+
+def test_equivalent_custom_fitter_preserves_regression_parity(getkey):
+    fitters = importlib.import_module("glmax.infer.fitters")
+
+    class DelegatingFitter(fitters.AbstractGLMFitter):
+        base: fitters.AbstractGLMFitter = fitters.IRLSFitter()
+
+        def __call__(
+            self,
+            X,
+            y,
+            family,
+            solver,
+            eta,
+            max_iter=1000,
+            tol=1e-3,
+            step_size=1.0,
+            offset_eta=0.0,
+            alpha_init=0.0,
+        ):
+            return self.base(
+                X,
+                y,
+                family,
+                solver,
+                eta,
+                max_iter=max_iter,
+                tol=tol,
+                step_size=step_size,
+                offset_eta=offset_eta,
+                alpha_init=alpha_init,
+            )
+
+    X, y = simulate_glm_data(getkey(), family="poisson")
+    solver = glmax.CholeskySolver()
+    custom_fitter = DelegatingFitter()
+
+    baseline = glmax.fit(X, y, family=glmax.Poisson(), solver=solver)
+    injected = glmax.fit(X, y, family=glmax.Poisson(), solver=solver, fitter=custom_fitter)
+    wrapper_injected = glmax.GLM(family=glmax.Poisson(), solver=solver, fitter=custom_fitter).fit(X, y)
+
+    assert_glm_state_parity(injected, baseline, rtol=1e-7, atol=1e-8)
+    assert_glm_state_parity(wrapper_injected, baseline, rtol=1e-7, atol=1e-8)

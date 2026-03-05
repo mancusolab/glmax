@@ -101,6 +101,8 @@ def test_poisson(getkey, solver):
     assert_array_eq(glm_state.beta, sm_state.params, atol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, atol=1e-3)
     assert_array_eq(glm_state.p, sm_state.pvalues, atol=1e-3)
+    assert bool(glm_state.converged)
+    assert int(glm_state.num_iters) > 0
 
 
 @pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
@@ -123,6 +125,8 @@ def test_normal(getkey, solver):
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
+    assert bool(glm_state.converged)
+    assert int(glm_state.num_iters) > 0
 
 
 @pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
@@ -145,6 +149,8 @@ def test_logit(getkey, solver):
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
+    assert bool(glm_state.converged)
+    assert int(glm_state.num_iters) > 0
 
 
 @pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
@@ -169,6 +175,8 @@ def test_NegativeBinomial(getkey, solver):
     assert_array_eq(glm_state.beta, sm_beta, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_se, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_p, rtol=1e-3)
+    assert bool(glm_state.converged)
+    assert int(glm_state.num_iters) > 0
 
 
 def test_module_fit_entrypoint_executes(getkey):
