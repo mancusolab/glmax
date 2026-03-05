@@ -7,7 +7,7 @@ from ..family.dist import ExponentialFamily
 from .solve import AbstractLinearSolver
 
 
-class IRLSState(NamedTuple):
+class _IRLSState(NamedTuple):
     beta: Array
     num_iters: int
     converged: Array
@@ -28,7 +28,7 @@ def irls(
     step_size: float = 1.0,
     offset_eta: ArrayLike = 0.0,
     disp_init: ScalarLike = 0.0,
-) -> IRLSState:
+) -> _IRLSState:
     """IRLS to solve GLM
 
     :param X: covariate data matrix (nxp)
@@ -41,7 +41,7 @@ def irls(
     :param step_size: step size to update the parameter at each step, default to 1.0
     :param offset_eta: offset (nx1)
     :param disp_init: initial value for the canonical dispersion parameter
-    :return: IRLSState
+    :return: _IRLSState
     """
     n, p = X.shape
 
@@ -74,4 +74,4 @@ def irls(
     objective, objective_delta, num_iters, beta, eta, disp = lax.while_loop(cond_fun, body_fun, init_tuple)
     converged = jnp.logical_and(jnp.fabs(objective_delta) < tol, num_iters <= max_iter)
 
-    return IRLSState(beta, num_iters, converged, disp, objective, objective_delta)
+    return _IRLSState(beta, num_iters, converged, disp, objective, objective_delta)

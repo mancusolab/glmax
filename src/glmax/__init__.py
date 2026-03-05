@@ -11,7 +11,7 @@ from .contracts import (
     Params as Params,
 )
 from .fit import fit as fit, predict as predict
-from .glm import GLM as GLM, GLMState as GLMState, specify as specify
+from .glm import GLM as GLM, specify as specify
 from .infer import check as check, infer as infer
 
 

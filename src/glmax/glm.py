@@ -14,10 +14,6 @@ from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
 
-# Backward-compatible alias while transitioning callers to the canonical contract noun.
-GLMState = FitResult
-
-
 class GLM(eqx.Module):
     """
     This class provides a flexible framework for fitting Generalized Linear Models (GLMs),
@@ -105,7 +101,7 @@ class GLM(eqx.Module):
         max_iter: int = 1000,
         tol: float = 1e-3,
         step_size: float = 1.0,
-    ) -> GLMState:
+    ) -> FitResult:
         """
         Represents the fitted state of a Generalized Linear Model (GLM).
 
@@ -181,7 +177,7 @@ class GLM(eqx.Module):
 
         pval_wald = self.wald_test(stat, df)
 
-        return GLMState(
+        return FitResult(
             params=Params(beta=beta, disp=self.family.canonical_dispersion(disp)),
             se=beta_se,
             z=stat,

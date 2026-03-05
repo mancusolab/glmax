@@ -208,14 +208,6 @@ class FitResult:
     def objective_delta(self) -> Array:
         return self.diagnostics.objective_delta
 
-    @property
-    def infor_inv(self) -> Array:
-        return self.curvature
-
-    @property
-    def resid(self) -> Array:
-        return self.score_residual
-
 
 @tree_util.register_dataclass
 @dataclass(frozen=True)

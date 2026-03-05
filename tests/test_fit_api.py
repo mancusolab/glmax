@@ -42,6 +42,10 @@ def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
     assert callable(glmax.fit)
 
 
+def test_legacy_fit_state_alias_is_not_publicly_exported() -> None:
+    assert not hasattr(glmax, "GLMState")
+
+
 def _make_fit_result() -> FitResult:
     return FitResult(
         params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
@@ -122,6 +126,8 @@ def test_contract_dataclasses_are_pytrees() -> None:
     result = _make_fit_result()
     fit_leaves, _ = jtu.tree_flatten(result)
     assert len(fit_leaves) == 14
+    assert not hasattr(result, "infor_inv")
+    assert not hasattr(result, "resid")
 
 
 def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
