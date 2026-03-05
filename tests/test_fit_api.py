@@ -225,6 +225,21 @@ def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
         glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
 
 
+def test_glm_method_preserves_legacy_direct_x_y_call_compatibility() -> None:
+    model = glmax.GLM(family=Gaussian())
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+    y = jnp.array([0.5, 1.1, 1.8, 2.2])
+    offset_eta = jnp.array([0.1, 0.1, 0.1, 0.1])
+    init = jnp.array([0.2, 0.4, 0.6, 0.8])
+
+    result = model.fit(X, y, offset_eta=offset_eta, init=init, alpha_init=jnp.array(0.0))
+
+    assert isinstance(result, FitResult)
+    assert isinstance(result.params, Params)
+    assert result.eta.shape == y.shape
+    assert result.params.beta.shape == (X.shape[1],)
+
+
 @pytest.mark.parametrize(
     ("family", "y"),
     [

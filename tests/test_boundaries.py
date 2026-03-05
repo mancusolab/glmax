@@ -4,6 +4,8 @@ import pytest
 
 import jax.numpy as jnp
 
+import glmax
+
 from glmax import GLM, GLMData
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 
@@ -72,21 +74,20 @@ def test_glm_fit_accepts_glmdata_noun() -> None:
     assert fit_result.params.beta.shape == (1,)
 
 
-def test_glm_fit_rejects_raw_x_y_inputs() -> None:
+def test_top_level_fit_rejects_raw_x_y_inputs() -> None:
     with pytest.raises(TypeError, match="GLMData"):
-        GLM(family=Gaussian()).fit(jnp.ones((4, 1)), y=jnp.ones(4))
+        glmax.fit(GLM(family=Gaussian()), jnp.ones((4, 1)))
 
 
-def test_glm_fit_uses_disp_init_keyword_not_alpha_init() -> None:
+def test_glm_fit_accepts_legacy_alpha_init_and_new_disp_init_keywords() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 1.0, 2.0]))
     model = GLM(family=NegativeBinomial())
 
     fit_result = model.fit(data, disp_init=jnp.array(0.4))
+    legacy_result = model.fit(data.X, data.y, alpha_init=jnp.array(0.4))
 
     assert fit_result.params.beta.shape == (1,)
-
-    with pytest.raises(TypeError, match="disp_init"):
-        model.fit(data, alpha_init=jnp.array(0.4))
+    assert legacy_result.params.beta.shape == (1,)
 
 
 def test_glm_fit_rejects_all_false_mask_with_deterministic_error() -> None:
