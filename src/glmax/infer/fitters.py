@@ -20,6 +20,24 @@ class IRLSState(NamedTuple):
 
 
 class AbstractGLMFitter(eqx.Module, strict=True):
+    r"""Abstract optimization-strategy contract for GLM fitting.
+
+    **Arguments:**
+
+    - Implementations receive validated fit-boundary tensors and optimization
+      controls (`max_iter`, `tol`, `step_size`).
+
+    **Returns:**
+
+    - [`IRLSState`][] containing coefficient updates, convergence metadata,
+      and dispersion outputs for the calling fit pipeline.
+
+    **Failure Modes:**
+
+    - Implementations may raise backend numerical errors when solver updates
+      cannot be computed for the provided operator.
+    """
+
     @abstractmethod
     def __call__(
         self,
@@ -38,6 +56,21 @@ class AbstractGLMFitter(eqx.Module, strict=True):
 
 
 class IRLSFitter(AbstractGLMFitter):
+    r"""Default IRLS-based fitter strategy.
+
+    **Arguments:**
+
+    - Uses weighted least-squares updates with family-specific working responses.
+
+    **Returns:**
+
+    - [`IRLSState`][] produced by iterative reweighted least squares updates.
+
+    **Failure Modes:**
+
+    - May fail when linear solves diverge or operators are ill-conditioned.
+    """
+
     def __call__(
         self,
         X: ArrayLike,
@@ -51,6 +84,29 @@ class IRLSFitter(AbstractGLMFitter):
         offset_eta: ArrayLike = 0.0,
         alpha_init: ScalarLike = 0.0,
     ) -> IRLSState:
+        r"""Run IRLS updates for one fit call.
+
+        **Arguments:**
+
+        - `X`: Covariate matrix with shape `(n, p)`.
+        - `y`: Response vector with shape `(n,)`.
+        - `family`: Exponential-family model specification.
+        - `solver`: Linear solver strategy for weighted updates.
+        - `eta`: Initial linear predictor.
+        - `max_iter`: Maximum IRLS iterations.
+        - `tol`: Convergence tolerance on likelihood deltas.
+        - `step_size`: Step size for iterative updates.
+        - `offset_eta`: Optional linear-predictor offset.
+        - `alpha_init`: Initial dispersion parameter.
+
+        **Returns:**
+
+        - [`IRLSState`][] with final coefficients, convergence metadata, and dispersion.
+
+        **Failure Modes:**
+
+        - May raise backend linear-algebra errors from solver calls.
+        """
         n, p = X.shape
 
         def body_fun(val: Tuple):
@@ -95,4 +151,18 @@ def irls(
     offset_eta: ArrayLike = 0.0,
     alpha_init: ScalarLike = 0.0,
 ) -> IRLSState:
+    r"""Functional compatibility wrapper for IRLS fitter execution.
+
+    **Arguments:**
+
+    - Matches historical `infer.optimize.irls` parameters for compatibility.
+
+    **Returns:**
+
+    - [`IRLSState`][] from the default [`IRLSFitter`][] strategy.
+
+    **Failure Modes:**
+
+    - Follows the same numerical failure behavior as [`IRLSFitter`][].
+    """
     return IRLSFitter()(X, y, family, solver, eta, max_iter, tol, step_size, offset_eta, alpha_init)

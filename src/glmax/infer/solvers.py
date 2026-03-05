@@ -9,25 +9,41 @@ from .contracts import AbstractLinearSolver, SolverState
 
 
 class QRSolver(AbstractLinearSolver, strict=True):
-    """
-    Define parent class for all solvers
-    If the operator is non-square
-    If your primary concern is computational efficiency
-    Note that whilst this does handle non-square operators, it still can only handle full-rank operators.
+    r"""QR-based weighted least-squares solver.
+
+    **Arguments:**
+
+    - Uses `lineax.QR` to solve full-rank weighted systems and supports
+      non-square operators.
+
+    **Returns:**
+
+    - Weighted least-squares coefficient updates for each IRLS iteration.
+
+    **Failure Modes:**
+
+    - May fail for rank-deficient systems where QR assumptions are violated.
     """
 
     solver: lx.AbstractLinearSolver = lx.QR()
 
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
-        """
+        r"""Build weighted QR operator inputs.
+
         **Arguments:**
 
-         - :param X: covariate data matrix (nxp)
-         - :param r: residuals
-         - :param weights: weights for each individual
+        - `X`: Covariate matrix with shape `(n, p)`.
+        - `r`: Working-response vector with shape `(n,)`.
+        - `weights`: Per-sample weights with shape `(n,)`.
 
-            **Returns:**
-            The solution to the weighted least squares regression using QR factorization.
+        **Returns:**
+
+        - Tuple `(A, b)` containing a linear operator and right-hand side.
+
+        **Failure Modes:**
+
+        - Invalid weight broadcasting or incompatible input shapes propagate as
+          backend array-shape errors.
         """
         w_half = jnp.sqrt(weights)
         w_half_r = w_half * r
@@ -39,10 +55,19 @@ class QRSolver(AbstractLinearSolver, strict=True):
 
 
 class CholeskySolver(AbstractLinearSolver):
-    """
-    Define parent class for all solvers
-    Preferred solver for positive or negative definite systems
-    The operator must be square, nonsingular, and either positive or negative definite.
+    r"""Cholesky-based weighted least-squares solver.
+
+    **Arguments:**
+
+    - Uses `lineax.Cholesky` on normal-equation operators.
+
+    **Returns:**
+
+    - Weighted least-squares coefficient updates for each IRLS iteration.
+
+    **Failure Modes:**
+
+    - Requires numerically stable normal equations; near-singular systems may fail.
     """
 
     solver: lx.AbstractLinearSolver = lx.Cholesky()
@@ -56,16 +81,19 @@ class CholeskySolver(AbstractLinearSolver):
 
 
 class CGSolver(AbstractLinearSolver):
-    """
+    r"""Conjugate-gradient weighted least-squares solver.
+
     **Arguments:**
 
-           - :param X: covariate data matrix (nxp)
-           - :param r: residuals
-           - :param weights: weights for each individual
+    - Uses `lineax.NormalCG` for iterative weighted least-squares solves.
 
-              **Returns:**
-              The solution to the weighted least squares regression using
-              Cholesky decomposition on the coefficient matrix.
+    **Returns:**
+
+    - Weighted least-squares coefficient updates for each IRLS iteration.
+
+    **Failure Modes:**
+
+    - Convergence may degrade on poorly conditioned systems depending on tolerance settings.
     """
 
     solver: lx.AbstractLinearSolver = lx.NormalCG(atol=1e-5, rtol=1e-5)

@@ -1,3 +1,6 @@
+import importlib
+import inspect
+
 import pytest
 
 import jax.numpy as jnp
@@ -24,3 +27,23 @@ def test_glm_fit_rejects_invalid_override_fitter_type():
 
     with pytest.raises(TypeError, match="fitter must implement AbstractGLMFitter"):
         model.fit(X, y, fitter="not-a-fitter")
+
+
+def test_fitter_and_inference_docstrings_follow_contract_sections():
+    fitters = importlib.import_module("glmax.infer.fitters")
+    inference = importlib.import_module("glmax.infer.inference")
+
+    targets = (
+        fitters.AbstractGLMFitter,
+        fitters.IRLSFitter,
+        fitters.IRLSFitter.__call__,
+        fitters.irls,
+        inference.wald_test,
+    )
+
+    for target in targets:
+        doc = inspect.getdoc(target)
+        assert doc is not None
+        assert "**Arguments:**" in doc
+        assert "**Returns:**" in doc
+        assert "**Raises:**" in doc or "**Failure Modes:**" in doc
