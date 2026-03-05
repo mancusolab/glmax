@@ -3,6 +3,8 @@
 # FisherInfoError
 # HuberError
 
+import importlib
+
 from typing import Tuple
 
 import numpy as np
@@ -178,3 +180,61 @@ def test_module_fit_entrypoint_executes(getkey):
 
     assert isinstance(glm_state, glmax.GLMState)
     assert glm_state.beta.shape == (n_features,)
+
+
+def test_glm_fit_delegates_to_module_entrypoint(monkeypatch):
+    fit_module = importlib.import_module("glmax.fit")
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    expected = glmax.GLMState(
+        beta=jnp.array([1.0, 2.0]),
+        se=jnp.array([0.1, 0.2]),
+        z=jnp.array([10.0, 10.0]),
+        p=jnp.array([0.0, 0.0]),
+        eta=jnp.array([0.0, 0.0, 0.0]),
+        mu=jnp.array([1.0, 1.0, 1.0]),
+        glm_wt=jnp.array([1.0, 1.0, 1.0]),
+        num_iters=jnp.asarray(2),
+        converged=jnp.asarray(True),
+        infor_inv=jnp.eye(2),
+        resid=jnp.array([0.0, 0.0, 0.0]),
+        alpha=jnp.asarray(0.0),
+    )
+    recorded: dict[str, object] = {}
+
+    def fake_fit(
+        X,
+        y,
+        family,
+        solver,
+        offset_eta=0.0,
+        init=None,
+        alpha_init=None,
+        se_estimator=None,
+        max_iter=1000,
+        tol=1e-3,
+        step_size=1.0,
+    ):
+        recorded["family"] = family
+        recorded["solver"] = solver
+        recorded["offset_eta"] = offset_eta
+        recorded["init"] = init
+        recorded["alpha_init"] = alpha_init
+        recorded["max_iter"] = max_iter
+        recorded["tol"] = tol
+        recorded["step_size"] = step_size
+        return expected
+
+    monkeypatch.setattr(fit_module, "fit", fake_fit)
+
+    X = jnp.ones((3, 2))
+    y = jnp.array([1.0, 2.0, 3.0])
+    actual = model.fit(X, y, offset_eta=1.5, max_iter=22, tol=1e-5, step_size=0.25)
+
+    assert actual is expected
+    assert recorded["family"] is model.family
+    assert recorded["solver"] is model.solver
+    assert recorded["offset_eta"] == 1.5
+    assert recorded["max_iter"] == 22
+    assert recorded["tol"] == 1e-5
+    assert recorded["step_size"] == 0.25

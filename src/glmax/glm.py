@@ -1,3 +1,5 @@
+# pattern: Functional Core
+
 from typing import NamedTuple, Tuple
 
 import equinox as eqx
@@ -8,7 +10,6 @@ from jaxtyping import ArrayLike, ScalarLike
 
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
 from .family.utils import t_cdf
-from .infer.optimize import irls
 from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
@@ -161,50 +162,20 @@ class GLM(eqx.Module):
         -  A [`glmax.GLMState`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
-        if init is None or alpha_init is None:
-            init, alpha_init = self.calc_eta_and_dispersion(X, y, offset_eta)
+        from .fit import fit as module_fit
 
-        beta, n_iter, converged, alpha = irls(
+        return module_fit(
             X,
             y,
-            self.family,
-            self.solver,
-            init,
-            max_iter,
-            tol,
-            step_size,
-            offset_eta,
-            alpha_init,
-        )
-
-        eta = X @ beta + offset_eta
-        mu = self.family.glink.inverse(eta)
-        resid = (y - mu) * self.family.glink.deriv(mu)  # note: this is the working resid
-
-        _, _, weight = self.family.calc_weight(X, y, eta, alpha)
-
-        resid_covar = se_estimator(self.family, X, y, eta, mu, weight, alpha)
-        beta_se = jnp.sqrt(jnp.diag(resid_covar))
-
-        df = X.shape[0] - X.shape[1]
-        beta = beta.squeeze()  # (p,)
-        stat = beta / beta_se
-
-        pval_wald = self.wald_test(stat, df)
-
-        return GLMState(
-            beta,
-            beta_se,
-            stat,
-            pval_wald,
-            eta,
-            mu,
-            weight,
-            n_iter,
-            converged,
-            resid_covar,
-            resid,
-            alpha,
+            family=self.family,
+            solver=self.solver,
+            offset_eta=offset_eta,
+            init=init,
+            alpha_init=alpha_init,
+            se_estimator=se_estimator,
+            max_iter=max_iter,
+            tol=tol,
+            step_size=step_size,
         )
 
 
