@@ -2,6 +2,14 @@ from importlib.metadata import version  # pragma: no cover
 
 import jax
 
+from .contracts import (
+    Diagnostics as Diagnostics,
+    FitResult as FitResult,
+    Fitter as Fitter,
+    GLMData as GLMData,
+    InferenceResult as InferenceResult,
+    Params as Params,
+)
 from .family import (
     Binomial as Binomial,
     ExponentialFamily as ExponentialFamily,
