@@ -6,7 +6,7 @@ from jax import Array, numpy as jnp
 from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
-from .contracts import Diagnostics, FitResult, Params
+from .contracts import Diagnostics, FitResult, GLMData, Params
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
 from .family.utils import t_cdf
 from .infer.optimize import irls
@@ -96,8 +96,8 @@ class GLM(eqx.Module):
 
     def fit(
         self,
-        X: ArrayLike,
-        y: ArrayLike,
+        X: ArrayLike | GLMData,
+        y: ArrayLike | None = None,
         offset_eta: ArrayLike = 0.0,
         init: ArrayLike = None,
         alpha_init: ScalarLike = None,
@@ -128,32 +128,38 @@ class GLM(eqx.Module):
         -  A [`glmax.FitResult`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
+        data = self._coerce_data(X, y, offset_eta)
+        X_array, y_array, offset_array, weights_array, _ = data.canonical_arrays()
+
+        if not bool(jnp.allclose(weights_array, jnp.ones_like(weights_array))):
+            raise ValueError("GLMData.weights is not supported in GLM.fit yet.")
+
         if init is None or alpha_init is None:
-            init, alpha_init = self.calc_eta_and_dispersion(X, y, offset_eta)
+            init, alpha_init = self.calc_eta_and_dispersion(X_array, y_array, offset_array)
 
         beta, n_iter, converged, alpha = irls(
-            X,
-            y,
+            X_array,
+            y_array,
             self.family,
             self.solver,
             init,
             max_iter,
             tol,
             step_size,
-            offset_eta,
+            offset_array,
             alpha_init,
         )
 
-        eta = X @ beta + offset_eta
+        eta = X_array @ beta + offset_array
         mu = self.family.glink.inverse(eta)
-        resid = (y - mu) * self.family.glink.deriv(mu)  # note: this is the working resid
+        resid = (y_array - mu) * self.family.glink.deriv(mu)  # note: this is the working resid
 
-        _, _, weight = self.family.calc_weight(X, y, eta, alpha)
+        _, _, weight = self.family.calc_weight(X_array, y_array, eta, alpha)
 
-        resid_covar = se_estimator(self.family, X, y, eta, mu, weight, alpha)
+        resid_covar = se_estimator(self.family, X_array, y_array, eta, mu, weight, alpha)
         beta_se = jnp.sqrt(jnp.diag(resid_covar))
 
-        df = X.shape[0] - X.shape[1]
+        df = X_array.shape[0] - X_array.shape[1]
         beta = jnp.ravel(beta)  # (p,)
         stat = beta / beta_se
 
@@ -171,6 +177,18 @@ class GLM(eqx.Module):
             infor_inv=resid_covar,
             resid=resid,
         )
+
+    @staticmethod
+    def _coerce_data(X: ArrayLike | GLMData, y: ArrayLike | None, offset_eta: ArrayLike) -> GLMData:
+        if isinstance(X, GLMData):
+            if y is not None:
+                raise TypeError("When GLMData is provided as X, y must be omitted.")
+            return X
+
+        if y is None:
+            raise TypeError("y is required when X is not a GLMData object.")
+
+        return GLMData(X=X, y=y, offset=offset_eta)
 
 
 GLM.__init__.__doc__ = r"""**Arguments:**
