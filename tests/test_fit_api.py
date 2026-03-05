@@ -1,3 +1,4 @@
+# pattern: Imperative Shell
 import importlib
 import inspect
 import os
@@ -161,6 +162,30 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     assert isinstance(result_1, FitResult)
     assert jnp.allclose(result_1.beta, result_2.beta)
     assert jnp.allclose(result_1.params.disp, result_2.params.disp)
+
+
+def test_default_fitter_explicitly_forwards_disp_init_through_top_level_router() -> None:
+    seen: dict[str, object] = {}
+
+    class RecordingGLM(glmax.GLM):
+        def fit(self, data, **kwargs):
+            seen["data"] = data
+            seen["kwargs"] = kwargs
+            return _make_fit_result()
+
+    model = RecordingGLM(family=Gaussian())
+    data = GLMData(
+        X=jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]]),
+        y=jnp.array([1.0, 0.0, 1.0]),
+    )
+    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
+
+    result = glmax.fit(model, data, init=init)
+
+    assert isinstance(result, FitResult)
+    assert seen["data"] is data
+    assert jnp.allclose(seen["kwargs"]["init_eta"], data.X @ init.beta)
+    assert jnp.allclose(seen["kwargs"]["disp_init"], init.disp)
 
 
 def test_contract_dataclasses_are_pytrees() -> None:
