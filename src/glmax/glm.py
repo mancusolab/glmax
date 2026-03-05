@@ -132,17 +132,23 @@ class GLM(eqx.Module):
         if data.weights is not None:
             raise ValueError("GLMData.weights is not supported in GLM.fit yet.")
         X_array, y_array, offset_array, _, _ = data.canonical_arrays()
+        if X_array.shape[0] == 0:
+            raise ValueError("GLMData.mask removes all samples; at least one effective sample is required.")
 
         disp_init = alpha_init
         if init is not None:
             init = jnp.asarray(init)
             if init.ndim != 1 or init.shape[0] != X_array.shape[0]:
                 raise ValueError("init must be a one-dimensional eta vector with length equal to sample count.")
+            if not bool(jnp.all(jnp.isfinite(init))):
+                raise ValueError("init must contain only finite values.")
 
         if disp_init is not None:
             disp_init = jnp.asarray(disp_init)
             if disp_init.ndim > 0 and disp_init.size != 1:
                 raise ValueError("alpha_init must be a scalar dispersion value.")
+            if not bool(jnp.all(jnp.isfinite(disp_init))):
+                raise ValueError("alpha_init must contain only finite values.")
 
         if init is None or disp_init is None:
             init, disp_init = self.calc_eta_and_dispersion(X_array, y_array, offset_array)

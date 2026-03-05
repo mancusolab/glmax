@@ -72,6 +72,13 @@ def test_glm_fit_accepts_glmdata_noun() -> None:
     assert fit_result.params.beta.shape == (1,)
 
 
+def test_glm_fit_rejects_all_false_mask_with_deterministic_error() -> None:
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]), mask=False)
+
+    with pytest.raises(ValueError, match="mask removes all samples"):
+        GLM(family=Gaussian()).fit(data)
+
+
 def test_params_schema_is_beta_and_disp_only() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.0, 2.0, 2.9]))
     fit_result = GLM(family=Gaussian()).fit(data)

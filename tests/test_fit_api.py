@@ -155,6 +155,16 @@ def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
         glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
 
 
+def test_fit_boundary_rejects_non_finite_params_init() -> None:
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
+
+    with pytest.raises(ValueError, match="finite"):
+        glmax.fit(glmax.GLM(family=Gaussian()), data, init=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)))
+
+    with pytest.raises(ValueError, match="finite"):
+        glmax.fit(glmax.GLM(family=Gaussian()), data, init=Params(beta=jnp.array([0.0]), disp=jnp.array(jnp.inf)))
+
+
 def test_default_fitter_validates_init_beta_shape() -> None:
     X = jnp.ones((4, 2))
     y = jnp.ones(4)
