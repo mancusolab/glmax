@@ -1,3 +1,5 @@
+# pattern: Imperative Shell
+
 from importlib.metadata import version  # pragma: no cover
 
 import jax
@@ -13,6 +15,9 @@ from .family import (
     NegativeBinomial as NegativeBinomial,
     Poisson as Poisson,
     Power as Power,
+)
+from .fit import (
+    fit as fit,
 )
 from .glm import (
     GLM as GLM,

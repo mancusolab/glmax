@@ -167,3 +167,14 @@ def test_NegativeBinomial(getkey, solver):
     assert_array_eq(glm_state.beta, sm_beta, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_se, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_p, rtol=1e-3)
+
+
+def test_module_fit_entrypoint_executes(getkey):
+    n_samples = 120
+    n_features = 4
+
+    X, y, _ = simulate_glm_data(getkey(), n_samples, n_features, family="poisson")
+    glm_state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    assert isinstance(glm_state, glmax.GLMState)
+    assert glm_state.beta.shape == (n_features,)
