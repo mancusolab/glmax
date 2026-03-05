@@ -11,6 +11,17 @@ Use `glmax.fit` as the canonical public entrypoint for fitting. It owns:
 `GLM.fit` is a compatibility wrapper that delegates to the same canonical path.
 Valid-input outputs are expected to remain aligned between direct and wrapper usage.
 
+## Compatibility Guarantees and Deprecation Checkpoints
+
+- Current guarantee: `GLM.fit` delegates to `glmax.fit`, sharing boundary
+  normalization and fitter validation semantics.
+- Deprecation trigger: parity and boundary-regression tests remain stable while
+  canonical usage guidance is published in user-facing docs.
+- Minimum release window: retain `GLM.fit` for at least two minor releases after
+  an explicit deprecation notice.
+- Migration guidance: call `glmax.fit(...)` directly with explicit `family`,
+  `solver`, and optional `fitter` arguments.
+
 ## Failure Semantics
 
 Boundary failures are deterministic and occur before numerics execution:

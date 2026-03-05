@@ -166,6 +166,17 @@ class GLM(eqx.Module):
         - Raises `TypeError` when `fitter` does not implement `AbstractGLMFitter`.
         - Boundary normalization, dtype/shape checks, and deterministic invalid-input
           failures are delegated to canonical [`glmax.fit`][].
+
+        **Compatibility Guarantees:**
+
+        - For valid inputs, this wrapper delegates to canonical [`glmax.fit`][]
+          and is expected to stay numerically aligned with direct calls.
+
+        **Deprecation Checkpoints:**
+
+        - Wrapper behavior remains available through at least two minor releases
+          after any formal deprecation notice.
+        - Migration path is direct canonical invocation via [`glmax.fit`][].
         """
         from .fit import fit as module_fit
 

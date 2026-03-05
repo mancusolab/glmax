@@ -304,6 +304,8 @@ def test_docs_claim_canonical_workflow_is_backed_by_parity_assertions(getkey):
     doc = _read_glm_api_doc()
     assert "canonical public entrypoint" in doc
     assert "compatibility wrapper" in doc
+    assert "two minor releases" in doc
+    assert "Migration guidance" in doc
 
     X, y = simulate_glm_data(getkey(), family="poisson")
     direct_state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())

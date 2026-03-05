@@ -156,6 +156,21 @@ def fit(
     - Raises `TypeError` when `X`, `y`, `offset_eta`, `init`, or `alpha_init`
       are non-numeric.
     - Raises `ValueError` for rank/shape mismatches or non-finite boundary inputs.
+
+    **Compatibility Guarantees:**
+
+    - `glmax.fit` is the canonical public fit entrypoint.
+    - `GLM.fit` compatibility calls delegate to this function and share the same
+      deterministic boundary contract.
+
+    **Deprecation Checkpoints:**
+
+    - Any `GLM.fit` deprecation proposal requires parity and boundary-regression
+      tests to remain passing in CI.
+    - Deprecation notice must be published for at least two minor releases before
+      wrapper removal.
+    - Migration guidance remains: call `glmax.fit(...)` directly with explicit
+      `family`, `solver`, and optional `fitter`.
     """
     if not isinstance(fitter, AbstractGLMFitter):
         raise TypeError("fitter must implement AbstractGLMFitter")

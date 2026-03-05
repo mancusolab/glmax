@@ -68,6 +68,18 @@ pipeline.
     model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
     compat_state = model.fit(X, y)
 
+Compatibility and Deprecation Checkpoints
+=========================================
+``GLM.fit`` remains available as a compatibility shim while ``glmax.fit`` is
+the canonical entrypoint.
+
+* Trigger for deprecation planning: parity and boundary-regression tests remain
+  stable under canonical ``glmax.fit`` usage and migration guidance is published.
+* Minimum release window: keep the shim available for at least two minor
+  releases after any formal deprecation notice.
+* Migration guidance: replace ``model.fit(X, y, ...)`` with
+  ``glmax.fit(X, y, family=model.family, solver=model.solver, fitter=model.fitter, ...)``.
+
 .. _Notes:
 .. |Notes| replace:: **Notes**
 

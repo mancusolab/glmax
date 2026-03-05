@@ -43,6 +43,17 @@ state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
 compat_state = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver()).fit(X, y)
 ```
 
+## Compatibility and Deprecation Checkpoints
+
+`GLM.fit` is currently retained as a compatibility wrapper around `glmax.fit`.
+
+- Trigger for deprecation planning: parity and boundary-regression checks remain
+  stable for canonical `glmax.fit` usage and migration docs are published.
+- Minimum release window: retain `GLM.fit` for at least two minor releases after
+  a formal deprecation notice.
+- Migration guidance: replace `model.fit(X, y, ...)` with
+  `glmax.fit(X, y, family=model.family, solver=model.solver, fitter=model.fitter, ...)`.
+
 ## Notes
 
 - Fit-boundary failures are deterministic and shared by canonical and wrapper entrypoints:
