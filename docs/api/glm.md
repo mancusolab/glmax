@@ -1,54 +1,44 @@
-# GLM Fit API
+# GLM API
 
-`glmax` now exposes a package-level fit API:
+## Canonical Workflow
 
-```python
-import glmax as gx
+Use `glmax.fit` as the canonical public entrypoint for fitting. It owns:
 
-model = gx.GLM(family=gx.Gaussian())
-state = gx.fit(model, X, y)
-```
+- boundary normalization (`jnp.asarray`, dtype/rank/shape/finiteness checks)
+- fitter dispatch (`IRLSFitter` by default, custom fitter injection supported)
+- covariance/test strategy composition for returned `GLMState`
 
-This is the preferred path for new code.
+`GLM.fit` is a compatibility wrapper that delegates to the same canonical path.
+Valid-input outputs are expected to remain aligned between direct and wrapper usage.
 
-## Recommended Usage
+## Compatibility Guarantees and Deprecation Checkpoints
 
-```python
-import glmax as gx
+- Current guarantee: `GLM.fit` delegates to `glmax.fit`, sharing boundary
+  normalization and fitter validation semantics.
+- Deprecation trigger: parity and boundary-regression tests remain stable while
+  canonical usage guidance is published in user-facing docs.
+- Minimum release window: retain `GLM.fit` for at least two minor releases after
+  an explicit deprecation notice.
+- Migration guidance: call `glmax.fit(...)` directly with explicit `family`,
+  `solver`, and optional `fitter` arguments.
 
-model = gx.GLM(family=gx.Poisson(), solver=gx.QRSolver())
-state = gx.fit(
-    model,
-    X,
-    y,
-    offset=offset,                 # optional, length n_samples
-    covariance=gx.FisherInfoError(),
-    options={"max_iter": 1000, "tol": 1e-3, "step_size": 1.0},
-)
-```
+## Failure Semantics
 
-`state` is a `gx.GLMState` with fields:
-`beta`, `se`, `z`, `p`, `eta`, `mu`, `glm_wt`, `num_iters`, `converged`, `infor_inv`, `resid`, `alpha`.
+Boundary failures are deterministic and occur before numerics execution:
 
-## Migration From `GLM.fit`
+- `TypeError`: non-numeric `X`, `y`, `offset_eta`, `init`, `alpha_init`, or invalid fitter type
+- `ValueError`: invalid rank/shape constraints
+- `ValueError`: non-finite boundary values (NaN/Inf)
 
-Legacy wrapper usage remains supported:
+These semantics are regression-tested in `tests/test_fit_api.py`, `tests/test_fitters.py`,
+and `tests/test_glm.py`.
 
-```python
-import glmax as gx
+## Reference
 
-model = gx.GLM(family=gx.Gaussian())
-legacy_state = model.fit(X, y, offset_eta=offset)
-```
+### Canonical Fit
 
-Migration mapping:
+::: glmax.fit
 
-- `model.fit(X, y, offset_eta=offset)` -> `gx.fit(model, X, y, offset=offset)`
-- `model.fit(..., se_estimator=est)` -> `gx.fit(..., covariance=est)`
-- `model.fit(..., max_iter=..., tol=..., step_size=..., alpha_init=...)` -> `gx.fit(..., options={...})`
+### GLM Model
 
-## Compatibility And Deprecation Direction
-
-- `GLM.fit(...)` currently delegates to `gx.fit(...)` for backward compatibility.
-- `GLM.fit(...)` can emit an opt-in compatibility warning when `GLMAX_WARN_GLM_FIT_COMPAT=1`.
-- Long-term direction: keep `gx.fit(...)` as the canonical entrypoint for user code.
+::: glmax.GLM

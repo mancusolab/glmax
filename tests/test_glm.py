@@ -3,6 +3,10 @@
 # FisherInfoError
 # HuberError
 
+import importlib
+import inspect
+
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
@@ -93,11 +97,14 @@ def test_poisson(getkey, solver):
     sm_state = sm_poi.fit()
 
     # solve using glmax functions
-    glm_state = glmax.fit(glmax.GLM(family=glmax.Poisson(), solver=solver), X, y)
+    glmax_poi = glmax.GLM(family=glmax.Poisson(), solver=solver)
+    glm_state = glmax_poi.fit(X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, atol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, atol=1e-3)
     assert_array_eq(glm_state.p, sm_state.pvalues, atol=1e-3)
+    assert bool(glm_state.converged)
+    assert int(glm_state.num_iters) > 0
 
 
 @pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
@@ -114,11 +121,14 @@ def test_normal(getkey, solver):
     sm_state = sm_norm.fit()
 
     # solve using glmax functions
-    glm_state = glmax.fit(glmax.GLM(family=glmax.Gaussian(), solver=solver), X, y)
+    glmax_normal = glmax.GLM(family=glmax.Gaussian(), solver=solver)
+    glm_state = glmax_normal.fit(X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
+    assert bool(glm_state.converged)
+    assert int(glm_state.num_iters) > 0
 
 
 @pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
@@ -135,11 +145,14 @@ def test_logit(getkey, solver):
     sm_state = sm_logit.fit()
 
     # solve using glmax functions
-    glm_state = glmax.fit(glmax.GLM(family=glmax.Binomial(), solver=solver), X, y)
+    glmax_logit = glmax.GLM(family=glmax.Binomial(), solver=solver)
+    glm_state = glmax_logit.fit(X, y)
 
     assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
+    assert bool(glm_state.converged)
+    assert int(glm_state.num_iters) > 0
 
 
 @pytest.mark.parametrize("solver", (glmax.QRSolver(), glmax.CGSolver(), glmax.CholeskySolver()))
@@ -151,12 +164,8 @@ def test_NegativeBinomial(getkey, solver):
     # Simulate NegativeBinomial regression data
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
 
-    glm_state = glmax.fit(
-        glmax.GLM(family=glmax.NegativeBinomial(), solver=solver),
-        X,
-        y,
-        options={"tol": 1e-8},
-    )
+    jaxqtl_nb = glmax.GLM(family=glmax.NegativeBinomial(), solver=solver)
+    glm_state = jaxqtl_nb.fit(X, y, tol=1e-8)
 
     # solve using statsmodel method (ground truth)
     sm_negbin = sm.GLM(np.array(y), np.array(X), family=sm.families.NegativeBinomial(alpha=glm_state.alpha))
@@ -168,5 +177,224 @@ def test_NegativeBinomial(getkey, solver):
     assert_array_eq(glm_state.beta, sm_beta, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_se, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_p, rtol=1e-3)
-    assert glm_state.num_iters >= 0
-    assert bool(glm_state.converged) in (True, False)
+    assert bool(glm_state.converged)
+    assert int(glm_state.num_iters) > 0
+
+
+def test_module_fit_entrypoint_executes(getkey):
+    n_samples = 120
+    n_features = 4
+
+    X, y, _ = simulate_glm_data(getkey(), n_samples, n_features, family="poisson")
+    glm_state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    assert isinstance(glm_state, glmax.GLMState)
+    assert glm_state.beta.shape == (n_features,)
+
+
+def test_glm_fit_delegates_to_module_entrypoint(monkeypatch):
+    fit_module = importlib.import_module("glmax.fit")
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    expected = glmax.GLMState(
+        beta=jnp.array([1.0, 2.0]),
+        se=jnp.array([0.1, 0.2]),
+        z=jnp.array([10.0, 10.0]),
+        p=jnp.array([0.0, 0.0]),
+        eta=jnp.array([0.0, 0.0, 0.0]),
+        mu=jnp.array([1.0, 1.0, 1.0]),
+        glm_wt=jnp.array([1.0, 1.0, 1.0]),
+        num_iters=jnp.asarray(2),
+        converged=jnp.asarray(True),
+        infor_inv=jnp.eye(2),
+        resid=jnp.array([0.0, 0.0, 0.0]),
+        alpha=jnp.asarray(0.0),
+    )
+    recorded: dict[str, object] = {}
+
+    def fake_fit(
+        X,
+        y,
+        family,
+        solver,
+        fitter=None,
+        offset_eta=0.0,
+        init=None,
+        alpha_init=None,
+        se_estimator=None,
+        max_iter=1000,
+        tol=1e-3,
+        step_size=1.0,
+    ):
+        recorded["family"] = family
+        recorded["solver"] = solver
+        recorded["fitter"] = fitter
+        recorded["offset_eta"] = offset_eta
+        recorded["init"] = init
+        recorded["alpha_init"] = alpha_init
+        recorded["max_iter"] = max_iter
+        recorded["tol"] = tol
+        recorded["step_size"] = step_size
+        return expected
+
+    monkeypatch.setattr(fit_module, "fit", fake_fit)
+
+    X = jnp.ones((3, 2))
+    y = jnp.array([1.0, 2.0, 3.0])
+    actual = model.fit(X, y, offset_eta=1.5, max_iter=22, tol=1e-5, step_size=0.25)
+
+    assert actual is expected
+    assert recorded["family"] is model.family
+    assert recorded["solver"] is model.solver
+    assert isinstance(recorded["fitter"], importlib.import_module("glmax.infer.fitters").IRLSFitter)
+    assert recorded["offset_eta"] == 1.5
+    assert recorded["max_iter"] == 22
+    assert recorded["tol"] == 1e-5
+    assert recorded["step_size"] == 0.25
+
+
+def test_consolidated_infer_modules_are_available():
+    contracts = importlib.import_module("glmax.infer.contracts")
+    solvers = importlib.import_module("glmax.infer.solvers")
+    inference = importlib.import_module("glmax.infer.inference")
+
+    assert hasattr(contracts, "AbstractLinearSolver")
+    assert hasattr(solvers, "QRSolver")
+    assert hasattr(solvers, "CholeskySolver")
+    assert hasattr(solvers, "CGSolver")
+    assert hasattr(inference, "FisherInfoError")
+    assert hasattr(inference, "HuberError")
+    assert hasattr(inference, "wald_test")
+
+
+def test_glm_wald_test_routes_through_inference_strategy(monkeypatch):
+    glm_module = importlib.import_module("glmax.glm")
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    def fake_wald_test(statistic, df, family):
+        return jnp.asarray([0.123456])
+
+    monkeypatch.setattr(glm_module, "inference_wald_test", fake_wald_test)
+
+    pval = model.wald_test(jnp.asarray([1.0]), 1)
+    assert_array_eq(pval, jnp.asarray([0.123456]), atol=1e-12)
+
+
+def test_infer_public_exports_remain_stable():
+    from glmax.infer import (
+        AbstractStdErrEstimator,
+        CGSolver,
+        CholeskySolver,
+        FisherInfoError,
+        HuberError,
+        irls,
+        QRSolver,
+    )
+
+    inference = importlib.import_module("glmax.infer.inference")
+    solvers = importlib.import_module("glmax.infer.solvers")
+
+    assert callable(irls)
+    assert QRSolver is solvers.QRSolver
+    assert CholeskySolver is solvers.CholeskySolver
+    assert CGSolver is solvers.CGSolver
+    assert AbstractStdErrEstimator is inference.AbstractStdErrEstimator
+    assert FisherInfoError is inference.FisherInfoError
+    assert HuberError is inference.HuberError
+
+
+def test_legacy_infer_modules_warn_but_preserve_aliases():
+    with pytest.warns(DeprecationWarning):
+        legacy_solve = importlib.reload(importlib.import_module("glmax.infer.solve"))
+    with pytest.warns(DeprecationWarning):
+        legacy_stderr = importlib.reload(importlib.import_module("glmax.infer.stderr"))
+
+    contracts = importlib.import_module("glmax.infer.contracts")
+    solvers = importlib.import_module("glmax.infer.solvers")
+    inference = importlib.import_module("glmax.infer.inference")
+
+    assert legacy_solve.AbstractLinearSolver is contracts.AbstractLinearSolver
+    assert legacy_solve.SolverState is contracts.SolverState
+    assert legacy_solve.QRSolver is solvers.QRSolver
+    assert legacy_solve.CholeskySolver is solvers.CholeskySolver
+    assert legacy_solve.CGSolver is solvers.CGSolver
+    assert legacy_stderr.AbstractStdErrEstimator is inference.AbstractStdErrEstimator
+    assert legacy_stderr.FisherInfoError is inference.FisherInfoError
+    assert legacy_stderr.HuberError is inference.HuberError
+
+
+def test_fitters_module_provides_irls_contract():
+    fitters = importlib.import_module("glmax.infer.fitters")
+    optimize = importlib.import_module("glmax.infer.optimize")
+
+    assert hasattr(fitters, "AbstractGLMFitter")
+    assert hasattr(fitters, "IRLSFitter")
+    assert hasattr(fitters, "IRLSState")
+    assert callable(fitters.irls)
+    assert callable(optimize.irls)
+
+
+def test_wrapper_and_canonical_match_offset_finiteness_boundary_error():
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0]])
+    y = jnp.array([1.0, 0.0])
+    bad_offset = jnp.array([0.0, jnp.inf])
+
+    with pytest.raises(ValueError, match="offset_eta must contain only finite values"):
+        glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver(), offset_eta=bad_offset)
+
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+    with pytest.raises(ValueError, match="offset_eta must contain only finite values"):
+        model.fit(X, y, offset_eta=bad_offset)
+
+
+def test_wrapper_and_canonical_remain_aligned_with_numpy_inputs(getkey):
+    X, y, _ = simulate_glm_data(getkey(), n_samples=80, n_features=4, family="poisson")
+    X_np = np.asarray(X)
+    y_np = np.asarray(y)
+    solver = glmax.CholeskySolver()
+
+    direct = glmax.fit(X_np, y_np, family=glmax.Poisson(), solver=solver, offset_eta=0.1)
+    wrapper = glmax.GLM(family=glmax.Poisson(), solver=solver).fit(X_np, y_np, offset_eta=0.1)
+
+    assert_array_eq(wrapper.beta, direct.beta, rtol=1e-7, atol=1e-8)
+    assert_array_eq(wrapper.se, direct.se, rtol=1e-7, atol=1e-8)
+    assert int(wrapper.num_iters) == int(direct.num_iters)
+    assert bool(wrapper.converged) is bool(direct.converged)
+
+
+def test_contract_and_solver_docstrings_follow_required_sections():
+    contracts = importlib.import_module("glmax.infer.contracts")
+    solvers = importlib.import_module("glmax.infer.solvers")
+    inference = importlib.import_module("glmax.infer.inference")
+
+    targets = (
+        contracts.AbstractLinearSolver,
+        contracts.AbstractLinearSolver.__call__,
+        solvers.QRSolver,
+        solvers.QRSolver.init,
+        solvers.CholeskySolver,
+        solvers.CGSolver,
+        inference.AbstractStdErrEstimator,
+        inference.FisherInfoError,
+        inference.HuberError,
+    )
+
+    for target in targets:
+        doc = inspect.getdoc(target)
+        assert doc is not None
+        assert "**Arguments:**" in doc
+        assert "**Returns:**" in doc
+        assert "**Raises:**" in doc or "**Failure Modes:**" in doc
+
+
+def test_docs_claim_shared_boundary_failures_is_backed_by_glm_checks():
+    doc = Path("docs/api/glm.md").read_text()
+    assert "Boundary failures are deterministic" in doc
+
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0]])
+    y = jnp.array([1.0, 0.0])
+    bad_offset = jnp.array([0.0, jnp.inf])
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    with pytest.raises(ValueError, match="offset_eta must contain only finite values"):
+        model.fit(X, y, offset_eta=bad_offset)

@@ -1,89 +1,231 @@
-import numpy as np
+# pattern: Functional Core
 
-import equinox as eqx
+from typing import Tuple
 
-from jax import numpy as jnp
-from jaxtyping import ArrayLike
+from jax import Array, numpy as jnp
+from jaxtyping import ArrayLike, ScalarLike
 
-from .family.dist import ExponentialFamily
-from .glm import GLM, GLMState
-from .infer.fitter import AbstractFitter
-from .infer.optimize import irls
-from .infer.solve import AbstractLinearSolver
-from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
-from .infer.tests import AbstractHypothesisTest, WaldTest
+from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
+from .glm import GLMState
+from .infer.contracts import AbstractLinearSolver
+from .infer.fitters import AbstractGLMFitter, IRLSFitter
+from .infer.inference import (
+    AbstractStdErrEstimator,
+    FisherInfoError,
+    wald_test as inference_wald_test,
+)
+from .infer.solvers import CholeskySolver
 
 
-def _to_numeric_array(name: str, value: ArrayLike) -> jnp.ndarray:
-    np_value = np.asarray(value)
-    if np_value.dtype.kind not in ("i", "u", "f"):
+def _to_numeric_array(name: str, value: ArrayLike) -> Array:
+    try:
+        array = jnp.asarray(value)
+    except TypeError as exc:
+        raise TypeError(f"{name} must have a numeric dtype") from exc
+    if not jnp.issubdtype(array.dtype, jnp.number):
         raise TypeError(f"{name} must have a numeric dtype")
-    return jnp.asarray(value)
+    return array
 
 
-def _run_default_pipeline(
-    model: GLM,
-    X: jnp.ndarray,
-    y: jnp.ndarray,
-    offset: jnp.ndarray,
-    *,
-    init: ArrayLike | None,
-    covariance: AbstractStdErrEstimator | None,
-    tests: AbstractHypothesisTest | None,
-    options: dict[str, object],
-) -> GLMState:
-    max_iter = int(options.pop("max_iter", 1000))
-    tol = float(options.pop("tol", 1e-3))
-    step_size = float(options.pop("step_size", 1.0))
-    alpha_init = options.pop("alpha_init", None)
-    if options:
-        unknown_keys = ", ".join(sorted(options.keys()))
-        raise TypeError(f"Unknown fit options: {unknown_keys}")
+def _normalize_fit_inputs(
+    X: ArrayLike,
+    y: ArrayLike,
+    offset_eta: ArrayLike = 0.0,
+    init: ArrayLike = None,
+    alpha_init: ScalarLike = None,
+) -> Tuple[Array, Array, Array, Array | None, Array | None]:
+    X_array = _to_numeric_array("X", X)
+    y_array = _to_numeric_array("y", y)
+    offset_array = _to_numeric_array("offset_eta", offset_eta)
+    init_array = None if init is None else _to_numeric_array("init", init)
+    alpha_array = None if alpha_init is None else _to_numeric_array("alpha_init", alpha_init)
 
-    if init is None and alpha_init is None:
-        eta_init, alpha_init = model.calc_eta_and_dispersion(X, y, offset)
-    elif init is None:
-        eta_init, _ = model.calc_eta_and_dispersion(X, y, offset)
-    elif alpha_init is None:
-        eta_init = jnp.asarray(init)
-        _, alpha_init = model.calc_eta_and_dispersion(X, y, offset)
+    if X_array.ndim != 2:
+        raise ValueError("X must be a 2D array")
+    if y_array.ndim != 1:
+        raise ValueError("y must be a 1D array")
+    if X_array.shape[0] != y_array.shape[0]:
+        raise ValueError("X and y must have the same number of rows")
+
+    n_samples = X_array.shape[0]
+
+    if offset_array.ndim == 0:
+        offset_array = jnp.full((n_samples,), offset_array, dtype=offset_array.dtype)
+    elif offset_array.ndim != 1 or offset_array.shape[0] != n_samples:
+        raise ValueError("offset_eta must be a scalar or a 1D array with length equal to the number of rows in X")
+
+    if init_array is not None and (init_array.ndim != 1 or init_array.shape[0] != n_samples):
+        raise ValueError("init must be a 1D array with length equal to the number of rows in X")
+
+    if alpha_array is not None and alpha_array.ndim > 0:
+        raise ValueError("alpha_init must be a scalar value")
+
+    if not bool(jnp.all(jnp.isfinite(X_array))):
+        raise ValueError("X must contain only finite values")
+    if not bool(jnp.all(jnp.isfinite(y_array))):
+        raise ValueError("y must contain only finite values")
+    if not bool(jnp.all(jnp.isfinite(offset_array))):
+        raise ValueError("offset_eta must contain only finite values")
+    if init_array is not None and not bool(jnp.all(jnp.isfinite(init_array))):
+        raise ValueError("init must contain only finite values")
+    if alpha_array is not None and not bool(jnp.all(jnp.isfinite(alpha_array))):
+        raise ValueError("alpha_init must contain only finite values")
+
+    return X_array, y_array, offset_array, init_array, alpha_array
+
+
+def _calc_eta_and_dispersion(
+    X: ArrayLike,
+    y: ArrayLike,
+    family: ExponentialFamily,
+    solver: AbstractLinearSolver,
+    se_estimator: AbstractStdErrEstimator,
+    offset_eta: ArrayLike = 0.0,
+    max_iter: int = 1000,
+    tol: float = 1e-3,
+    step_size: float = 1.0,
+) -> Tuple[Array, Array]:
+    n = X.shape[0]
+    init_val = family.init_eta(y)
+
+    if isinstance(family, NegativeBinomial):
+        glm_state_pois = fit(
+            X,
+            y,
+            family=Poisson(),
+            solver=solver,
+            offset_eta=offset_eta,
+            init=init_val,
+            alpha_init=jnp.asarray(0.0),
+            se_estimator=se_estimator,
+            max_iter=max_iter,
+            tol=tol,
+            step_size=step_size,
+        )
+
+        alpha_init = n / jnp.sum((y / family.glink.inverse(glm_state_pois.eta) - 1) ** 2)
+        eta = glm_state_pois.eta
+        disp = family.estimate_dispersion(X, y, eta, alpha=1.0 / alpha_init, max_iter=max_iter)
+        disp = jnp.nan_to_num(disp, nan=0.1)
     else:
-        eta_init = jnp.asarray(init)
+        eta = init_val
+        disp = jnp.asarray(0.0)
 
-    beta, n_iter, converged, alpha = irls(
+    return eta, disp
+
+
+def fit(
+    X: ArrayLike,
+    y: ArrayLike,
+    family: ExponentialFamily = Gaussian(),
+    solver: AbstractLinearSolver = CholeskySolver(),
+    fitter: AbstractGLMFitter = IRLSFitter(),
+    offset_eta: ArrayLike = 0.0,
+    init: ArrayLike = None,
+    alpha_init: ScalarLike = None,
+    se_estimator: AbstractStdErrEstimator = FisherInfoError(),
+    max_iter: int = 1000,
+    tol: float = 1e-3,
+    step_size: float = 1.0,
+) -> GLMState:
+    r"""Fit a generalized linear model through the canonical `glmax.fit` workflow.
+
+    **Arguments:**
+
+    - `X`: Covariate design matrix with shape `(n, p)`.
+    - `y`: Response vector with shape `(n,)`.
+    - `family`: Exponential-family model specification.
+    - `solver`: Linear-system strategy used inside fitter updates.
+    - `fitter`: Fitter strategy controlling IRLS-style optimization.
+    - `offset_eta`: Optional scalar or length-`n` offset in linear predictor space.
+    - `init`: Optional length-`n` initialization for the linear predictor.
+    - `alpha_init`: Optional scalar dispersion initialization.
+    - `se_estimator`: Strategy for covariance/standard-error estimation.
+    - `max_iter`: Maximum fitter iterations.
+    - `tol`: Convergence tolerance.
+    - `step_size`: Iteration step size.
+
+    **Returns:**
+
+    - A [`glmax.GLMState`][] containing fitted coefficients, inference statistics,
+      convergence metadata, and model diagnostics.
+
+    **Failure Modes:**
+
+    - Raises `TypeError` when `fitter` does not implement `AbstractGLMFitter`.
+    - Raises `TypeError` when `X`, `y`, `offset_eta`, `init`, or `alpha_init`
+      are non-numeric.
+    - Raises `ValueError` for rank/shape mismatches or non-finite boundary inputs.
+
+    **Compatibility Guarantees:**
+
+    - `glmax.fit` is the canonical public fit entrypoint.
+    - `GLM.fit` compatibility calls delegate to this function and share the same
+      deterministic boundary contract.
+
+    **Deprecation Checkpoints:**
+
+    - Any `GLM.fit` deprecation proposal requires parity and boundary-regression
+      tests to remain passing in CI.
+    - Deprecation notice must be published for at least two minor releases before
+      wrapper removal.
+    - Migration guidance remains: call `glmax.fit(...)` directly with explicit
+      `family`, `solver`, and optional `fitter`.
+    """
+    if not isinstance(fitter, AbstractGLMFitter):
+        raise TypeError("fitter must implement AbstractGLMFitter")
+    X, y, offset_eta, init, alpha_init = _normalize_fit_inputs(X, y, offset_eta, init, alpha_init)
+
+    if init is None or alpha_init is None:
+        init, alpha_init = _calc_eta_and_dispersion(
+            X,
+            y,
+            family=family,
+            solver=solver,
+            se_estimator=se_estimator,
+            offset_eta=offset_eta,
+            max_iter=max_iter,
+            tol=tol,
+            step_size=step_size,
+        )
+
+    fit_state = fitter(
         X,
         y,
-        model.family,
-        model.solver,
-        eta_init,
-        max_iter,
-        tol,
-        step_size,
-        offset,
-        alpha_init,
+        family,
+        solver,
+        init,
+        max_iter=max_iter,
+        tol=tol,
+        step_size=step_size,
+        offset_eta=offset_eta,
+        alpha_init=alpha_init,
     )
+    beta = fit_state.beta
+    n_iter = fit_state.num_iters
+    converged = fit_state.converged
+    alpha = fit_state.alpha
 
-    eta = X @ beta + offset
-    mu = model.family.glink.inverse(eta)
-    resid = (y - mu) * model.family.glink.deriv(mu)
-    _, _, weight = model.family.calc_weight(X, y, eta, alpha)
+    eta = X @ beta + offset_eta
+    mu = family.glink.inverse(eta)
+    resid = (y - mu) * family.glink.deriv(mu)
 
-    se_estimator = FisherInfoError() if covariance is None else covariance
-    resid_covar = se_estimator(model.family, X, y, eta, mu, weight, alpha)
+    _, _, weight = family.calc_weight(X, y, eta, alpha)
+
+    resid_covar = se_estimator(family, X, y, eta, mu, weight, alpha)
     beta_se = jnp.sqrt(jnp.diag(resid_covar))
 
     df = X.shape[0] - X.shape[1]
     beta = beta.squeeze()
     stat = beta / beta_se
 
-    hypothesis_test = WaldTest() if tests is None else tests
-    pval = hypothesis_test(stat, df, model.family)
+    pval_wald = inference_wald_test(stat, df, family)
 
     return GLMState(
         beta,
         beta_se,
         stat,
-        pval,
+        pval_wald,
         eta,
         mu,
         weight,
@@ -92,91 +234,4 @@ def _run_default_pipeline(
         resid_covar,
         resid,
         alpha,
-    )
-
-
-def fit(
-    model: GLM,
-    X: ArrayLike,
-    y: ArrayLike,
-    offset: ArrayLike | None = None,
-    *,
-    fitter: object | None = None,
-    solver: object | None = None,
-    covariance: object | None = None,
-    tests: object | None = None,
-    init: ArrayLike | None = None,
-    options: dict[str, object] | None = None,
-) -> GLMState:
-    if fitter is not None and not isinstance(fitter, AbstractFitter):
-        raise TypeError("fitter must implement AbstractFitter")
-    if tests is not None and not isinstance(tests, AbstractHypothesisTest):
-        raise TypeError("tests must implement AbstractHypothesisTest")
-    if solver is not None and not isinstance(solver, AbstractLinearSolver):
-        raise TypeError("solver must implement AbstractLinearSolver")
-    if covariance is not None and not isinstance(covariance, AbstractStdErrEstimator):
-        raise TypeError("covariance must implement AbstractStdErrEstimator")
-    if options is not None and not isinstance(options, dict):
-        raise TypeError("options must be a dictionary")
-
-    X_arr = _to_numeric_array("X", X)
-    y_arr = _to_numeric_array("y", y)
-
-    if X_arr.ndim != 2:
-        raise ValueError("X must be a 2D array")
-    if y_arr.ndim != 1:
-        raise ValueError("y must be a 1D array")
-    if X_arr.shape[0] != y_arr.shape[0]:
-        raise ValueError("X and y must have the same number of rows")
-
-    if offset is None:
-        offset_arr = jnp.zeros((X_arr.shape[0],), dtype=y_arr.dtype)
-    else:
-        offset_arr = _to_numeric_array("offset", offset)
-        if offset_arr.ndim != 1:
-            raise ValueError("offset must be a 1D array")
-        if offset_arr.shape[0] != X_arr.shape[0]:
-            raise ValueError("offset must have length equal to the number of rows in X")
-
-    if not bool(jnp.all(jnp.isfinite(X_arr))):
-        raise ValueError("X must contain only finite values")
-    if not bool(jnp.all(jnp.isfinite(y_arr))):
-        raise ValueError("y must contain only finite values")
-    if not bool(jnp.all(jnp.isfinite(offset_arr))):
-        raise ValueError("offset must contain only finite values")
-
-    if isinstance(model.family, ExponentialFamily):
-        try:
-            model.family.__check_init__()
-        except ValueError as exc:
-            raise ValueError("Invalid family/link combination") from exc
-
-    if solver is not None:
-        model = eqx.tree_at(lambda m: m.solver, model, solver)
-
-    fit_options = {} if options is None else dict(options)
-    option_covariance = fit_options.pop("se_estimator", None)
-    if option_covariance is not None and covariance is not None:
-        raise ValueError("Specify covariance either via `covariance` or `options['se_estimator']`, not both")
-    if covariance is None and option_covariance is not None:
-        if not isinstance(option_covariance, AbstractStdErrEstimator):
-            raise TypeError("options['se_estimator'] must implement AbstractStdErrEstimator")
-        covariance = option_covariance
-
-    if fitter is not None:
-        if covariance is not None:
-            fit_options["se_estimator"] = covariance
-        if tests is not None:
-            fit_options["test_hook"] = tests
-        return fitter(model, X_arr, y_arr, offset_arr, init=init, options=fit_options)
-
-    return _run_default_pipeline(
-        model,
-        X_arr,
-        y_arr,
-        offset_arr,
-        init=init,
-        covariance=covariance,
-        tests=tests,
-        options=fit_options,
     )

@@ -1,27 +1,17 @@
-from .fitter import (
-    AbstractFitter as AbstractFitter,
-    DefaultFitter as DefaultFitter,
+from .fitters import (
+    AbstractGLMFitter as AbstractGLMFitter,
+    IRLSFitter as IRLSFitter,
 )
-from .optimize import (
-    irls as irls,
-)
-from .result import (
-    GLMState as GLMState,
-)
-from .solve import (
-    CGSolver as CGSolver,
-    CholeskySolver as CholeskySolver,
-    QRSolver as QRSolver,
-)
-from .state import (
-    IRLSState as IRLSState,
-)
-from .stderr import (
+from .inference import (
     AbstractStdErrEstimator as AbstractStdErrEstimator,
     FisherInfoError as FisherInfoError,
     HuberError as HuberError,
 )
-from .tests import (
-    AbstractHypothesisTest as AbstractHypothesisTest,
-    WaldTest as WaldTest,
+from .optimize import (
+    irls as irls,
+)
+from .solvers import (
+    CGSolver as CGSolver,
+    CholeskySolver as CholeskySolver,
+    QRSolver as QRSolver,
 )

@@ -1,3 +1,5 @@
+# pattern: Imperative Shell
+
 from importlib.metadata import version  # pragma: no cover
 
 import jax
@@ -14,25 +16,22 @@ from .family import (
     Poisson as Poisson,
     Power as Power,
 )
+
+# Public canonical fit API: keep this package-root export stable.
 from .fit import (
     fit as fit,
 )
 from .glm import (
     GLM as GLM,
+    GLMState as GLMState,
 )
 from .infer import (
-    AbstractFitter as AbstractFitter,
-    AbstractHypothesisTest as AbstractHypothesisTest,
     CGSolver as CGSolver,
     CholeskySolver as CholeskySolver,
-    DefaultFitter as DefaultFitter,
     FisherInfoError as FisherInfoError,
-    GLMState as GLMState,
     HuberError as HuberError,
     irls as irls,
-    IRLSState as IRLSState,
     QRSolver as QRSolver,
-    WaldTest as WaldTest,
 )
 
 

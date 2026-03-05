@@ -1,26 +1,59 @@
-import os
-import warnings
+# pattern: Functional Core
 
-from contextvars import ContextVar
-from typing import Tuple
-
-import numpy as np
+from typing import NamedTuple, Tuple
 
 import equinox as eqx
 
 from jax import Array, numpy as jnp
-from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
-from .family.utils import t_cdf
-from .infer.result import GLMState
-from .infer.solve import AbstractLinearSolver, CholeskySolver
-from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
-from .infer.tests import AbstractHypothesisTest
+from .infer.contracts import AbstractLinearSolver
+from .infer.fitters import AbstractGLMFitter, IRLSFitter
+from .infer.inference import (
+    AbstractStdErrEstimator,
+    FisherInfoError,
+    wald_test as inference_wald_test,
+)
+from .infer.solvers import CholeskySolver
 
 
-_compat_warning_active: ContextVar[bool] = ContextVar("_compat_warning_active", default=False)
+class GLMState(NamedTuple):
+    """
+    Represents the state of a Generalized Linear Model (GLM) during fitting.
+    This class stores the key parameters and intermediate results from
+    a GLM estimation process.
+
+    **Attributes:**
+
+    - `beta`: Estimated regression coefficients.
+    - `se`: Standard errors of the estimated coefficients.
+    - `z`: Z-scores for hypothesis testing of each coefficient, computed as `beta / se`.
+    - `p`: P-values associated with each coefficient.
+    - `eta`: the transformed mean response, linear component eta.
+    - `mu`: The **fitted mean response**, derived from the inverse link function applied to - `eta`.
+    - `glm_wt`: weights used in the iterative weighted least squares procedure The weights used in the iterative
+        weighted least squares (IWLS) procedure during GLM fitting.
+    - `num_iters`: number of iterations taken for the optimization algorithm to converge.
+    - `converged`: boolean indicating whether the optimization converged.
+    - `infor_inv`: **inverse of the Fisher Information matrix**, used for score tests  # for score test
+    - `resid`: The **residuals** from the model, used in score tests.
+         ⚠ **Note** These are not the working residuals from the IWLS algorithm
+    - `alpha`: The **dispersion parameter** in the Negative Binomial (NB) model, controlling overdispersion
+    """
+
+    beta: Array
+    se: Array
+    z: Array
+    p: Array
+    eta: Array
+    mu: Array
+    glm_wt: Array
+    num_iters: Array
+    converged: Array
+    infor_inv: Array  # for score test
+    resid: Array  # for score test, not the working resid!
+    alpha: Array  # dispersion parameter in NB model
 
 
 class GLM(eqx.Module):
@@ -37,6 +70,7 @@ class GLM(eqx.Module):
 
     family: ExponentialFamily = Gaussian()
     solver: AbstractLinearSolver = CholeskySolver()
+    fitter: AbstractGLMFitter = IRLSFitter()
 
     def calc_eta_and_dispersion(
         self,
@@ -52,7 +86,7 @@ class GLM(eqx.Module):
         :param offset_eta: offset (nx1)
         :return: eta, dispersion (alpha)
         """
-        n, p = X.shape
+        n, _ = X.shape
         init_val = self.family.init_eta(y)
         if isinstance(self.family, NegativeBinomial):
             jaxqtl_pois = GLM(family=Poisson())
@@ -72,6 +106,28 @@ class GLM(eqx.Module):
 
         return eta, disp
 
+    def wald_test(self, statistic: ArrayLike, df: int) -> Array:
+        """
+        Computes the Wald test statistic and corresponding p-value.
+
+        The Wald test is used to assess the significance of estimated coefficients
+        in a regression model. It tests the null hypothesis that a parameter (or
+        set of parameters) is equal to zero.
+
+        Under the assumption that the **Maximum Likelihood Estimator (MLE)** follows:
+
+        `statistic: The test statistic, typically beta / SE(beta), where `SE` is
+        the standard error of the estimated coefficient.
+
+        `df: The degrees of freedom associated with the test.
+        For a single coefficient, `df=1`, whereas for a joint test involving multiple coefficients,
+        `df` corresponds to the number of parameters tested.
+
+        Returns:
+        :return: The Wald test statistic's corresponding p-value.
+        """
+        return inference_wald_test(statistic, df, self.family)
+
     def fit(
         self,
         X: ArrayLike,
@@ -80,91 +136,68 @@ class GLM(eqx.Module):
         init: ArrayLike = None,
         alpha_init: ScalarLike = None,
         se_estimator: AbstractStdErrEstimator = FisherInfoError(),
+        fitter: AbstractGLMFitter | None = None,
         max_iter: int = 1000,
         tol: float = 1e-3,
         step_size: float = 1.0,
     ) -> GLMState:
-        """
-        Represents the fitted state of a Generalized Linear Model (GLM).
-
-        This class stores the estimated parameters, standard errors, diagnostics,
-        and other relevant information from the fitting process of a GLM.
+        r"""Compatibility wrapper around canonical [`glmax.fit`][] orchestration.
 
         **Arguments:**
 
-        - `X`: covariate data matrix.
-        - `y`: outcome vector.
-        - `init`: initial value for betas.
-        - `max_iter`: maximum number of iterations, default to 1000.
-        - `tol`: tolerance for convergence, default to 1e-3.
-        - `step_size`: step size, default to 1.0.
-        - `offset_eta`: offset.
-        - `alpha_init`: initial value for alpha in NB model, default to 0s.
+        - `X`: Covariate design matrix with shape `(n, p)`.
+        - `y`: Response vector with shape `(n,)`.
+        - `offset_eta`: Optional scalar or length-`n` offset in linear predictor space.
+        - `init`: Optional length-`n` initialization for the linear predictor.
+        - `alpha_init`: Optional scalar dispersion initialization.
+        - `se_estimator`: Strategy for covariance/standard-error estimation.
+        - `fitter`: Optional fitter strategy override; defaults to `self.fitter`.
+        - `max_iter`: Maximum fitter iterations.
+        - `tol`: Convergence tolerance.
+        - `step_size`: Iteration step size.
 
         **Returns:**
 
-        -  A [`glmax.GLMState`][] containing the final estimated parameters and convergence diagnostics
-            from the fitted GLM model.
+        - A [`glmax.GLMState`][] containing fitted coefficients, inference statistics,
+          convergence metadata, and model diagnostics.
+
+        **Failure Modes:**
+
+        - Raises `TypeError` when `fitter` does not implement `AbstractGLMFitter`.
+        - Boundary normalization, dtype/shape checks, and deterministic invalid-input
+          failures are delegated to canonical [`glmax.fit`][].
+
+        **Compatibility Guarantees:**
+
+        - For valid inputs, this wrapper delegates to canonical [`glmax.fit`][]
+          and is expected to stay numerically aligned with direct calls.
+
+        **Deprecation Checkpoints:**
+
+        - Wrapper behavior remains available through at least two minor releases
+          after any formal deprecation notice.
+        - Migration path is direct canonical invocation via [`glmax.fit`][].
         """
-        warn_enabled = os.environ.get("GLMAX_WARN_GLM_FIT_COMPAT", "").lower() in {"1", "true", "yes"}
-        should_warn = warn_enabled and not _compat_warning_active.get()
-        if should_warn:
-            warnings.warn(
-                "GLM.fit is a compatibility wrapper over glmax.fit; prefer glmax.fit for new code.",
-                UserWarning,
-                stacklevel=2,
-            )
+        from .fit import fit as module_fit
 
-        from .fit import fit as gx_fit
+        selected_fitter = self.fitter if fitter is None else fitter
+        if not isinstance(selected_fitter, AbstractGLMFitter):
+            raise TypeError("fitter must implement AbstractGLMFitter")
 
-        class _ModelWaldHook(AbstractHypothesisTest):
-            model: "GLM"
-
-            def __call__(self, statistic: Array, df: int, family: ExponentialFamily) -> Array:
-                del family
-                return self.model.wald_test(statistic, df)
-
-        if jnp.ndim(offset_eta) == 0:
-            offset_value = np.asarray(offset_eta)
-            if offset_value.dtype.kind in ("i", "u", "f"):
-                offset_scalar = offset_value.item()
-                x_shape = np.shape(X)
-                if len(x_shape) >= 1:
-                    offset = None if offset_scalar == 0.0 else jnp.full((x_shape[0],), offset_scalar)
-                else:
-                    offset = offset_eta
-            else:
-                offset = offset_eta
-        else:
-            offset = offset_eta
-
-        token = None
-        if should_warn:
-            token = _compat_warning_active.set(True)
-        try:
-            return gx_fit(
-                self,
-                X,
-                y,
-                offset=offset,
-                covariance=se_estimator,
-                tests=_ModelWaldHook(self),
-                init=init,
-                options={
-                    "alpha_init": alpha_init,
-                    "max_iter": max_iter,
-                    "tol": tol,
-                    "step_size": step_size,
-                },
-            )
-        finally:
-            if token is not None:
-                _compat_warning_active.reset(token)
-
-    def wald_test(self, statistic: ArrayLike, df: int) -> Array:
-        if isinstance(self.family, Gaussian):
-            return 2 * t_cdf(-abs(statistic), df)
-        return 2 * norm.sf(abs(statistic))
+        return module_fit(
+            X,
+            y,
+            family=self.family,
+            solver=self.solver,
+            fitter=selected_fitter,
+            offset_eta=offset_eta,
+            init=init,
+            alpha_init=alpha_init,
+            se_estimator=se_estimator,
+            max_iter=max_iter,
+            tol=tol,
+            step_size=step_size,
+        )
 
 
 GLM.__init__.__doc__ = r"""**Arguments:**
@@ -173,4 +206,14 @@ GLM.__init__.__doc__ = r"""**Arguments:**
     (e.g., Gaussian, Poisson, Negative Binomial). This determines the link function and variance structure.
 - `solver`: An instance of [`AbstractLinearSolver`][] to use for solving the weighted least squares problem
     for inference.
+- `fitter`: An instance of [`AbstractGLMFitter`][] controlling optimization updates.
+
+**Returns:**
+
+- A configured [`glmax.GLM`][] model ready to run [`GLM.fit`][].
+
+**Failure Modes:**
+
+- Constructor argument compatibility is type-enforced when attributes are consumed by
+  canonical [`glmax.fit`][] and fitter boundary validation.
 """

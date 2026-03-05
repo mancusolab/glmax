@@ -28,17 +28,38 @@ pip install .
 
 ## Get Started with Example
 
-```python
-import glmax as gx
+`glmax.fit` is the canonical fit entrypoint. `GLM.fit` remains available as a
+compatibility wrapper and routes through the same normalization and fitter
+orchestration path.
 
-model = gx.GLM(family=gx.Gaussian())
-state = gx.fit(model, X, y)
+```python
+import jax.numpy as jnp
+import glmax
+
+X = jnp.array([[1.0, 0.2], [1.0, -0.3], [1.0, 1.1], [1.0, -0.9]])
+y = jnp.array([1.0, 0.0, 2.0, 1.0])
+
+state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
+compat_state = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver()).fit(X, y)
 ```
 
-`gx.fit(...)` is the recommended API for new code.
-`GLM.fit(...)` remains available as a compatibility wrapper.
+## Compatibility and Deprecation Checkpoints
+
+`GLM.fit` is currently retained as a compatibility wrapper around `glmax.fit`.
+
+- Trigger for deprecation planning: parity and boundary-regression checks remain
+  stable for canonical `glmax.fit` usage and migration docs are published.
+- Minimum release window: retain `GLM.fit` for at least two minor releases after
+  a formal deprecation notice.
+- Migration guidance: replace `model.fit(X, y, ...)` with
+  `glmax.fit(X, y, family=model.family, solver=model.solver, fitter=model.fitter, ...)`.
 
 ## Notes
+
+- Fit-boundary failures are deterministic and shared by canonical and wrapper entrypoints:
+  - `TypeError` for non-numeric `X`, `y`, `offset_eta`, `init`, or `alpha_init`
+  - `ValueError` for rank/shape mismatches
+  - `ValueError` for non-finite boundary inputs (NaN/Inf)
 
 -   `glmax` uses [JAX](https://github.com/google/jax) with [Just In
     Time](https://jax.readthedocs.io/en/latest/jax-101/02-jitting.html)

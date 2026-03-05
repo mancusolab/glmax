@@ -111,7 +111,7 @@ plugins:
 nav:
     - 'index.md'
     - API:
-          - 'api/glm.md'
+          - 'GLM Fit API': 'api/glm.md'
     - Misc:
         - 'authors.md'
         - 'license.md'

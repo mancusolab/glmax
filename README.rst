@@ -49,29 +49,48 @@ Users can download the latest repository and then use ``pip``:
 
 Get Started with Example
 ========================
+``glmax.fit`` is the canonical public fit workflow. ``GLM.fit`` is retained as
+a compatibility wrapper that routes through the same normalization and fitting
+pipeline.
+
 .. code:: python
 
-    import glmax as gx
+    import jax.numpy as jnp
+    import glmax
 
-    model = gx.GLM(family=gx.Gaussian())
-    state = gx.fit(model, X, y)
+    X = jnp.array([[1.0, 0.2], [1.0, -0.3], [1.0, 1.1], [1.0, -0.9]])
+    y = jnp.array([1.0, 0.0, 2.0, 1.0])
 
-Use ``gx.fit(...)`` as the preferred API for new code.
+    # Canonical path
+    state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
 
-Migration guidance for legacy callers:
+    # Compatibility path (same boundary + fitter orchestration)
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+    compat_state = model.fit(X, y)
 
-* ``model.fit(X, y, offset_eta=offset)`` -> ``gx.fit(model, X, y, offset=offset)``
-* ``model.fit(..., se_estimator=est)`` -> ``gx.fit(..., covariance=est)``
-* ``model.fit(..., max_iter=..., tol=..., step_size=..., alpha_init=...)`` -> ``gx.fit(..., options={...})``
+Compatibility and Deprecation Checkpoints
+=========================================
+``GLM.fit`` remains available as a compatibility shim while ``glmax.fit`` is
+the canonical entrypoint.
 
-``GLM.fit(...)`` remains available as a compatibility wrapper and can emit an opt-in
-compatibility warning when ``GLMAX_WARN_GLM_FIT_COMPAT=1``.
+* Trigger for deprecation planning: parity and boundary-regression tests remain
+  stable under canonical ``glmax.fit`` usage and migration guidance is published.
+* Minimum release window: keep the shim available for at least two minor
+  releases after any formal deprecation notice.
+* Migration guidance: replace ``model.fit(X, y, ...)`` with
+  ``glmax.fit(X, y, family=model.family, solver=model.solver, fitter=model.fitter, ...)``.
 
 .. _Notes:
 .. |Notes| replace:: **Notes**
 
 Notes
 =====
+* Public fitting boundary checks are deterministic:
+
+  * ``TypeError`` for non-numeric ``X``, ``y``, ``offset_eta``, ``init``, or ``alpha_init``.
+  * ``ValueError`` for rank/shape mismatches.
+  * ``ValueError`` for non-finite boundary values (NaN/Inf).
+
 * ``glmax`` uses `JAX <https://github.com/google/jax>`_ with `Just In Time  <https://jax.readthedocs.io/en/latest/jax-101/02-jitting.html>`_ compilation to achieve high-speed computation. However, there are some `issues <https://github.com/google/jax/issues/5501>`_ for JAX with Mac M1 chip. To solve this, users need to initiate conda using `miniforge <https://github.com/conda-forge/miniforge>`_, and then install ``glmax`` using ``pip`` in the desired environment.
 
 .. _Version:
@@ -86,7 +105,7 @@ TBD
 
 
 Support
-=======
+========
 
 Please report any bugs or feature requests in the `Issue Tracker <https://github.com/mancusolab/glmax/issues>`_.
 If users have any questions or comments, please contact Eleanor Zhang (zzhang39@usc.edu) and Nicholas Mancuso (nmancuso@usc.edu).
