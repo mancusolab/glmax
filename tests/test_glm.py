@@ -308,3 +308,14 @@ def test_legacy_infer_modules_warn_but_preserve_aliases():
     assert legacy_stderr.AbstractStdErrEstimator is inference.AbstractStdErrEstimator
     assert legacy_stderr.FisherInfoError is inference.FisherInfoError
     assert legacy_stderr.HuberError is inference.HuberError
+
+
+def test_fitters_module_provides_irls_contract():
+    fitters = importlib.import_module("glmax.infer.fitters")
+    optimize = importlib.import_module("glmax.infer.optimize")
+
+    assert hasattr(fitters, "AbstractGLMFitter")
+    assert hasattr(fitters, "IRLSFitter")
+    assert hasattr(fitters, "IRLSState")
+    assert callable(fitters.irls)
+    assert optimize.irls is fitters.irls

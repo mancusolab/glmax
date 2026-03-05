@@ -1,3 +1,7 @@
+from .fitters import (
+    AbstractGLMFitter as AbstractGLMFitter,
+    IRLSFitter as IRLSFitter,
+)
 from .inference import (
     AbstractStdErrEstimator as AbstractStdErrEstimator,
     FisherInfoError as FisherInfoError,
