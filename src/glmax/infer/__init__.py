@@ -1,13 +1,13 @@
-from .optimize import (
-    irls as irls,
-)
-from .solve import (
-    CGSolver as CGSolver,
-    CholeskySolver as CholeskySolver,
-    QRSolver as QRSolver,
-)
-from .stderr import (
+from .inference import (
     AbstractStdErrEstimator as AbstractStdErrEstimator,
     FisherInfoError as FisherInfoError,
     HuberError as HuberError,
+)
+from .optimize import (
+    irls as irls,
+)
+from .solvers import (
+    CGSolver as CGSolver,
+    CholeskySolver as CholeskySolver,
+    QRSolver as QRSolver,
 )

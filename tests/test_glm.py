@@ -265,3 +265,26 @@ def test_glm_wald_test_routes_through_inference_strategy(monkeypatch):
 
     pval = model.wald_test(jnp.asarray([1.0]), 1)
     assert_array_eq(pval, jnp.asarray([0.123456]), atol=1e-12)
+
+
+def test_infer_public_exports_remain_stable():
+    from glmax.infer import (
+        AbstractStdErrEstimator,
+        CGSolver,
+        CholeskySolver,
+        FisherInfoError,
+        HuberError,
+        irls,
+        QRSolver,
+    )
+
+    inference = importlib.import_module("glmax.infer.inference")
+    solvers = importlib.import_module("glmax.infer.solvers")
+
+    assert callable(irls)
+    assert QRSolver is solvers.QRSolver
+    assert CholeskySolver is solvers.CholeskySolver
+    assert CGSolver is solvers.CGSolver
+    assert AbstractStdErrEstimator is inference.AbstractStdErrEstimator
+    assert FisherInfoError is inference.FisherInfoError
+    assert HuberError is inference.HuberError
