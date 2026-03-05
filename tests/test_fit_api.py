@@ -1,4 +1,5 @@
 import importlib
+import inspect
 
 from typing import Tuple
 
@@ -77,6 +78,18 @@ def _assert_boundary_error_parity(
     model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
     with pytest.raises(exc_type, match=message):
         model.fit(X, y, offset_eta=offset_eta, init=init, alpha_init=alpha_init)
+
+
+def test_public_entrypoint_docstrings_follow_contract_sections():
+    optimize = importlib.import_module("glmax.infer.optimize")
+    entrypoints = (glmax.fit, glmax.GLM.fit, optimize.irls)
+
+    for fn in entrypoints:
+        doc = inspect.getdoc(fn)
+        assert doc is not None
+        assert "**Arguments:**" in doc
+        assert "**Returns:**" in doc
+        assert "**Raises:**" in doc or "**Failure Modes:**" in doc
 
 
 @pytest.mark.parametrize(

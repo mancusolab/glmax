@@ -128,6 +128,35 @@ def fit(
     tol: float = 1e-3,
     step_size: float = 1.0,
 ) -> GLMState:
+    r"""Fit a generalized linear model through the canonical `glmax.fit` workflow.
+
+    **Arguments:**
+
+    - `X`: Covariate design matrix with shape `(n, p)`.
+    - `y`: Response vector with shape `(n,)`.
+    - `family`: Exponential-family model specification.
+    - `solver`: Linear-system strategy used inside fitter updates.
+    - `fitter`: Fitter strategy controlling IRLS-style optimization.
+    - `offset_eta`: Optional scalar or length-`n` offset in linear predictor space.
+    - `init`: Optional length-`n` initialization for the linear predictor.
+    - `alpha_init`: Optional scalar dispersion initialization.
+    - `se_estimator`: Strategy for covariance/standard-error estimation.
+    - `max_iter`: Maximum fitter iterations.
+    - `tol`: Convergence tolerance.
+    - `step_size`: Iteration step size.
+
+    **Returns:**
+
+    - A [`glmax.GLMState`][] containing fitted coefficients, inference statistics,
+      convergence metadata, and model diagnostics.
+
+    **Failure Modes:**
+
+    - Raises `TypeError` when `fitter` does not implement `AbstractGLMFitter`.
+    - Raises `TypeError` when `X`, `y`, `offset_eta`, `init`, or `alpha_init`
+      are non-numeric.
+    - Raises `ValueError` for rank/shape mismatches or non-finite boundary inputs.
+    """
     if not isinstance(fitter, AbstractGLMFitter):
         raise TypeError("fitter must implement AbstractGLMFitter")
     X, y, offset_eta, init, alpha_init = _normalize_fit_inputs(X, y, offset_eta, init, alpha_init)

@@ -141,27 +141,31 @@ class GLM(eqx.Module):
         tol: float = 1e-3,
         step_size: float = 1.0,
     ) -> GLMState:
-        """
-        Represents the fitted state of a Generalized Linear Model (GLM).
-
-        This class stores the estimated parameters, standard errors, diagnostics,
-        and other relevant information from the fitting process of a GLM.
+        r"""Compatibility wrapper around canonical [`glmax.fit`][] orchestration.
 
         **Arguments:**
 
-        - `X`: covariate data matrix.
-        - `y`: outcome vector.
-        - `init`: initial value for betas.
-        - `max_iter`: maximum number of iterations, default to 1000.
-        - `tol`: tolerance for convergence, default to 1e-3.
-        - `step_size`: step size, default to 1.0.
-        - `offset_eta`: offset.
-        - `alpha_init`: initial value for alpha in NB model, default to 0s.
+        - `X`: Covariate design matrix with shape `(n, p)`.
+        - `y`: Response vector with shape `(n,)`.
+        - `offset_eta`: Optional scalar or length-`n` offset in linear predictor space.
+        - `init`: Optional length-`n` initialization for the linear predictor.
+        - `alpha_init`: Optional scalar dispersion initialization.
+        - `se_estimator`: Strategy for covariance/standard-error estimation.
+        - `fitter`: Optional fitter strategy override; defaults to `self.fitter`.
+        - `max_iter`: Maximum fitter iterations.
+        - `tol`: Convergence tolerance.
+        - `step_size`: Iteration step size.
 
         **Returns:**
 
-        -  A [`glmax.GLMState`][] containing the final estimated parameters and convergence diagnostics
-            from the fitted GLM model.
+        - A [`glmax.GLMState`][] containing fitted coefficients, inference statistics,
+          convergence metadata, and model diagnostics.
+
+        **Failure Modes:**
+
+        - Raises `TypeError` when `fitter` does not implement `AbstractGLMFitter`.
+        - Boundary normalization, dtype/shape checks, and deterministic invalid-input
+          failures are delegated to canonical [`glmax.fit`][].
         """
         from .fit import fit as module_fit
 
@@ -191,4 +195,14 @@ GLM.__init__.__doc__ = r"""**Arguments:**
     (e.g., Gaussian, Poisson, Negative Binomial). This determines the link function and variance structure.
 - `solver`: An instance of [`AbstractLinearSolver`][] to use for solving the weighted least squares problem
     for inference.
+- `fitter`: An instance of [`AbstractGLMFitter`][] controlling optimization updates.
+
+**Returns:**
+
+- A configured [`glmax.GLM`][] model ready to run [`GLM.fit`][].
+
+**Failure Modes:**
+
+- Constructor argument compatibility is type-enforced when attributes are consumed by
+  canonical [`glmax.fit`][] and fitter boundary validation.
 """
