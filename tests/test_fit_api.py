@@ -99,15 +99,11 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
 
         def fit(
             self,
-            X: jnp.ndarray,
-            y: jnp.ndarray,
-            offset_eta: jnp.ndarray | float = 0.0,
+            data: GLMData,
             init: jnp.ndarray | None = None,
             alpha_init: jnp.ndarray | None = None,
         ) -> FitResult:
-            self.seen["X"] = X
-            self.seen["y"] = y
-            self.seen["offset_eta"] = offset_eta
+            self.seen["data"] = data
             self.seen["init"] = init
             self.seen["alpha_init"] = alpha_init
             return expected
@@ -118,10 +114,11 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     offset = jnp.array([0.2, 0.1, 0.3])
     init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
 
-    result = glmax.fit(model, GLMData(X=X, y=y, offset=offset), init=init)
+    data = GLMData(X=X, y=y, offset=offset)
+    result = glmax.fit(model, data, init=init)
 
     assert result is expected
-    assert jnp.allclose(model.seen["offset_eta"], offset)
+    assert model.seen["data"] is data
     assert jnp.allclose(model.seen["init"], X @ init.beta)
     assert jnp.allclose(model.seen["alpha_init"], init.disp)
 
@@ -140,14 +137,22 @@ def test_contract_dataclasses_are_pytrees() -> None:
 
 
 def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
-    X = jnp.ones((3, 1))
-    y = jnp.ones(3)
+    X = jnp.array([[0.0], [1.0], [2.0]])
+    y = jnp.array([0.0, 1.0, 2.0])
 
     with pytest.raises(ValueError, match="weights"):
         glmax.fit(glmax.GLM(), GLMData(X=X, y=y, weights=jnp.ones(3)))
 
-    with pytest.raises(ValueError, match="mask"):
-        glmax.fit(glmax.GLM(), GLMData(X=X, y=y, mask=jnp.array([True, False, True])))
+    masked_result = glmax.fit(glmax.GLM(family=Gaussian()), GLMData(X=X, y=y, mask=jnp.array([True, False, True])))
+    assert isinstance(masked_result, FitResult)
+
+
+def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
+    with pytest.raises(TypeError, match="GLMData"):
+        glmax.fit(glmax.GLM(), jnp.ones((3, 1)))
+
+    with pytest.raises(TypeError, match="Params"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
 
 
 def test_default_fitter_validates_init_beta_shape() -> None:

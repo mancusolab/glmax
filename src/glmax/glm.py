@@ -129,12 +129,21 @@ class GLM(eqx.Module):
             from the fitted GLM model.
         """
         data = self._coerce_data(X, y, offset_eta)
-        X_array, y_array, offset_array, weights_array, _ = data.canonical_arrays()
-
-        if not bool(jnp.allclose(weights_array, jnp.ones_like(weights_array))):
+        if data.weights is not None:
             raise ValueError("GLMData.weights is not supported in GLM.fit yet.")
+        X_array, y_array, offset_array, _, _ = data.canonical_arrays()
 
         disp_init = alpha_init
+        if init is not None:
+            init = jnp.asarray(init)
+            if init.ndim != 1 or init.shape[0] != X_array.shape[0]:
+                raise ValueError("init must be a one-dimensional eta vector with length equal to sample count.")
+
+        if disp_init is not None:
+            disp_init = jnp.asarray(disp_init)
+            if disp_init.ndim > 0 and disp_init.size != 1:
+                raise ValueError("alpha_init must be a scalar dispersion value.")
+
         if init is None or disp_init is None:
             init, disp_init = self.calc_eta_and_dispersion(X_array, y_array, offset_array)
 
@@ -184,6 +193,9 @@ class GLM(eqx.Module):
         if isinstance(X, GLMData):
             if y is not None:
                 raise TypeError("When GLMData is provided as X, y must be omitted.")
+            offset_array = jnp.asarray(offset_eta)
+            if not bool(jnp.all(offset_array == 0)):
+                raise TypeError("offset_eta must remain default when GLMData is provided.")
             return X
 
         if y is None:
