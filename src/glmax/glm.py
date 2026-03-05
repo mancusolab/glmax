@@ -180,3 +180,13 @@ GLM.__init__.__doc__ = r"""**Arguments:**
 - `solver`: An instance of [`AbstractLinearSolver`][] to use for solving the weighted least squares problem
     for inference.
 """
+
+
+def specify(*, family: ExponentialFamily | None = None, solver: AbstractLinearSolver | None = None) -> GLM:
+    """Construct a GLM explicitly from grammar-style arguments."""
+    kwargs = {}
+    if family is not None:
+        kwargs["family"] = family
+    if solver is not None:
+        kwargs["solver"] = solver
+    return GLM(**kwargs)
