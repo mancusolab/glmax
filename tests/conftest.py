@@ -1,10 +1,9 @@
-"""
-    Dummy conftest.py for glmax.
+# pattern: Imperative Shell
 
-    If you don't know what this is for, just leave it empty.
-    Read more about conftest.py under:
-    - https://docs.pytest.org/en/stable/fixture.html
-    - https://docs.pytest.org/en/stable/writing_plugins.html
+"""Pytest-only test bootstrap for this worktree.
+
+Use ``tools/worktree-python`` for non-pytest commands that must import ``glmax``
+from this worktree's ``src/`` tree.
 """
 import sys
 

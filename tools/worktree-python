@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+WORKTREE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+
+if [ "${PYTHONPATH:-}" = "" ]; then
+    export PYTHONPATH="$WORKTREE_ROOT/src"
+else
+    export PYTHONPATH="$WORKTREE_ROOT/src:$PYTHONPATH"
+fi
+
+exec "${GLMAX_PYTHON_BIN:-python}" "$@"

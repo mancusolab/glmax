@@ -1,5 +1,10 @@
 import importlib
 import inspect
+import os
+import subprocess
+import sys
+
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +16,10 @@ import glmax
 from glmax import Diagnostics, FitResult, Fitter, GLMData, InferenceResult, Params
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 from glmax.glm import specify
+
+
+WORKTREE_ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_INIT = WORKTREE_ROOT / "src" / "glmax" / "__init__.py"
 
 
 def test_canonical_contract_imports_exist() -> None:
@@ -41,6 +50,30 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
 
 def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
     assert callable(glmax.fit)
+
+
+def test_pytest_imports_glmax_from_worktree_src() -> None:
+    assert Path(glmax.__file__).resolve() == EXPECTED_INIT.resolve()
+
+
+def test_worktree_python_wrapper_imports_glmax_from_worktree_src() -> None:
+    command = [
+        str(WORKTREE_ROOT / "tools" / "worktree-python"),
+        "-c",
+        "import glmax, pathlib; print(pathlib.Path(glmax.__file__).resolve())",
+    ]
+    env = os.environ.copy()
+    env["GLMAX_PYTHON_BIN"] = sys.executable
+    completed = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=WORKTREE_ROOT,
+        env=env,
+    )
+
+    assert completed.stdout.strip() == str(EXPECTED_INIT.resolve())
 
 
 def test_legacy_fit_state_alias_is_not_publicly_exported() -> None:
