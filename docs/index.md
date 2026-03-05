@@ -28,9 +28,27 @@ pip install .
 
 ## Get Started with Example
 
-TBD
+`glmax.fit` is the canonical fit entrypoint. `GLM.fit` remains available as a
+compatibility wrapper and routes through the same normalization and fitter
+orchestration path.
+
+```python
+import jax.numpy as jnp
+import glmax
+
+X = jnp.array([[1.0, 0.2], [1.0, -0.3], [1.0, 1.1], [1.0, -0.9]])
+y = jnp.array([1.0, 0.0, 2.0, 1.0])
+
+state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
+compat_state = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver()).fit(X, y)
+```
 
 ## Notes
+
+- Fit-boundary failures are deterministic and shared by canonical and wrapper entrypoints:
+  - `TypeError` for non-numeric `X`, `y`, `offset_eta`, `init`, or `alpha_init`
+  - `ValueError` for rank/shape mismatches
+  - `ValueError` for non-finite boundary inputs (NaN/Inf)
 
 -   `glmax` uses [JAX](https://github.com/google/jax) with [Just In
     Time](https://jax.readthedocs.io/en/latest/jax-101/02-jitting.html)

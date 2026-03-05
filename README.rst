@@ -49,13 +49,36 @@ Users can download the latest repository and then use ``pip``:
 
 Get Started with Example
 ========================
-TBD
+``glmax.fit`` is the canonical public fit workflow. ``GLM.fit`` is retained as
+a compatibility wrapper that routes through the same normalization and fitting
+pipeline.
+
+.. code:: python
+
+    import jax.numpy as jnp
+    import glmax
+
+    X = jnp.array([[1.0, 0.2], [1.0, -0.3], [1.0, 1.1], [1.0, -0.9]])
+    y = jnp.array([1.0, 0.0, 2.0, 1.0])
+
+    # Canonical path
+    state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
+
+    # Compatibility path (same boundary + fitter orchestration)
+    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
+    compat_state = model.fit(X, y)
 
 .. _Notes:
 .. |Notes| replace:: **Notes**
 
 Notes
 =====
+* Public fitting boundary checks are deterministic:
+
+  * ``TypeError`` for non-numeric ``X``, ``y``, ``offset_eta``, ``init``, or ``alpha_init``.
+  * ``ValueError`` for rank/shape mismatches.
+  * ``ValueError`` for non-finite boundary values (NaN/Inf).
+
 * ``glmax`` uses `JAX <https://github.com/google/jax>`_ with `Just In Time  <https://jax.readthedocs.io/en/latest/jax-101/02-jitting.html>`_ compilation to achieve high-speed computation. However, there are some `issues <https://github.com/google/jax/issues/5501>`_ for JAX with Mac M1 chip. To solve this, users need to initiate conda using `miniforge <https://github.com/conda-forge/miniforge>`_, and then install ``glmax`` using ``pip`` in the desired environment.
 
 .. _Version:
