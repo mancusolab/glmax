@@ -12,7 +12,8 @@ class _ModelFitter:
         if init is None:
             return model.fit(data.X, data.y, offset_eta=offset)
 
-        return model.fit(data.X, data.y, offset_eta=offset, init=init.beta, alpha_init=init.disp)
+        eta_init = data.X @ init.beta
+        return model.fit(data.X, data.y, offset_eta=offset, init=eta_init, alpha_init=init.disp)
 
 
 DEFAULT_FITTER: Fitter = _ModelFitter()

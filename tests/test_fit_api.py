@@ -1,6 +1,7 @@
 import inspect
 
 import jax.numpy as jnp
+import jax.tree_util as jtu
 
 import glmax
 
@@ -84,6 +85,55 @@ def test_fit_returns_fitresult_using_injected_fitter() -> None:
     assert seen["model"] is model
     assert seen["data"] is data
     assert seen["init"] is init
+
+
+def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
+    expected = _make_fit_result()
+
+    class DummyModel:
+        def __init__(self) -> None:
+            self.seen: dict[str, object] = {}
+
+        def fit(
+            self,
+            X: jnp.ndarray,
+            y: jnp.ndarray,
+            offset_eta: jnp.ndarray | float = 0.0,
+            init: jnp.ndarray | None = None,
+            alpha_init: jnp.ndarray | None = None,
+        ) -> FitResult:
+            self.seen["X"] = X
+            self.seen["y"] = y
+            self.seen["offset_eta"] = offset_eta
+            self.seen["init"] = init
+            self.seen["alpha_init"] = alpha_init
+            return expected
+
+    model = DummyModel()
+    X = jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]])
+    y = jnp.array([1.0, 0.0, 1.0])
+    offset = jnp.array([0.2, 0.1, 0.3])
+    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
+
+    result = glmax.fit(model, GLMData(X=X, y=y, offset=offset), init=init)
+
+    assert result is expected
+    assert jnp.allclose(model.seen["offset_eta"], offset)
+    assert jnp.allclose(model.seen["init"], X @ init.beta)
+    assert jnp.allclose(model.seen["alpha_init"], init.disp)
+
+
+def test_contract_dataclasses_are_pytrees() -> None:
+    params = Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.5))
+    leaves, tree = jtu.tree_flatten(params)
+    assert len(leaves) == 2
+    rebuilt = jtu.tree_unflatten(tree, leaves)
+    assert jnp.allclose(rebuilt.beta, params.beta)
+    assert jnp.allclose(rebuilt.disp, params.disp)
+
+    result = _make_fit_result()
+    fit_leaves, _ = jtu.tree_flatten(result)
+    assert len(fit_leaves) == 12
 
 
 def test_specify_returns_glm_instance() -> None:

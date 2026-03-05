@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable, TYPE_CHECKING
 
-from jax import Array
+from jax import Array, tree_util
 from jaxtyping import ArrayLike
 
 
@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from .glm import GLM
 
 
+@tree_util.register_dataclass
 @dataclass(frozen=True)
 class GLMData:
     """Canonical data noun for GLM workflows."""
@@ -22,6 +23,7 @@ class GLMData:
     mask: ArrayLike | None = None
 
 
+@tree_util.register_dataclass
 @dataclass(frozen=True)
 class Params:
     """Canonical model parameters."""
@@ -30,6 +32,7 @@ class Params:
     disp: Array
 
 
+@tree_util.register_dataclass
 @dataclass(frozen=True)
 class Diagnostics:
     """Common diagnostics emitted by fit/check verbs."""
@@ -38,6 +41,7 @@ class Diagnostics:
     num_iters: Array
 
 
+@tree_util.register_dataclass
 @dataclass(frozen=True)
 class FitResult:
     """Canonical fit contract shared by grammar verbs."""
@@ -70,6 +74,7 @@ class FitResult:
         return self.diagnostics.converged
 
 
+@tree_util.register_dataclass
 @dataclass(frozen=True)
 class InferenceResult:
     """Canonical infer verb output contract."""
