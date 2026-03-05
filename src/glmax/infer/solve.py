@@ -1,3 +1,5 @@
+"""Internal linear solver adapters used by GLM fit/infer kernels."""
+
 from abc import abstractmethod
 from typing_extensions import TypeAlias
 

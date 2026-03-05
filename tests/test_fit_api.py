@@ -1,3 +1,4 @@
+import importlib
 import inspect
 
 import pytest
@@ -44,6 +45,20 @@ def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
 
 def test_legacy_fit_state_alias_is_not_publicly_exported() -> None:
     assert not hasattr(glmax, "GLMState")
+
+
+def test_infer_shims_are_not_publicly_reexported() -> None:
+    infer_module = importlib.import_module("glmax.infer")
+
+    assert not hasattr(infer_module, "irls")
+    assert not hasattr(infer_module, "CholeskySolver")
+    assert not hasattr(infer_module, "QRSolver")
+    assert not hasattr(infer_module, "CGSolver")
+    assert not hasattr(infer_module, "FisherInfoError")
+    assert not hasattr(infer_module, "HuberError")
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.infer.state")
 
 
 def _make_fit_result() -> FitResult:

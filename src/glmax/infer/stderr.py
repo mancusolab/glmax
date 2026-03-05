@@ -1,3 +1,5 @@
+"""Internal standard-error estimators used by GLM fit/infer kernels."""
+
 from abc import abstractmethod
 
 import equinox as eqx

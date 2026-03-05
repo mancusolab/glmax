@@ -1,3 +1,5 @@
+"""Internal IRLS optimizer kernels used by canonical grammar verbs."""
+
 from typing import NamedTuple, Tuple
 
 from jax import Array, lax, numpy as jnp
