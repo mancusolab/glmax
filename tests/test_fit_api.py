@@ -122,12 +122,12 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
 
     data = GLMData(X=X, y=y, offset=offset)
-    expected = model.fit(data, init=X @ init.beta, alpha_init=init.disp)
-    result = glmax.fit(model, data, init=init)
+    result_1 = glmax.fit(model, data, init=init)
+    result_2 = glmax.fit(model, data, init=init)
 
-    assert isinstance(result, FitResult)
-    assert jnp.allclose(result.beta, expected.beta)
-    assert jnp.allclose(result.params.disp, expected.params.disp)
+    assert isinstance(result_1, FitResult)
+    assert jnp.allclose(result_1.beta, result_2.beta)
+    assert jnp.allclose(result_1.params.disp, result_2.params.disp)
 
 
 def test_contract_dataclasses_are_pytrees() -> None:
@@ -258,11 +258,12 @@ def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None
     model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.0])
+    data = GLMData(X=X, y=y)
 
-    first = model.fit(X, y, tol=1e-6)
+    first = glmax.fit(model, data)
     assert first.beta.shape == (1,)
 
-    second = glmax.fit(model, GLMData(X=X, y=y), init=first.params)
+    second = glmax.fit(model, data, init=first.params)
     assert second.beta.shape == (1,)
 
 

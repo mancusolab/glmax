@@ -58,3 +58,17 @@ def test_predict_rejects_beta_shape_mismatch() -> None:
 
     with pytest.raises(ValueError, match="Params.beta"):
         glmax.predict(model, bad_params, data)
+
+
+def test_predict_rejects_non_finite_and_non_numeric_params() -> None:
+    model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
+
+    with pytest.raises(ValueError, match="Params.beta"):
+        glmax.predict(model, Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)), data)
+
+    with pytest.raises(TypeError, match="Params.beta must be numeric"):
+        glmax.predict(model, Params(beta=["bad"], disp=jnp.array(0.0)), data)
+
+    with pytest.raises(TypeError, match="Params.disp must be numeric"):
+        glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad"), data)

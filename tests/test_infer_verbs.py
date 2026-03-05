@@ -74,6 +74,12 @@ def test_infer_rejects_invalid_fit_artifacts_deterministically() -> None:
             replace(fit_result, params=Params(beta=jnp.array([1.0]), disp="bad")),
         )
 
+    with pytest.raises(ValueError, match="FitResult.params.disp"):
+        glmax.infer(
+            model,
+            replace(fit_result, params=Params(beta=jnp.array([1.0]), disp=jnp.array(jnp.inf))),
+        )
+
 
 def test_infer_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
     model, fit_result = _make_fit_result()

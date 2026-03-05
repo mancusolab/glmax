@@ -63,6 +63,15 @@ def test_check_rejects_invalid_fit_artifacts_deterministically() -> None:
             ),
         )
 
+    with pytest.raises(ValueError, match="FitResult.params.disp"):
+        glmax.check(
+            model,
+            replace(
+                fit_result,
+                params=glmax.Params(beta=jnp.array([1.0]), disp=jnp.array(jnp.inf)),
+            ),
+        )
+
 
 def test_check_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
     model, fit_result = _make_fit_result()
