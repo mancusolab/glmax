@@ -41,6 +41,20 @@ Before any `GLM.fit` shim removal decision, all of the following must be true:
 3. User-facing migration guidance for direct `glmax.fit` usage remains current.
 4. Risk-log entries related to shim removal are explicitly accepted or mitigated.
 
+## Exit Gate Checklist (Final)
+
+Date: 2026-03-05
+
+- [x] Full redesign regression suite passes:
+  - `PYTHONPATH=/Users/nicholas/Projects/glmax/.worktrees/glmax-fit-pipeline-redesign/src pytest -p no:capture tests`
+  - Result: `41 passed, 1 warning`.
+- [x] Compatibility status is documented in public docs and code docstrings.
+- [x] Failure semantics are documented and linked to regression assertions.
+- [x] AC coverage sign-off is explicit and test-backed:
+  - AC1.2 (wrapper/direct parity): covered in `tests/test_fit_api.py` and `tests/test_glm.py`.
+  - AC3.2 (fitter injection support): covered in `tests/test_fitters.py` and `tests/test_fit_api.py`.
+  - AC5.2 (compatibility/failure docs linked to tests): covered in `tests/test_fit_api.py`, `tests/test_fitters.py`, and `tests/test_glm.py`.
+
 ## Follow-Up Ownership
 
 - Primary owner for compatibility lifecycle: GLMAX maintainers.
