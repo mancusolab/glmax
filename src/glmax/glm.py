@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 from typing import Tuple
 
 import equinox as eqx
@@ -98,13 +100,14 @@ class GLM(eqx.Module):
     def fit(
         self,
         data: GLMData,
-        *,
+        *legacy_args: ArrayLike,
         init_eta: ArrayLike = None,
         disp_init: ScalarLike = None,
         se_estimator: AbstractStdErrEstimator = FisherInfoError(),
         max_iter: int = 1000,
         tol: float = 1e-3,
         step_size: float = 1.0,
+        **legacy_kwargs: ArrayLike,
     ) -> FitResult:
         """
         Represents the fitted state of a Generalized Linear Model (GLM).
@@ -126,6 +129,23 @@ class GLM(eqx.Module):
         -  A [`glmax.FitResult`][] containing the final estimated parameters and convergence diagnostics
             from the fitted GLM model.
         """
+        if legacy_args:
+            raise TypeError(
+                "GLM.fit(...) no longer accepts separate `X, y` positional inputs; "
+                "pass a single `GLMData(X=..., y=...)` value as `data`."
+            )
+        if "init" in legacy_kwargs:
+            raise TypeError(
+                "GLM.fit(...) no longer accepts legacy keyword `init`; "
+                "pass `init_eta=` and optional `disp_init=` instead."
+            )
+        if "alpha_init" in legacy_kwargs:
+            raise TypeError(
+                "GLM.fit(...) no longer accepts legacy keyword `alpha_init`; " "use canonical `disp_init=` instead."
+            )
+        if legacy_kwargs:
+            unexpected = ", ".join(f"`{name}`" for name in sorted(legacy_kwargs))
+            raise TypeError(f"GLM.fit(...) got unexpected keyword argument(s): {unexpected}.")
         if not isinstance(data, GLMData):
             raise TypeError("GLM.fit(...) expects `data` to be a GLMData instance.")
         if data.weights is not None:
@@ -202,6 +222,25 @@ class GLM(eqx.Module):
             score_residual=score_residual,
         )
 
+
+GLM.fit.__signature__ = inspect.Signature(
+    parameters=[
+        inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+        inspect.Parameter("data", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=GLMData),
+        inspect.Parameter("init_eta", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=ArrayLike),
+        inspect.Parameter("disp_init", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=ScalarLike),
+        inspect.Parameter(
+            "se_estimator",
+            inspect.Parameter.KEYWORD_ONLY,
+            default=FisherInfoError(),
+            annotation=AbstractStdErrEstimator,
+        ),
+        inspect.Parameter("max_iter", inspect.Parameter.KEYWORD_ONLY, default=1000, annotation=int),
+        inspect.Parameter("tol", inspect.Parameter.KEYWORD_ONLY, default=1e-3, annotation=float),
+        inspect.Parameter("step_size", inspect.Parameter.KEYWORD_ONLY, default=1.0, annotation=float),
+    ],
+    return_annotation=FitResult,
+)
 
 GLM.__init__.__doc__ = r"""**Arguments:**
 

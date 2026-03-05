@@ -177,6 +177,7 @@ def test_default_fitter_explicitly_forwards_disp_init_through_top_level_router()
     data = GLMData(
         X=jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]]),
         y=jnp.array([1.0, 0.0, 1.0]),
+        offset=jnp.array([0.2, 0.1, 0.3]),
     )
     init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
 
@@ -184,7 +185,7 @@ def test_default_fitter_explicitly_forwards_disp_init_through_top_level_router()
 
     assert isinstance(result, FitResult)
     assert seen["data"] is data
-    assert jnp.allclose(seen["kwargs"]["init_eta"], data.X @ init.beta)
+    assert jnp.allclose(seen["kwargs"]["init_eta"], data.X @ init.beta + data.offset)
     assert jnp.allclose(seen["kwargs"]["disp_init"], init.disp)
 
 
@@ -250,13 +251,31 @@ def test_glm_fit_rejects_legacy_public_alias_inputs() -> None:
         y=jnp.array([0.5, 1.1, 1.8, 2.2]),
     )
 
-    with pytest.raises(TypeError):
+    with pytest.raises(
+        TypeError,
+        match=(
+            r"GLM\.fit\(\.\.\.\) no longer accepts separate `X, y` positional inputs; "
+            r"pass a single `GLMData\(X=..., y=...\)` value as `data`\."
+        ),
+    ):
         model.fit(data.X, data.y)
 
-    with pytest.raises(TypeError):
+    with pytest.raises(
+        TypeError,
+        match=(
+            r"GLM\.fit\(\.\.\.\) no longer accepts legacy keyword `init`; "
+            r"pass `init_eta=` and optional `disp_init=` instead\."
+        ),
+    ):
         model.fit(data, init=jnp.array([0.2, 0.4, 0.6, 0.8]))
 
-    with pytest.raises(TypeError):
+    with pytest.raises(
+        TypeError,
+        match=(
+            r"GLM\.fit\(\.\.\.\) no longer accepts legacy keyword `alpha_init`; "
+            r"use canonical `disp_init=` instead\."
+        ),
+    ):
         model.fit(data, alpha_init=jnp.array(0.0))
 
 

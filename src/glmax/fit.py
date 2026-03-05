@@ -41,12 +41,12 @@ class _ModelFitter:
     """Bridge canonical fit verb calls into the existing GLM.fit implementation."""
 
     def __call__(self, model: GLM, data: GLMData, init: Params | None = None) -> FitResult:
-        X_array, _, _, _, _ = data.canonical_arrays()
+        X_array, _, offset_array, _, _ = data.canonical_arrays()
         init_beta, init_disp = _canonicalize_init(init, X_array.shape[1])
         if init_beta is None:
             return model.fit(data)
 
-        eta_init = X_array @ init_beta
+        eta_init = X_array @ init_beta + offset_array
         return model.fit(data, init_eta=eta_init, disp_init=init_disp)
 
 
