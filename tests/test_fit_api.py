@@ -239,6 +239,8 @@ def test_glm_fit_signature_does_not_expose_legacy_wrapper_parameters() -> None:
 
     assert "legacy_args" not in sig.parameters
     assert "legacy_kwargs" not in sig.parameters
+    assert "init" not in sig.parameters
+    assert "alpha_init" not in sig.parameters
     assert all(param.kind is not inspect.Parameter.VAR_POSITIONAL for param in sig.parameters.values())
     assert all(param.kind is not inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values())
 

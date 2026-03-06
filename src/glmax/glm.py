@@ -108,6 +108,77 @@ def _fit_model(
     )
 
 
+def _fit_impl(
+    model: "GLM",
+    data: GLMData,
+    init_eta: ArrayLike = None,
+    disp_init: ScalarLike = None,
+    se_estimator: AbstractStdErrEstimator = FisherInfoError(),
+    max_iter: int = 1000,
+    tol: float = 1e-3,
+    step_size: float = 1.0,
+) -> FitResult:
+    """Internal convenience method over the canonical GLM fit kernel.
+
+    Use `glmax.fit(model, data, init=...)` for the public grammar contract.
+
+    **Arguments:**
+
+    - `data`: canonical covariate/response noun.
+    - `init_eta`: optional initial linear predictor.
+    - `disp_init`: optional canonical dispersion initial value.
+    - `max_iter`: maximum number of iterations, default to 1000.
+    - `tol`: tolerance for convergence, default to 1e-3.
+    - `step_size`: step size, default to 1.0.
+
+    **Returns:**
+
+    -  A [`glmax.FitResult`][] containing the fitted parameter and diagnostic artifacts.
+    """
+    return _fit_model(
+        model,
+        data,
+        init_eta=init_eta,
+        disp_init=disp_init,
+        se_estimator=se_estimator,
+        max_iter=max_iter,
+        tol=tol,
+        step_size=step_size,
+    )
+
+
+class _GLMBoundFit:
+    def __init__(self, instance: "GLM") -> None:
+        self._instance = instance
+        self.__wrapped__ = _fit_impl
+        self.__doc__ = _fit_impl.__doc__
+
+    def __call__(self, *args: object, **kwargs: object) -> FitResult:
+        if "init" in kwargs:
+            raise TypeError(
+                "GLM.fit(...) no longer accepts `init`. "
+                "Use `glmax.fit(model, data, init=...)` for Params-based initialization, "
+                "or pass `init_eta=` when providing a linear predictor directly."
+            )
+        if "alpha_init" in kwargs:
+            raise TypeError("GLM.fit(...) no longer accepts `alpha_init`. Use `disp_init=` instead.")
+        return _fit_impl(self._instance, *args, **kwargs)
+
+
+class _GLMFitDescriptor:
+    __wrapped__ = _fit_impl
+    __doc__ = _fit_impl.__doc__
+
+    def __call__(self, model: "GLM", *args: object, **kwargs: object) -> FitResult:
+        return _GLMBoundFit(model)(*args, **kwargs)
+
+    def __get__(self, instance: "GLM" | None, owner: type["GLM"]) -> object:
+        del owner
+        if instance is None:
+            return self
+        return _GLMBoundFit(instance)
+
+
 class GLM(eqx.Module):
     """
     This class provides a flexible framework for fitting Generalized Linear Models (GLMs),
@@ -185,54 +256,7 @@ class GLM(eqx.Module):
 
         return pval
 
-    def fit(
-        self,
-        data: GLMData,
-        init_eta: ArrayLike = None,
-        disp_init: ScalarLike = None,
-        se_estimator: AbstractStdErrEstimator = FisherInfoError(),
-        max_iter: int = 1000,
-        tol: float = 1e-3,
-        step_size: float = 1.0,
-        init: object = _REMOVED_KEYWORD,
-        alpha_init: object = _REMOVED_KEYWORD,
-    ) -> FitResult:
-        """
-        Internal convenience method over the canonical GLM fit kernel.
-
-        Use `glmax.fit(model, data, init=...)` for the public grammar contract.
-
-        **Arguments:**
-
-        - `data`: canonical covariate/response noun.
-        - `init_eta`: optional initial linear predictor.
-        - `disp_init`: optional canonical dispersion initial value.
-        - `max_iter`: maximum number of iterations, default to 1000.
-        - `tol`: tolerance for convergence, default to 1e-3.
-        - `step_size`: step size, default to 1.0.
-
-        **Returns:**
-
-        -  A [`glmax.FitResult`][] containing the fitted parameter and diagnostic artifacts.
-        """
-        if init is not _REMOVED_KEYWORD:
-            raise TypeError(
-                "GLM.fit(...) no longer accepts `init`. "
-                "Use `glmax.fit(model, data, init=...)` for Params-based initialization, "
-                "or pass `init_eta=` when providing a linear predictor directly."
-            )
-        if alpha_init is not _REMOVED_KEYWORD:
-            raise TypeError("GLM.fit(...) no longer accepts `alpha_init`. Use `disp_init=` instead.")
-        return _fit_model(
-            self,
-            data,
-            init_eta=init_eta,
-            disp_init=disp_init,
-            se_estimator=se_estimator,
-            max_iter=max_iter,
-            tol=tol,
-            step_size=step_size,
-        )
+    fit = _GLMFitDescriptor()
 
 
 GLM.__init__.__doc__ = r"""**Arguments:**
