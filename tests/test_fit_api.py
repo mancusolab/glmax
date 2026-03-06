@@ -81,12 +81,15 @@ def test_worktree_python_wrapper_imports_glmax_from_worktree_src() -> None:
 
 def test_legacy_fit_state_alias_is_not_publicly_exported() -> None:
     assert not hasattr(glmax, "GLMState")
+    assert "GLMState" not in glmax.__all__
 
 
 def test_infer_shims_are_not_publicly_reexported() -> None:
     infer_module = importlib.import_module("glmax.infer")
 
     assert not hasattr(infer_module, "irls")
+    assert not hasattr(infer_module, "AbstractFitter")
+    assert not hasattr(infer_module, "DefaultFitter")
     assert not hasattr(infer_module, "CholeskySolver")
     assert not hasattr(infer_module, "QRSolver")
     assert not hasattr(infer_module, "CGSolver")
@@ -319,6 +322,19 @@ def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
     assert result.params.beta.shape == (2,)
     assert bool(result.converged)
     assert jnp.all(jnp.isfinite(result.params.beta))
+
+
+def test_legacy_array_first_fitter_module_is_importable_but_unsupported() -> None:
+    legacy_fitter_module = importlib.import_module("glmax.infer.fitter")
+    legacy_fitter = legacy_fitter_module.DefaultFitter()
+
+    with pytest.raises((ImportError, AttributeError), match=r"_run_default_pipeline"):
+        legacy_fitter(
+            glmax.GLM(family=Gaussian()),
+            jnp.ones((2, 1)),
+            jnp.ones(2),
+            jnp.zeros(2),
+        )
 
 
 @pytest.mark.parametrize(
