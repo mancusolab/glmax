@@ -185,14 +185,12 @@ class GLM(eqx.Module):
     def fit(
         self,
         data: GLMData,
-        *legacy_args: ArrayLike,
         init_eta: ArrayLike = None,
         disp_init: ScalarLike = None,
         se_estimator: AbstractStdErrEstimator = FisherInfoError(),
         max_iter: int = 1000,
         tol: float = 1e-3,
         step_size: float = 1.0,
-        **legacy_kwargs: ArrayLike,
     ) -> FitResult:
         """
         Internal convenience method over the canonical GLM fit kernel.
@@ -212,23 +210,6 @@ class GLM(eqx.Module):
 
         -  A [`glmax.FitResult`][] containing the fitted parameter and diagnostic artifacts.
         """
-        if legacy_args:
-            raise TypeError(
-                "GLM.fit(...) no longer accepts separate `X, y` positional inputs; "
-                "pass a single `GLMData(X=..., y=...)` value as `data`."
-            )
-        if "init" in legacy_kwargs:
-            raise TypeError(
-                "GLM.fit(...) no longer accepts legacy keyword `init`; "
-                "pass `init_eta=` and optional `disp_init=` instead."
-            )
-        if "alpha_init" in legacy_kwargs:
-            raise TypeError(
-                "GLM.fit(...) no longer accepts legacy keyword `alpha_init`; " "use canonical `disp_init=` instead."
-            )
-        if legacy_kwargs:
-            unexpected = ", ".join(f"`{name}`" for name in sorted(legacy_kwargs))
-            raise TypeError(f"GLM.fit(...) got unexpected keyword argument(s): {unexpected}.")
         return _fit_model(
             self,
             data,

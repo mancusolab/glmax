@@ -17,6 +17,7 @@ import glmax
 from glmax import Diagnostics, FitResult, Fitter, GLMData, InferenceResult, Params
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 from glmax.glm import specify
+from glmax.infer.solve import QRSolver
 
 
 WORKTREE_ROOT = Path(__file__).resolve().parents[1]
@@ -231,6 +232,30 @@ def test_glm_fit_is_not_a_curated_public_contract() -> None:
 
     assert not hasattr(glmax.GLM.fit, "__signature__")
     assert "Use `glmax.fit(model, data, init=...)` for the public grammar contract." in doc
+
+
+def test_glm_fit_signature_does_not_expose_legacy_wrapper_parameters() -> None:
+    sig = inspect.signature(glmax.GLM.fit)
+
+    assert "legacy_args" not in sig.parameters
+    assert "legacy_kwargs" not in sig.parameters
+    assert all(param.kind is not inspect.Parameter.VAR_POSITIONAL for param in sig.parameters.values())
+    assert all(param.kind is not inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values())
+
+
+def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
+    model = glmax.specify(family=Gaussian(), solver=QRSolver())
+    data = GLMData(
+        X=jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]]),
+        y=jnp.array([0.8, 1.7, 2.1, 2.9]),
+    )
+
+    result = glmax.fit(model, data)
+
+    assert isinstance(result, FitResult)
+    assert result.params.beta.shape == (2,)
+    assert bool(result.converged)
+    assert jnp.all(jnp.isfinite(result.params.beta))
 
 
 @pytest.mark.parametrize(
