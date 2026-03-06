@@ -39,3 +39,6 @@ pred = glmax.predict(model, fit_result.params, data)
 infer_result = glmax.infer(model, fit_result)
 diagnostics = glmax.check(model, fit_result)
 ```
+
+`glmax.GLM.fit(...)` remains available as an internal convenience method, but
+the public API contract is the top-level grammar workflow shown above.

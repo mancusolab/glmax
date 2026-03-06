@@ -6,11 +6,11 @@
 
 `glmax` exposes five canonical verbs:
 
-- `specify(...)` creates a `GLM` model.
-- `fit(model, data, ...)` estimates model parameters.
-- `predict(model, params, data)` computes predictions.
-- `infer(model, fit_result)` computes inferential summaries without refitting.
-- `check(model, fit_result)` returns diagnostics without refitting.
+- `specify(...)` creates a `GLM` model
+- `fit(model, data, init=None, *, fitter=...)` estimates model parameters
+- `predict(model, params, data)` computes predictions
+- `infer(model, fit_result)` computes inferential summaries without refitting
+- `check(model, fit_result)` returns diagnostics without refitting
 
 Data and parameter contracts are explicit nouns:
 

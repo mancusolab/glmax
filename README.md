@@ -4,11 +4,13 @@
 
 The canonical workflow is:
 
-1. `specify(...)` a model.
-2. `fit(model, data, ...)` to estimate parameters.
-3. `predict(model, params, data)` for fitted means.
-4. `infer(model, fit_result)` for inferential summaries.
-5. `check(model, fit_result)` for diagnostics.
+1. `specify(...) -> GLM`
+2. `fit(model, data, init=None, *, fitter=...) -> FitResult`
+3. `predict(model, params, data)` for fitted means
+4. `infer(model, fit_result)` for inferential summaries without refitting
+5. `check(model, fit_result)` for diagnostics without refitting
+
+The canonical nouns are `GLMData`, `Params`, `FitResult`, `InferenceResult`, and `Diagnostics`.
 
 ## Installation
 
@@ -34,7 +36,8 @@ data = GLMData(
 )
 
 fit_result = glmax.fit(model, data)
-pred = glmax.predict(model, fit_result.params, data)
+params = fit_result.params
+pred = glmax.predict(model, params, data)
 infer_result = glmax.infer(model, fit_result)
 diagnostics = glmax.check(model, fit_result)
 ```

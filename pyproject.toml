@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "glmax"
 dynamic = ["version"]
-description = ''
+description = "Grammar-first generalized linear modeling in JAX."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
