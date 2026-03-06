@@ -150,6 +150,14 @@ def test_fit_returns_fitresult_using_injected_fitter() -> None:
     assert seen["init"] is init
 
 
+def test_fit_rejects_non_callable_fitter_with_deterministic_error() -> None:
+    model = glmax.GLM()
+    data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
+
+    with pytest.raises(TypeError, match=r"expects `fitter` to be callable"):
+        glmax.fit(model, data, fitter="not-a-fitter")
+
+
 def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]])

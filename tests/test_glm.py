@@ -94,7 +94,7 @@ def test_poisson(getkey):
     glmax_poi = glmax.specify(family=Poisson())
     glm_state = glmax.fit(glmax_poi, GLMData(X=X, y=y))
 
-    assert_array_eq(glm_state.beta, sm_state.params, atol=1e-3)
+    assert_array_eq(glm_state.params.beta, sm_state.params, atol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, atol=1e-3)
     assert_array_eq(glm_state.p, sm_state.pvalues, atol=1e-3)
 
@@ -115,7 +115,7 @@ def test_normal(getkey):
     glmax_normal = glmax.specify(family=Gaussian())
     glm_state = glmax.fit(glmax_normal, GLMData(X=X, y=y))
 
-    assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
+    assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
 
@@ -136,7 +136,7 @@ def test_logit(getkey):
     glmax_logit = glmax.specify(family=Binomial())
     glm_state = glmax.fit(glmax_logit, GLMData(X=X, y=y))
 
-    assert_array_eq(glm_state.beta, sm_state.params, rtol=1e-3)
+    assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
     assert_array_eq(glm_state.se, sm_state.bse, rtol=1e-3)
     assert_array_eq(glm_state.p, sm_state.pvalues, rtol=1e-3)
 
@@ -159,6 +159,6 @@ def test_NegativeBinomial(getkey):
     sm_se = sm_state.bse
     sm_p = sm_state.pvalues
 
-    assert_array_eq(glm_state.beta, sm_beta, rtol=5e-3)
+    assert_array_eq(glm_state.params.beta, sm_beta, rtol=5e-3)
     assert_array_eq(glm_state.se, sm_se, rtol=5e-3)
     assert_array_eq(glm_state.p, sm_p, rtol=3e-2)
