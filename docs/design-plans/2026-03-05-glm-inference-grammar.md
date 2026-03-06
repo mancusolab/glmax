@@ -124,7 +124,7 @@ Detailed artifacts:
 - Why this strategy: solver contracts are already modular and tested; redesign scope is grammar API and contract clarity, not backend linear-algebra replacement.
 
 ## Solver Translation Feasibility
-- Summary: High feasibility. Existing `infer/solvers.py` implementations can be reused with contract renaming and updated result schemas.
+- Summary: High feasibility. Existing `infer/solve.py` implementations can remain the single solver seam, with duplicate solver modules removed during consolidation.
 - Blocking constraints: Ensure `FitResult` carries the curvature intermediates needed by `infer`/`check` so no solver outputs are recomputed ad hoc.
 - Custom-solver rationale (if chosen): not applicable in this phase.
 

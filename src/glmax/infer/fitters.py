@@ -9,7 +9,7 @@ from jax import Array, lax, numpy as jnp
 from jaxtyping import ArrayLike, ScalarLike
 
 from ..family.dist import ExponentialFamily
-from .contracts import AbstractLinearSolver
+from .solve import AbstractLinearSolver
 
 
 class IRLSState(NamedTuple):

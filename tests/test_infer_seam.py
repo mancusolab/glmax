@@ -2,6 +2,8 @@
 import importlib
 import sys
 
+import pytest
+
 import jax.numpy as jnp
 
 import glmax
@@ -56,6 +58,14 @@ def test_qr_solver_import_path_remains_supported() -> None:
 
     assert solve_module.QRSolver is QRSolver
     assert isinstance(QRSolver(), solve_module.AbstractLinearSolver)
+
+
+def test_duplicate_solver_modules_are_not_importable() -> None:
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.infer.contracts")
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.infer.solvers")
 
 
 def test_importing_canonical_fit_module_does_not_touch_stale_infer_modules() -> None:
