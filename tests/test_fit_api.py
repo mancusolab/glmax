@@ -324,17 +324,9 @@ def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
     assert jnp.all(jnp.isfinite(result.params.beta))
 
 
-def test_legacy_array_first_fitter_module_is_importable_but_unsupported() -> None:
-    legacy_fitter_module = importlib.import_module("glmax.infer.fitter")
-    legacy_fitter = legacy_fitter_module.DefaultFitter()
-
-    with pytest.raises((ImportError, AttributeError), match=r"_run_default_pipeline"):
-        legacy_fitter(
-            glmax.GLM(family=Gaussian()),
-            jnp.ones((2, 1)),
-            jnp.ones(2),
-            jnp.zeros(2),
-        )
+def test_legacy_array_first_fitter_module_is_not_importable() -> None:
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.infer.fitter")
 
 
 @pytest.mark.parametrize(

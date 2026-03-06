@@ -68,6 +68,17 @@ def test_duplicate_solver_modules_are_not_importable() -> None:
         importlib.import_module("glmax.infer.solvers")
 
 
+def test_legacy_fitter_modules_are_not_importable() -> None:
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.infer.fitter")
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.infer.fitters")
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.infer.result")
+
+
 def test_importing_canonical_fit_module_does_not_touch_stale_infer_modules() -> None:
     _drop_stale_infer_modules()
     fit_module = importlib.reload(importlib.import_module("glmax.fit"))

@@ -42,10 +42,10 @@ We will redesign `glmax` around a GLM-scoped Grammar of Inference where primary 
 - Preserving backward-compatibility wrappers or alias-heavy transition APIs.
 
 ## Existing Patterns
-Confirmed patterns and constraints from codebase investigation:
-- `glmax` currently re-exports families/links, `fit`, `GLM`, `GLMState`, solver/error classes, and `infer.irls` at package root (`src/glmax/__init__.py`).
-- `GLMState` and `IRLSState` are duplicated across multiple modules (`src/glmax/glm.py`, `src/glmax/infer/result.py`, `src/glmax/infer/fitters.py`, `src/glmax/infer/state.py`), which creates schema drift risk.
-- Dispersion (`alpha`) is already a first-class fitting concern in numerics (iterative `family.update_dispersion(...)` in `IRLSFitter`, NB-specific `estimate_dispersion(...)` bootstrap in `fit.py`).
+Confirmed patterns and constraints from codebase investigation (historical pre-consolidation snapshot):
+- `glmax` re-exported families/links, `fit`, `GLM`, `GLMState`, solver/error classes, and `infer.irls` at package root before the grammar cleanup (`src/glmax/__init__.py`).
+- `GLMState` and `IRLSState` were duplicated across multiple modules (`src/glmax/glm.py`, `src/glmax/infer/result.py`, `src/glmax/infer/fitters.py`, `src/glmax/infer/state.py`), which created schema drift risk before consolidation.
+- Dispersion (`alpha`) was already a first-class fitting concern in numerics during the legacy IRLS layer (iterative `family.update_dispersion(...)` in `IRLSFitter`, NB-specific `estimate_dispersion(...)` bootstrap in `fit.py`).
 - Inference internals are already mostly strategy-based (`fitters`, `solvers`, `inference`), while some compatibility/deprecation shims remain (`infer/optimize.py`, `infer/solve.py`, `infer/stderr.py`).
 
 Intentional divergence in this design:
@@ -67,7 +67,7 @@ Intentional divergence in this design:
 | --- | --- | --- | --- | --- |
 | SRC-1 | `src/glmax/__init__.py` | local-code | Current root-level API exports and public surface | high |
 | SRC-2 | `src/glmax/fit.py` | local-code | Canonical fit workflow, boundary normalization, and NB dispersion bootstrap | high |
-| SRC-3 | `src/glmax/glm.py` | local-code | Current `GLM`/`GLMState` contracts and wrapper fit behavior | high |
+| SRC-3 | `src/glmax/glm.py` | local-code | Historical `GLM`/`GLMState` wrapper behavior and current model-spec surface | high |
 | SRC-4 | `src/glmax/infer/` | local-code | Fitter/solver/inference strategies plus compatibility shims and duplicate state contracts | high |
 | SRC-5 | `src/glmax/family/dist.py` | local-code | Family-level weight and dispersion update hooks | high |
 | SRC-6 | `tests/test_fit_api.py`, `tests/test_glm.py`, `tests/test_fitters.py` | local-tests | Existing API and compatibility assumptions to replace | high |
@@ -99,8 +99,8 @@ Not applicable (`existing-codebase-port`).
 
 | Finding ID | Source Scope | Summary | Evidence (file:line or commit:path:line) | Status (`confirmed`/`discrepancy`/`addition`/`missing`) |
 | --- | --- | --- | --- | --- |
-| PORT-INV-1 | API exports | Root package currently exports legacy + compatibility-heavy surface (`fit`, `GLM`, `GLMState`, `irls`, solvers) | `src/glmax/__init__.py:7`, `src/glmax/__init__.py:21`, `src/glmax/__init__.py:24`, `src/glmax/__init__.py:28` | confirmed |
-| PORT-INV-2 | State schemas | `GLMState`/`IRLSState` contracts are duplicated in multiple modules | `src/glmax/glm.py:21`, `src/glmax/infer/result.py:6`, `src/glmax/infer/fitters.py:15`, `src/glmax/infer/state.py:6` | confirmed |
+| PORT-INV-1 | API exports | Root package exported a legacy + compatibility-heavy surface (`fit`, `GLM`, `GLMState`, `irls`, solvers) before grammar consolidation | `src/glmax/__init__.py:7`, `src/glmax/__init__.py:21`, `src/glmax/__init__.py:24`, `src/glmax/__init__.py:28` | confirmed |
+| PORT-INV-2 | State schemas | `GLMState`/`IRLSState` contracts were duplicated in multiple modules before consolidation | `src/glmax/glm.py:21`, `src/glmax/infer/result.py:6`, `src/glmax/infer/fitters.py:15`, `src/glmax/infer/state.py:6` | confirmed |
 | PORT-INV-3 | Fitting verbs | Public fitting is currently split between module fit, wrapper fit, and infer exports | `src/glmax/fit.py:117`, `src/glmax/glm.py:131`, `src/glmax/infer/optimize.py:15` | confirmed |
 | PORT-INV-4 | Dispersion handling | Dispersion is already updated in iterative fitting and family-specific hooks | `src/glmax/infer/fitters.py:122`, `src/glmax/family/dist.py:82`, `src/glmax/family/dist.py:285` | confirmed |
 | PORT-INV-5 | Tests/docs dependency | Existing tests and docs assert wrapper compatibility and `README.rst` assumptions | `tests/test_fit_api.py:109`, `tests/test_glm.py:195`, `README.rst:52`, `docs/index.md:31` | confirmed |
@@ -112,7 +112,7 @@ No external research required; this design is codebase-anchored.
 ## Mathematical Sanity Checks
 - Summary: This design changes contracts and module boundaries, not family/link likelihood mathematics. Existing IRLS weighting, score, and covariance formulas remain the numerical baseline.
 - Blocking issues: none identified for design readiness.
-- Accepted risks: Temporary parity drift risk during schema migration from `GLMState/alpha` to `FitResult/Params.disp`; mitigated with family regression and boundary-failure tests.
+- Accepted risks (historical): temporary parity drift risk during schema migration from `GLMState/alpha` to `FitResult/Params.disp`; mitigated with family regression and boundary-failure tests.
 
 Detailed artifacts:
 - `docs/design-plans/artifacts/2026-03-05-glm-inference-grammar/model-symbol-table.md`
