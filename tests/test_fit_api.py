@@ -243,6 +243,21 @@ def test_glm_fit_signature_does_not_expose_legacy_wrapper_parameters() -> None:
     assert all(param.kind is not inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values())
 
 
+@pytest.mark.parametrize(
+    ("legacy_keyword", "match"),
+    [
+        ("init", r"GLM\.fit\(\.\.\.\) no longer accepts `init`.*glmax\.fit\(model, data, init=\.\.\.\)"),
+        ("alpha_init", r"GLM\.fit\(\.\.\.\) no longer accepts `alpha_init`.*Use `disp_init=` instead"),
+    ],
+)
+def test_glm_fit_removed_legacy_keywords_raise_migration_typeerrors(legacy_keyword: str, match: str) -> None:
+    model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 2.0, 3.0]))
+
+    with pytest.raises(TypeError, match=match):
+        model.fit(data, **{legacy_keyword: jnp.zeros(1)})
+
+
 def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
     model = glmax.specify(family=Gaussian(), solver=QRSolver())
     data = GLMData(

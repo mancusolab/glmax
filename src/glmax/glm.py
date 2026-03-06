@@ -18,6 +18,9 @@ from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
 
+_REMOVED_KEYWORD = object()
+
+
 def _fit_model(
     model: "GLM",
     data: GLMData,
@@ -191,6 +194,8 @@ class GLM(eqx.Module):
         max_iter: int = 1000,
         tol: float = 1e-3,
         step_size: float = 1.0,
+        init: object = _REMOVED_KEYWORD,
+        alpha_init: object = _REMOVED_KEYWORD,
     ) -> FitResult:
         """
         Internal convenience method over the canonical GLM fit kernel.
@@ -210,6 +215,14 @@ class GLM(eqx.Module):
 
         -  A [`glmax.FitResult`][] containing the fitted parameter and diagnostic artifacts.
         """
+        if init is not _REMOVED_KEYWORD:
+            raise TypeError(
+                "GLM.fit(...) no longer accepts `init`. "
+                "Use `glmax.fit(model, data, init=...)` for Params-based initialization, "
+                "or pass `init_eta=` when providing a linear predictor directly."
+            )
+        if alpha_init is not _REMOVED_KEYWORD:
+            raise TypeError("GLM.fit(...) no longer accepts `alpha_init`. Use `disp_init=` instead.")
         return _fit_model(
             self,
             data,
