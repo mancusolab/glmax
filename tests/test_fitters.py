@@ -1,7 +1,6 @@
-import importlib
-import inspect
+# pattern: Imperative Shell
 
-from pathlib import Path
+from dataclasses import replace
 
 import pytest
 
@@ -9,52 +8,99 @@ import jax.numpy as jnp
 
 import glmax
 
-
-def _sample_inputs():
-    X = jnp.array([[1.0, 0.5], [1.0, -0.5], [1.0, 1.5], [1.0, -1.5]])
-    y = jnp.array([1.0, 0.0, 2.0, 1.0])
-    return X, y
+from glmax import Diagnostics, FitResult, GLMData, Params
+from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 
 
-def test_canonical_fit_rejects_invalid_fitter_type():
-    X, y = _sample_inputs()
-
-    with pytest.raises(TypeError, match="fitter must implement AbstractGLMFitter"):
-        glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver(), fitter=object())
-
-
-def test_glm_fit_rejects_invalid_override_fitter_type():
-    X, y = _sample_inputs()
-    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
-
-    with pytest.raises(TypeError, match="fitter must implement AbstractGLMFitter"):
-        model.fit(X, y, fitter="not-a-fitter")
-
-
-def test_fitter_and_inference_docstrings_follow_contract_sections():
-    fitters = importlib.import_module("glmax.infer.fitters")
-    inference = importlib.import_module("glmax.infer.inference")
-
-    targets = (
-        fitters.AbstractGLMFitter,
-        fitters.IRLSFitter,
-        fitters.IRLSFitter.__call__,
-        fitters.irls,
-        inference.wald_test,
+def _make_fit_result() -> FitResult:
+    return FitResult(
+        params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
+        se=jnp.array([0.5]),
+        z=jnp.array([2.0]),
+        p=jnp.array([0.05]),
+        eta=jnp.array([1.0, 1.0]),
+        mu=jnp.array([1.0, 1.0]),
+        glm_wt=jnp.array([1.0, 1.0]),
+        diagnostics=Diagnostics(
+            converged=jnp.array(True),
+            num_iters=jnp.array(1),
+            objective=jnp.array(0.0),
+            objective_delta=jnp.array(-1e-4),
+        ),
+        curvature=jnp.array([[1.0]]),
+        score_residual=jnp.array([0.0, 0.0]),
     )
 
-    for target in targets:
-        doc = inspect.getdoc(target)
-        assert doc is not None
-        assert "**Arguments:**" in doc
-        assert "**Returns:**" in doc
-        assert "**Raises:**" in doc or "**Failure Modes:**" in doc
+
+def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
+    seen: dict[str, object] = {}
+    expected = _make_fit_result()
+
+    class RecordingFitter:
+        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
+            seen["model"] = model
+            seen["data"] = data
+            seen["init"] = init
+            return expected
+
+    model = glmax.GLM()
+    data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
+    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0))
+
+    result = glmax.fit(model, data, init=init, fitter=RecordingFitter())
+
+    assert result is expected
+    assert seen["model"] is model
+    assert seen["data"] is data
+    assert seen["init"] is init
 
 
-def test_docs_claim_invalid_fitter_type_is_enforced():
-    doc = Path("docs/api/glm.md").read_text()
-    assert "invalid fitter type" in doc
+def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
+    class BadFitter:
+        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> object:
+            del model, data, init
+            return object()
 
-    X, y = _sample_inputs()
-    with pytest.raises(TypeError, match="fitter must implement AbstractGLMFitter"):
-        glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver(), fitter=object())
+    model = glmax.GLM()
+    data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
+
+    with pytest.raises(TypeError, match="FitResult"):
+        glmax.fit(model, data, fitter=BadFitter())
+
+
+@pytest.mark.parametrize(
+    ("family", "y"),
+    [
+        (Gaussian(), jnp.array([0.2, 1.1, 2.0, 3.3])),
+        (Poisson(), jnp.array([0.0, 1.0, 1.0, 2.0])),
+        (Binomial(), jnp.array([0.0, 1.0, 0.0, 1.0])),
+        (NegativeBinomial(), jnp.array([0.0, 1.0, 2.0, 4.0])),
+    ],
+)
+def test_default_fitter_returns_canonical_fitresult_for_supported_families(family, y) -> None:
+    model = glmax.specify(family=family)
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=y)
+
+    result = glmax.fit(model, data)
+
+    assert isinstance(result, FitResult)
+    assert result.params.beta.shape == (1,)
+    assert result.eta.shape == y.shape
+    assert result.mu.shape == y.shape
+    assert result.glm_wt.shape == y.shape
+    assert result.score_residual.shape == y.shape
+
+
+def test_fit_rejects_custom_fitter_result_with_malformed_contract() -> None:
+    malformed = replace(_make_fit_result(), diagnostics=object())
+
+    class BadFitter:
+        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
+            del model, data, init
+            return malformed
+
+    model = glmax.GLM()
+    data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
+
+    with pytest.raises(TypeError, match="FitResult.diagnostics"):
+        glmax.fit(model, data, fitter=BadFitter())

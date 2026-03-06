@@ -28,7 +28,7 @@ theme:  # pulled from optimistix
 
 
 site_name: glmax
-site_description: The documentation for the glmax software library.
+site_description: Grammar-first generalized linear modeling in JAX.
 site_url: https://mancusolab.github.io/glmax
 
 repo_url: https://github.com/mancusolab/glmax
@@ -109,9 +109,9 @@ plugins:
                     show_signature_annotations: true
 
 nav:
-    - 'index.md'
+    - Home: 'index.md'
     - API:
-          - 'GLM Fit API': 'api/glm.md'
+          - 'GLM Grammar': 'api/glm.md'
     - Misc:
         - 'authors.md'
         - 'license.md'

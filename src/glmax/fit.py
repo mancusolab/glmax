@@ -1,237 +1,90 @@
 # pattern: Functional Core
 
-from typing import Tuple
+from __future__ import annotations
 
-from jax import Array, numpy as jnp
-from jaxtyping import ArrayLike, ScalarLike
+import jax.numpy as jnp
 
-from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
-from .glm import GLMState
-from .infer.contracts import AbstractLinearSolver
-from .infer.fitters import AbstractGLMFitter, IRLSFitter
-from .infer.inference import (
-    AbstractStdErrEstimator,
-    FisherInfoError,
-    wald_test as inference_wald_test,
-)
-from .infer.solvers import CholeskySolver
+from .contracts import FitResult, Fitter, GLMData, Params, validate_fit_result
+from .glm import _fit_model, GLM
 
 
-def _to_numeric_array(name: str, value: ArrayLike) -> Array:
+def _canonicalize_init(init: Params | None, n_features: int) -> tuple[jnp.ndarray | None, jnp.ndarray | None]:
+    if init is None:
+        return None, None
+
     try:
-        array = jnp.asarray(value)
+        beta = jnp.asarray(init.beta)
     except TypeError as exc:
-        raise TypeError(f"{name} must have a numeric dtype") from exc
-    if not jnp.issubdtype(array.dtype, jnp.number):
-        raise TypeError(f"{name} must have a numeric dtype")
-    return array
+        raise TypeError("Params.beta must be numeric.") from exc
+    if not jnp.issubdtype(beta.dtype, jnp.number):
+        raise TypeError("Params.beta must be numeric.")
+    if beta.ndim != 1 or beta.shape[0] != n_features:
+        raise ValueError("Params.beta must be a one-dimensional vector with length equal to X.shape[1].")
+    if not bool(jnp.issubdtype(beta.dtype, jnp.inexact)):
+        raise TypeError("Params.beta must have an inexact dtype.")
+    if not bool(jnp.all(jnp.isfinite(beta))):
+        raise ValueError("Params.beta must contain only finite values.")
+
+    try:
+        disp = jnp.asarray(init.disp)
+    except TypeError as exc:
+        raise TypeError("Params.disp must be numeric.") from exc
+    if not jnp.issubdtype(disp.dtype, jnp.number):
+        raise TypeError("Params.disp must be numeric.")
+    if disp.ndim > 0 and disp.size != 1:
+        raise ValueError("Params.disp must be a scalar.")
+    if not bool(jnp.issubdtype(disp.dtype, jnp.inexact)):
+        raise TypeError("Params.disp must have an inexact dtype.")
+    if not bool(jnp.all(jnp.isfinite(disp))):
+        raise ValueError("Params.disp must contain only finite values.")
+
+    return beta, disp
 
 
-def _normalize_fit_inputs(
-    X: ArrayLike,
-    y: ArrayLike,
-    offset_eta: ArrayLike = 0.0,
-    init: ArrayLike = None,
-    alpha_init: ScalarLike = None,
-) -> Tuple[Array, Array, Array, Array | None, Array | None]:
-    X_array = _to_numeric_array("X", X)
-    y_array = _to_numeric_array("y", y)
-    offset_array = _to_numeric_array("offset_eta", offset_eta)
-    init_array = None if init is None else _to_numeric_array("init", init)
-    alpha_array = None if alpha_init is None else _to_numeric_array("alpha_init", alpha_init)
+class _ModelFitter:
+    """Bridge canonical fit verb calls into the canonical GLM fit kernel."""
 
-    if X_array.ndim != 2:
-        raise ValueError("X must be a 2D array")
-    if y_array.ndim != 1:
-        raise ValueError("y must be a 1D array")
-    if X_array.shape[0] != y_array.shape[0]:
-        raise ValueError("X and y must have the same number of rows")
-
-    n_samples = X_array.shape[0]
-
-    if offset_array.ndim == 0:
-        offset_array = jnp.full((n_samples,), offset_array, dtype=offset_array.dtype)
-    elif offset_array.ndim != 1 or offset_array.shape[0] != n_samples:
-        raise ValueError("offset_eta must be a scalar or a 1D array with length equal to the number of rows in X")
-
-    if init_array is not None and (init_array.ndim != 1 or init_array.shape[0] != n_samples):
-        raise ValueError("init must be a 1D array with length equal to the number of rows in X")
-
-    if alpha_array is not None and alpha_array.ndim > 0:
-        raise ValueError("alpha_init must be a scalar value")
-
-    if not bool(jnp.all(jnp.isfinite(X_array))):
-        raise ValueError("X must contain only finite values")
-    if not bool(jnp.all(jnp.isfinite(y_array))):
-        raise ValueError("y must contain only finite values")
-    if not bool(jnp.all(jnp.isfinite(offset_array))):
-        raise ValueError("offset_eta must contain only finite values")
-    if init_array is not None and not bool(jnp.all(jnp.isfinite(init_array))):
-        raise ValueError("init must contain only finite values")
-    if alpha_array is not None and not bool(jnp.all(jnp.isfinite(alpha_array))):
-        raise ValueError("alpha_init must contain only finite values")
-
-    return X_array, y_array, offset_array, init_array, alpha_array
+    def __call__(self, model: GLM, data: GLMData, init: Params | None = None) -> FitResult:
+        X_array, _, offset_array, _, _ = data.canonical_arrays()
+        init_beta, init_disp = _canonicalize_init(init, X_array.shape[1])
+        init_eta = None if init_beta is None else X_array @ init_beta + offset_array
+        return _fit_model(model, data, init_eta=init_eta, disp_init=init_disp)
 
 
-def _calc_eta_and_dispersion(
-    X: ArrayLike,
-    y: ArrayLike,
-    family: ExponentialFamily,
-    solver: AbstractLinearSolver,
-    se_estimator: AbstractStdErrEstimator,
-    offset_eta: ArrayLike = 0.0,
-    max_iter: int = 1000,
-    tol: float = 1e-3,
-    step_size: float = 1.0,
-) -> Tuple[Array, Array]:
-    n = X.shape[0]
-    init_val = family.init_eta(y)
-
-    if isinstance(family, NegativeBinomial):
-        glm_state_pois = fit(
-            X,
-            y,
-            family=Poisson(),
-            solver=solver,
-            offset_eta=offset_eta,
-            init=init_val,
-            alpha_init=jnp.asarray(0.0),
-            se_estimator=se_estimator,
-            max_iter=max_iter,
-            tol=tol,
-            step_size=step_size,
-        )
-
-        alpha_init = n / jnp.sum((y / family.glink.inverse(glm_state_pois.eta) - 1) ** 2)
-        eta = glm_state_pois.eta
-        disp = family.estimate_dispersion(X, y, eta, alpha=1.0 / alpha_init, max_iter=max_iter)
-        disp = jnp.nan_to_num(disp, nan=0.1)
-    else:
-        eta = init_val
-        disp = jnp.asarray(0.0)
-
-    return eta, disp
+DEFAULT_FITTER: Fitter = _ModelFitter()
 
 
-def fit(
-    X: ArrayLike,
-    y: ArrayLike,
-    family: ExponentialFamily = Gaussian(),
-    solver: AbstractLinearSolver = CholeskySolver(),
-    fitter: AbstractGLMFitter = IRLSFitter(),
-    offset_eta: ArrayLike = 0.0,
-    init: ArrayLike = None,
-    alpha_init: ScalarLike = None,
-    se_estimator: AbstractStdErrEstimator = FisherInfoError(),
-    max_iter: int = 1000,
-    tol: float = 1e-3,
-    step_size: float = 1.0,
-) -> GLMState:
-    r"""Fit a generalized linear model through the canonical `glmax.fit` workflow.
+def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Fitter = DEFAULT_FITTER) -> FitResult:
+    """Canonical public fit verb over grammar nouns."""
+    if not isinstance(model, GLM):
+        raise TypeError("fit(...) expects `model` to be a GLM instance.")
+    if not isinstance(data, GLMData):
+        raise TypeError("fit(...) expects `data` to be a GLMData instance.")
+    if init is not None and not isinstance(init, Params):
+        raise TypeError("fit(...) expects `init` to be a Params instance or None.")
+    if not callable(fitter):
+        raise TypeError("fit(...) expects `fitter` to be callable.")
+    result = fitter(model, data, init)
+    if not isinstance(result, FitResult):
+        raise TypeError("fit(...) expects `fitter` to return a FitResult instance.")
+    validate_fit_result(result)
+    return result
 
-    **Arguments:**
 
-    - `X`: Covariate design matrix with shape `(n, p)`.
-    - `y`: Response vector with shape `(n,)`.
-    - `family`: Exponential-family model specification.
-    - `solver`: Linear-system strategy used inside fitter updates.
-    - `fitter`: Fitter strategy controlling IRLS-style optimization.
-    - `offset_eta`: Optional scalar or length-`n` offset in linear predictor space.
-    - `init`: Optional length-`n` initialization for the linear predictor.
-    - `alpha_init`: Optional scalar dispersion initialization.
-    - `se_estimator`: Strategy for covariance/standard-error estimation.
-    - `max_iter`: Maximum fitter iterations.
-    - `tol`: Convergence tolerance.
-    - `step_size`: Iteration step size.
+def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:
+    """Pure prediction verb over grammar nouns."""
+    if not isinstance(model, GLM):
+        raise TypeError("predict(...) expects `model` to be a GLM instance.")
+    if not isinstance(params, Params):
+        raise TypeError("predict(...) expects `params` to be a Params instance.")
+    if not isinstance(data, GLMData):
+        raise TypeError("predict(...) expects `data` to be a GLMData instance.")
+    if data.weights is not None:
+        raise ValueError("GLMData.weights is not supported in predict yet.")
 
-    **Returns:**
+    X_array, _, offset_array, _, _ = data.canonical_arrays()
+    beta, disp = _canonicalize_init(params, X_array.shape[1])
+    assert beta is not None and disp is not None
 
-    - A [`glmax.GLMState`][] containing fitted coefficients, inference statistics,
-      convergence metadata, and model diagnostics.
-
-    **Failure Modes:**
-
-    - Raises `TypeError` when `fitter` does not implement `AbstractGLMFitter`.
-    - Raises `TypeError` when `X`, `y`, `offset_eta`, `init`, or `alpha_init`
-      are non-numeric.
-    - Raises `ValueError` for rank/shape mismatches or non-finite boundary inputs.
-
-    **Compatibility Guarantees:**
-
-    - `glmax.fit` is the canonical public fit entrypoint.
-    - `GLM.fit` compatibility calls delegate to this function and share the same
-      deterministic boundary contract.
-
-    **Deprecation Checkpoints:**
-
-    - Any `GLM.fit` deprecation proposal requires parity and boundary-regression
-      tests to remain passing in CI.
-    - Deprecation notice must be published for at least two minor releases before
-      wrapper removal.
-    - Migration guidance remains: call `glmax.fit(...)` directly with explicit
-      `family`, `solver`, and optional `fitter`.
-    """
-    if not isinstance(fitter, AbstractGLMFitter):
-        raise TypeError("fitter must implement AbstractGLMFitter")
-    X, y, offset_eta, init, alpha_init = _normalize_fit_inputs(X, y, offset_eta, init, alpha_init)
-
-    if init is None or alpha_init is None:
-        init, alpha_init = _calc_eta_and_dispersion(
-            X,
-            y,
-            family=family,
-            solver=solver,
-            se_estimator=se_estimator,
-            offset_eta=offset_eta,
-            max_iter=max_iter,
-            tol=tol,
-            step_size=step_size,
-        )
-
-    fit_state = fitter(
-        X,
-        y,
-        family,
-        solver,
-        init,
-        max_iter=max_iter,
-        tol=tol,
-        step_size=step_size,
-        offset_eta=offset_eta,
-        alpha_init=alpha_init,
-    )
-    beta = fit_state.beta
-    n_iter = fit_state.num_iters
-    converged = fit_state.converged
-    alpha = fit_state.alpha
-
-    eta = X @ beta + offset_eta
-    mu = family.glink.inverse(eta)
-    resid = (y - mu) * family.glink.deriv(mu)
-
-    _, _, weight = family.calc_weight(X, y, eta, alpha)
-
-    resid_covar = se_estimator(family, X, y, eta, mu, weight, alpha)
-    beta_se = jnp.sqrt(jnp.diag(resid_covar))
-
-    df = X.shape[0] - X.shape[1]
-    beta = beta.squeeze()
-    stat = beta / beta_se
-
-    pval_wald = inference_wald_test(stat, df, family)
-
-    return GLMState(
-        beta,
-        beta_se,
-        stat,
-        pval_wald,
-        eta,
-        mu,
-        weight,
-        n_iter,
-        converged,
-        resid_covar,
-        resid,
-        alpha,
-    )
+    eta = X_array @ beta + offset_array
+    return model.family.glink.inverse(eta)

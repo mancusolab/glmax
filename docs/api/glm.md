@@ -1,44 +1,44 @@
-# GLM API
+# GLM Grammar API
 
-## Canonical Workflow
+This page summarizes the canonical noun/verb contracts for `glmax`.
 
-Use `glmax.fit` as the canonical public entrypoint for fitting. It owns:
+## Verbs
 
-- boundary normalization (`jnp.asarray`, dtype/rank/shape/finiteness checks)
-- fitter dispatch (`IRLSFitter` by default, custom fitter injection supported)
-- covariance/test strategy composition for returned `GLMState`
+- `glmax.specify(*, family=None, solver=None) -> GLM`
+- `glmax.fit(model, data, init=None, *, fitter=...) -> FitResult`
+- `glmax.predict(model, params, data) -> Array`
+- `glmax.infer(model, fit_result) -> InferenceResult`
+- `glmax.check(model, fit_result) -> Diagnostics`
 
-`GLM.fit` is a compatibility wrapper that delegates to the same canonical path.
-Valid-input outputs are expected to remain aligned between direct and wrapper usage.
+## Nouns
 
-## Compatibility Guarantees and Deprecation Checkpoints
+- `GLMData`
+  - `X`: rank-2 design matrix `(n, p)`
+  - `y`: rank-1 response vector `(n,)`
+  - optional `offset`, `weights`, `mask`
+- `Params`
+  - `beta`: rank-1 parameter vector `(p,)`
+  - `disp`: scalar canonical dispersion
+- `FitResult`
+  - `params`, `se`, `z`, `p`, `eta`, `mu`, `glm_wt`
+  - `diagnostics` (converged, iteration count, objective metadata)
+  - `curvature`, `score_residual`
+- `InferenceResult`
+  - `params`, `se`, `z`, `p`
+- `Diagnostics`
+  - `converged`, `num_iters`, `objective`, `objective_delta`
 
-- Current guarantee: `GLM.fit` delegates to `glmax.fit`, sharing boundary
-  normalization and fitter validation semantics.
-- Deprecation trigger: parity and boundary-regression tests remain stable while
-  canonical usage guidance is published in user-facing docs.
-- Minimum release window: retain `GLM.fit` for at least two minor releases after
-  an explicit deprecation notice.
-- Migration guidance: call `glmax.fit(...)` directly with explicit `family`,
-  `solver`, and optional `fitter` arguments.
+## Usage Pattern
 
-## Failure Semantics
+```python
+import glmax
 
-Boundary failures are deterministic and occur before numerics execution:
+model = glmax.specify(...)
+fit_result = glmax.fit(model, data)
+pred = glmax.predict(model, fit_result.params, data)
+infer_result = glmax.infer(model, fit_result)
+diagnostics = glmax.check(model, fit_result)
+```
 
-- `TypeError`: non-numeric `X`, `y`, `offset_eta`, `init`, `alpha_init`, or invalid fitter type
-- `ValueError`: invalid rank/shape constraints
-- `ValueError`: non-finite boundary values (NaN/Inf)
-
-These semantics are regression-tested in `tests/test_fit_api.py`, `tests/test_fitters.py`,
-and `tests/test_glm.py`.
-
-## Reference
-
-### Canonical Fit
-
-::: glmax.fit
-
-### GLM Model
-
-::: glmax.GLM
+`glmax.GLM.fit(...)` remains available as an internal convenience method, but
+the public API contract is the top-level grammar workflow shown above.

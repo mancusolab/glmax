@@ -1,314 +1,462 @@
+# pattern: Imperative Shell
 import importlib
 import inspect
+import os
+import subprocess
+import sys
 
 from pathlib import Path
-from typing import Tuple
 
-import numpy as np
 import pytest
 
-from utils import assert_array_eq, assert_glm_state_parity
-
-import jax.nn
 import jax.numpy as jnp
-import jax.random as rdm
+import jax.tree_util as jtu
 
 import glmax
 
+from glmax import Diagnostics, FitResult, Fitter, GLMData, InferenceResult, Params
+from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+from glmax.glm import specify
+from glmax.infer.solve import QRSolver
 
-def test_package_root_fit_export_identity():
-    from glmax import fit as package_fit
 
+WORKTREE_ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_INIT = WORKTREE_ROOT / "src" / "glmax" / "__init__.py"
+
+
+def test_canonical_contract_imports_exist() -> None:
+    assert GLMData is not None
+    assert Params is not None
+    assert FitResult is not None
+    assert InferenceResult is not None
+    assert Diagnostics is not None
+    assert Fitter is not None
+
+
+def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
+    assert set(glmax.__all__) == {
+        "GLMData",
+        "Params",
+        "GLM",
+        "Fitter",
+        "FitResult",
+        "InferenceResult",
+        "Diagnostics",
+        "specify",
+        "predict",
+        "fit",
+        "infer",
+        "check",
+    }
+
+
+def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
     assert callable(glmax.fit)
-    assert package_fit is glmax.fit
+    assert glmax.fit.__module__ == "glmax.fit"
 
 
-def simulate_glm_data(
-    key: rdm.PRNGKey,
-    n_samples: int = 180,
-    n_features: int = 5,
-    family: str = "poisson",
-    dispersion: float = 1.0,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    key, x_key, beta_key, noise_key, extra_key = rdm.split(key, 5)
-
-    X = rdm.normal(x_key, shape=(n_samples, n_features))
-    X = X - X.mean(axis=0) / (X.std(axis=0))
-    beta_true = rdm.normal(beta_key, shape=(n_features,))
-    eta = X @ beta_true
-
-    if family == "poisson":
-        y = rdm.poisson(noise_key, jnp.exp(eta))
-    elif family == "normal":
-        y = eta + rdm.normal(noise_key, shape=(n_samples,))
-    elif family == "binomial":
-        p = jnp.clip(jax.nn.sigmoid(eta), 1e-5, 1 - 1e-5)
-        y = rdm.bernoulli(noise_key, p).astype(jnp.int32)
-    elif family == "negative_binomial":
-        lam = jnp.exp(eta)
-        r = jnp.array(1.0 / dispersion)
-        gamma_sample = rdm.gamma(noise_key, r, shape=lam.shape)
-        y = rdm.poisson(extra_key, lam=gamma_sample * lam / r)
-    else:
-        raise ValueError(f"Unsupported family: {family}")
-
-    return X, y
+def test_pytest_imports_glmax_from_worktree_src() -> None:
+    assert Path(glmax.__file__).resolve() == EXPECTED_INIT.resolve()
 
 
-def _assert_boundary_error_parity(
-    X,
-    y,
-    *,
-    offset_eta=0.0,
-    init=None,
-    alpha_init=None,
-    exc_type=ValueError,
-    message="",
-):
-    with pytest.raises(exc_type, match=message):
-        glmax.fit(
-            X,
-            y,
-            family=glmax.Poisson(),
-            solver=glmax.CholeskySolver(),
-            offset_eta=offset_eta,
-            init=init,
-            alpha_init=alpha_init,
-        )
+def test_worktree_python_wrapper_imports_glmax_from_worktree_src() -> None:
+    command = [
+        str(WORKTREE_ROOT / "tools" / "worktree-python"),
+        "-c",
+        "import glmax, pathlib; print(pathlib.Path(glmax.__file__).resolve())",
+    ]
+    env = os.environ.copy()
+    env["GLMAX_PYTHON_BIN"] = sys.executable
+    completed = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=WORKTREE_ROOT,
+        env=env,
+    )
 
-    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver())
-    with pytest.raises(exc_type, match=message):
-        model.fit(X, y, offset_eta=offset_eta, init=init, alpha_init=alpha_init)
+    assert completed.stdout.strip() == str(EXPECTED_INIT.resolve())
 
 
-def _read_glm_api_doc() -> str:
-    return Path("docs/api/glm.md").read_text()
+def test_legacy_fit_state_alias_is_not_publicly_exported() -> None:
+    assert not hasattr(glmax, "GLMState")
 
 
-def test_public_entrypoint_docstrings_follow_contract_sections():
-    optimize = importlib.import_module("glmax.infer.optimize")
-    entrypoints = (glmax.fit, glmax.GLM.fit, optimize.irls)
+def test_infer_shims_are_not_publicly_reexported() -> None:
+    infer_module = importlib.import_module("glmax.infer")
 
-    for fn in entrypoints:
-        doc = inspect.getdoc(fn)
-        assert doc is not None
-        assert "**Arguments:**" in doc
-        assert "**Returns:**" in doc
-        assert "**Raises:**" in doc or "**Failure Modes:**" in doc
+    assert not hasattr(infer_module, "irls")
+    assert not hasattr(infer_module, "CholeskySolver")
+    assert not hasattr(infer_module, "QRSolver")
+    assert not hasattr(infer_module, "CGSolver")
+    assert not hasattr(infer_module, "FisherInfoError")
+    assert not hasattr(infer_module, "HuberError")
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.infer.state")
+
+
+def _make_fit_result() -> FitResult:
+    return FitResult(
+        params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
+        se=jnp.array([0.5]),
+        z=jnp.array([2.0]),
+        p=jnp.array([0.05]),
+        eta=jnp.array([1.0]),
+        mu=jnp.array([1.0]),
+        glm_wt=jnp.array([1.0]),
+        diagnostics=Diagnostics(
+            converged=jnp.array(True),
+            num_iters=jnp.array(1),
+            objective=jnp.array(0.1),
+            objective_delta=jnp.array(-1e-3),
+        ),
+        curvature=jnp.array([[1.0]]),
+        score_residual=jnp.array([0.0]),
+    )
+
+
+def test_fit_signature_matches_canonical_surface() -> None:
+    sig = inspect.signature(glmax.fit)
+    assert list(sig.parameters) == ["model", "data", "init", "fitter"]
+    assert sig.parameters["model"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert sig.parameters["data"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert sig.parameters["init"].default is None
+    assert sig.parameters["fitter"].kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_fit_returns_fitresult_using_injected_fitter() -> None:
+    expected = _make_fit_result()
+    seen: dict[str, object] = {}
+
+    class DummyFitter:
+        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
+            seen["model"] = model
+            seen["data"] = data
+            seen["init"] = init
+            return expected
+
+    model = glmax.GLM()
+    data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
+    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0))
+
+    result = glmax.fit(model, data, init=init, fitter=DummyFitter())
+
+    assert result is expected
+    assert isinstance(result, FitResult)
+    assert seen["model"] is model
+    assert seen["data"] is data
+    assert seen["init"] is init
+
+
+def test_fit_rejects_non_callable_fitter_with_deterministic_error() -> None:
+    model = glmax.GLM()
+    data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
+
+    with pytest.raises(TypeError, match=r"expects `fitter` to be callable"):
+        glmax.fit(model, data, fitter="not-a-fitter")
+
+
+def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
+    model = glmax.GLM(family=Gaussian())
+    X = jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]])
+    y = jnp.array([1.0, 0.0, 1.0])
+    offset = jnp.array([0.2, 0.1, 0.3])
+    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
+
+    data = GLMData(X=X, y=y, offset=offset)
+    result_1 = glmax.fit(model, data, init=init)
+    result_2 = glmax.fit(model, data, init=init)
+
+    assert isinstance(result_1, FitResult)
+    assert jnp.allclose(result_1.beta, result_2.beta)
+    assert jnp.allclose(result_1.params.disp, result_2.params.disp)
+
+
+def test_default_top_level_fit_does_not_dispatch_through_model_fit_override() -> None:
+    class OverrideRaisesGLM(glmax.GLM):
+        def fit(self, data, **kwargs):
+            del data, kwargs
+            raise AssertionError("top-level fit should not dispatch through GLM.fit overrides")
+
+    model = OverrideRaisesGLM(family=Gaussian())
+    data = GLMData(
+        X=jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]]),
+        y=jnp.array([1.0, 0.0, 1.0]),
+        offset=jnp.array([0.2, 0.1, 0.3]),
+    )
+    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
+
+    result = glmax.fit(model, data, init=init)
+
+    assert isinstance(result, FitResult)
+    assert result.params.beta.shape == (2,)
+    assert jnp.ndim(result.params.disp) == 0
+
+
+def test_contract_dataclasses_are_pytrees() -> None:
+    params = Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.5))
+    leaves, tree = jtu.tree_flatten(params)
+    assert len(leaves) == 2
+    rebuilt = jtu.tree_unflatten(tree, leaves)
+    assert jnp.allclose(rebuilt.beta, params.beta)
+    assert jnp.allclose(rebuilt.disp, params.disp)
+
+    result = _make_fit_result()
+    fit_leaves, _ = jtu.tree_flatten(result)
+    assert len(fit_leaves) == 14
+    assert not hasattr(result, "infor_inv")
+    assert not hasattr(result, "resid")
+
+
+def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
+    X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
+    y = jnp.array([0.2, 0.9, 2.2, 2.8])
+
+    with pytest.raises(ValueError, match="weights"):
+        glmax.fit(glmax.GLM(), GLMData(X=X, y=y, weights=jnp.ones(4)))
+
+    masked_result = glmax.fit(
+        glmax.GLM(family=Gaussian()),
+        GLMData(X=X, y=y, mask=jnp.array([True, False, True, True])),
+    )
+    assert isinstance(masked_result, FitResult)
+
+
+def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
+    with pytest.raises(TypeError, match="GLM"):
+        glmax.fit(object(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)))
+
+    with pytest.raises(TypeError, match="GLMData"):
+        glmax.fit(glmax.GLM(), jnp.ones((3, 1)))
+
+    with pytest.raises(TypeError, match="Params"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
+
+
+def test_glm_fit_is_not_a_curated_public_contract() -> None:
+    doc = glmax.GLM.fit.__doc__ or ""
+
+    assert not hasattr(glmax.GLM.fit, "__signature__")
+    assert "Use `glmax.fit(model, data, init=...)` for the public grammar contract." in doc
+
+
+def test_glm_fit_signature_does_not_expose_legacy_wrapper_parameters() -> None:
+    sig = inspect.signature(glmax.GLM.fit)
+
+    assert "legacy_args" not in sig.parameters
+    assert "legacy_kwargs" not in sig.parameters
+    assert "init" not in sig.parameters
+    assert "alpha_init" not in sig.parameters
+    assert all(param.kind is not inspect.Parameter.VAR_POSITIONAL for param in sig.parameters.values())
+    assert all(param.kind is not inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values())
+
+
+def test_bound_glm_fit_signature_does_not_expose_model_parameter() -> None:
+    sig = inspect.signature(glmax.GLM(family=Gaussian()).fit)
+
+    assert list(sig.parameters) == [
+        "data",
+        "init_eta",
+        "disp_init",
+        "se_estimator",
+        "max_iter",
+        "tol",
+        "step_size",
+    ]
+    assert "model" not in sig.parameters
 
 
 @pytest.mark.parametrize(
-    ("family_name", "family", "fit_kwargs"),
+    ("legacy_keyword", "match"),
     [
-        ("normal", glmax.Gaussian(), {}),
-        ("poisson", glmax.Poisson(), {}),
-        ("binomial", glmax.Binomial(), {}),
-        ("negative_binomial", glmax.NegativeBinomial(), {"tol": 1e-8}),
+        ("init", r"GLM\.fit\(\.\.\.\) no longer accepts `init`.*glmax\.fit\(model, data, init=\.\.\.\)"),
+        ("alpha_init", r"GLM\.fit\(\.\.\.\) no longer accepts `alpha_init`.*Use `disp_init=` instead"),
     ],
 )
-def test_wrapper_and_canonical_fit_parity(getkey, family_name, family, fit_kwargs):
-    from glmax import fit as package_fit
+def test_glm_fit_removed_legacy_keywords_raise_migration_typeerrors(legacy_keyword: str, match: str) -> None:
+    model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 2.0, 3.0]))
 
-    X, y = simulate_glm_data(getkey(), family=family_name, dispersion=2.0)
-    solver = glmax.CholeskySolver()
-
-    direct_state = package_fit(X, y, family=family, solver=solver, **fit_kwargs)
-    wrapper_state = glmax.GLM(family=family, solver=solver).fit(X, y, **fit_kwargs)
-
-    assert_glm_state_parity(wrapper_state, direct_state, rtol=1e-7, atol=1e-8)
+    with pytest.raises(TypeError, match=match):
+        model.fit(data, **{legacy_keyword: jnp.zeros(1)})
 
 
-def test_canonical_fit_routes_pvalues_through_inference_strategy(monkeypatch, getkey):
-    fit_module = importlib.import_module("glmax.fit")
+@pytest.mark.parametrize(
+    ("extra_arg", "match"),
+    [
+        (
+            jnp.zeros(4),
+            r"GLM\.fit\(\.\.\.\) accepts exactly one positional argument after binding: `data`.*Use `init_eta=`",
+        ),
+        (
+            Params(beta=jnp.zeros(1), disp=jnp.array(0.0)),
+            r"GLM\.fit\(\.\.\.\) no longer accepts positional `Params`.*Use `glmax\.fit\(model, data, init=params\)`",
+        ),
+    ],
+)
+def test_glm_fit_rejects_legacy_extra_positional_arguments_with_migration_guidance(
+    extra_arg: object, match: str
+) -> None:
+    model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 2.0, 3.0]))
 
-    def fake_wald_test(statistic, df, family):
-        del df, family
-        return jnp.full_like(statistic, 0.2222)
-
-    monkeypatch.setattr(fit_module, "inference_wald_test", fake_wald_test, raising=False)
-
-    X, y = simulate_glm_data(getkey(), family="poisson")
-    state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
-
-    assert_array_eq(state.p, jnp.full_like(state.p, 0.2222), rtol=0.0, atol=1e-12)
-
-
-def test_custom_fitter_strategy_injection_for_canonical_and_glm(getkey):
-    fitters = importlib.import_module("glmax.infer.fitters")
-    calls = {"count": 0}
-
-    class CustomFitter(fitters.AbstractGLMFitter):
-        def __call__(
-            self,
-            X,
-            y,
-            family,
-            solver,
-            eta,
-            max_iter=1000,
-            tol=1e-3,
-            step_size=1.0,
-            offset_eta=0.0,
-            alpha_init=0.0,
-        ):
-            del y, family, solver, max_iter, tol, step_size, offset_eta, alpha_init
-            calls["count"] += 1
-            beta = jnp.zeros((X.shape[1],), dtype=eta.dtype)
-            return fitters.IRLSState(beta=beta, num_iters=3, converged=jnp.asarray(True), alpha=jnp.asarray(0.0))
-
-    X, y = simulate_glm_data(getkey(), family="poisson")
-    custom = CustomFitter()
-
-    state_direct = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver(), fitter=custom)
-    model = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver(), fitter=custom)
-    state_wrapper = model.fit(X, y)
-
-    assert calls["count"] == 2
-    assert int(state_direct.num_iters) == 3
-    assert int(state_wrapper.num_iters) == 3
+    with pytest.raises(TypeError, match=match):
+        model.fit(data, extra_arg)
 
 
-def test_equivalent_custom_fitter_preserves_regression_parity(getkey):
-    fitters = importlib.import_module("glmax.infer.fitters")
+def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
+    model = glmax.specify(family=Gaussian(), solver=QRSolver())
+    data = GLMData(
+        X=jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]]),
+        y=jnp.array([0.8, 1.7, 2.1, 2.9]),
+    )
 
-    class DelegatingFitter(fitters.AbstractGLMFitter):
-        base: fitters.AbstractGLMFitter = fitters.IRLSFitter()
+    result = glmax.fit(model, data)
 
-        def __call__(
-            self,
-            X,
-            y,
-            family,
-            solver,
-            eta,
-            max_iter=1000,
-            tol=1e-3,
-            step_size=1.0,
-            offset_eta=0.0,
-            alpha_init=0.0,
-        ):
-            return self.base(
-                X,
-                y,
-                family,
-                solver,
-                eta,
-                max_iter=max_iter,
-                tol=tol,
-                step_size=step_size,
-                offset_eta=offset_eta,
-                alpha_init=alpha_init,
+    assert isinstance(result, FitResult)
+    assert result.params.beta.shape == (2,)
+    assert bool(result.converged)
+    assert jnp.all(jnp.isfinite(result.params.beta))
+
+
+@pytest.mark.parametrize(
+    ("family", "y"),
+    [
+        (Gaussian(), jnp.array([0.1, 1.0, 2.1, 2.9, 4.2])),
+        (Poisson(), jnp.array([0.0, 1.0, 1.0, 2.0, 3.0])),
+        (Binomial(), jnp.array([0.0, 0.0, 1.0, 1.0, 1.0])),
+        (NegativeBinomial(), jnp.array([0.0, 1.0, 2.0, 1.0, 4.0])),
+    ],
+)
+def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), y=y)
+    result = glmax.fit(glmax.GLM(family=family), data)
+
+    assert isinstance(result, FitResult)
+    assert isinstance(result.params, Params)
+    assert result.curvature.shape == (1, 1)
+    assert result.score_residual.shape == (data.n_samples,)
+    assert bool(jnp.isfinite(result.objective))
+    assert bool(jnp.isfinite(result.objective_delta))
+    if isinstance(family, NegativeBinomial):
+        assert result.params.disp > 0
+    else:
+        assert jnp.allclose(result.params.disp, jnp.array(0.0))
+
+
+def test_fit_boundary_rejects_non_finite_params_init() -> None:
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
+
+    with pytest.raises(ValueError, match="finite"):
+        glmax.fit(glmax.GLM(family=Gaussian()), data, init=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)))
+
+    with pytest.raises(ValueError, match="finite"):
+        glmax.fit(glmax.GLM(family=Gaussian()), data, init=Params(beta=jnp.array([0.0]), disp=jnp.array(jnp.inf)))
+
+
+def test_default_fitter_validates_init_beta_shape() -> None:
+    X = jnp.ones((4, 2))
+    y = jnp.ones(4)
+    bad_init = Params(beta=jnp.ones((2, 1)), disp=jnp.array(0.0))
+
+    with pytest.raises(ValueError, match="Params.beta"):
+        glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
+
+
+def test_default_fitter_validates_scalar_disp() -> None:
+    X = jnp.ones((4, 2))
+    y = jnp.ones(4)
+    bad_init = Params(beta=jnp.ones(2), disp=jnp.ones(2))
+
+    with pytest.raises(ValueError, match="Params.disp"):
+        glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
+
+
+def test_fit_rejects_malformed_fitresult_from_custom_fitter() -> None:
+    class BadFitter:
+        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
+            del model, data, init
+            return FitResult(
+                params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
+                se=jnp.array([0.5]),
+                z=jnp.array([2.0]),
+                p=jnp.array([0.05]),
+                eta=jnp.array([1.0]),
+                mu=jnp.array([1.0]),
+                glm_wt=jnp.array([1.0]),
+                diagnostics=Diagnostics(
+                    converged=jnp.array(True),
+                    num_iters=jnp.array(1),
+                    objective=jnp.array(0.0),
+                    objective_delta=jnp.array(-1e-3),
+                ),
+                curvature=jnp.array([[jnp.nan]]),
+                score_residual=jnp.array([0.0]),
             )
 
-    X, y = simulate_glm_data(getkey(), family="poisson")
-    solver = glmax.CholeskySolver()
-    custom_fitter = DelegatingFitter()
-
-    baseline = glmax.fit(X, y, family=glmax.Poisson(), solver=solver)
-    injected = glmax.fit(X, y, family=glmax.Poisson(), solver=solver, fitter=custom_fitter)
-    wrapper_injected = glmax.GLM(family=glmax.Poisson(), solver=solver, fitter=custom_fitter).fit(X, y)
-
-    assert_glm_state_parity(injected, baseline, rtol=1e-7, atol=1e-8)
-    assert_glm_state_parity(wrapper_injected, baseline, rtol=1e-7, atol=1e-8)
+    with pytest.raises(ValueError, match="FitResult.curvature"):
+        glmax.fit(
+            glmax.GLM(),
+            GLMData(X=jnp.array([[1.0]]), y=jnp.array([1.0])),
+            fitter=BadFitter(),
+        )
 
 
-def test_wrapper_and_canonical_share_boundary_normalization(monkeypatch, getkey):
-    fit_module = importlib.import_module("glmax.fit")
-    calls = {"count": 0}
+def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
+    model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
 
-    original = fit_module._normalize_fit_inputs
+    with pytest.raises(ValueError, match="Params.beta"):
+        glmax.predict(model, Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0)), data)
 
-    def spy_normalize(*args, **kwargs):
-        calls["count"] += 1
-        return original(*args, **kwargs)
+    with pytest.raises(ValueError, match="Params.beta"):
+        glmax.predict(model, Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)), data)
 
-    monkeypatch.setattr(fit_module, "_normalize_fit_inputs", spy_normalize)
+    with pytest.raises(TypeError, match="Params.beta must be numeric"):
+        glmax.predict(model, Params(beta=["bad"], disp=jnp.array(0.0)), data)
 
-    X, y = simulate_glm_data(getkey(), family="poisson")
-    glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
-    glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver()).fit(X, y)
+    with pytest.raises(TypeError, match="Params.disp must be numeric"):
+        glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad"), data)
 
-    assert calls["count"] >= 2
+    with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
+        glmax.predict(model, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0)), data)
 
-
-def test_boundary_rejects_non_numeric_dtypes_with_deterministic_errors():
-    X = np.array([["a", "b"], ["c", "d"]])
-    y = jnp.array([1.0, 0.0])
-    _assert_boundary_error_parity(X, y, exc_type=TypeError, message="X must have a numeric dtype")
-
-    X = jnp.array([[1.0, 0.0], [1.0, 1.0]])
-    y = np.array(["0", "1"])
-    _assert_boundary_error_parity(X, y, exc_type=TypeError, message="y must have a numeric dtype")
-
-    offset = np.array(["x", "y"])
-    _assert_boundary_error_parity(
-        X, jnp.array([0.0, 1.0]), offset_eta=offset, exc_type=TypeError, message="offset_eta must have a numeric dtype"
-    )
+    with pytest.raises(TypeError, match="Params.disp must have an inexact dtype"):
+        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32)), data)
 
 
-def test_boundary_rejects_invalid_rank_shape_and_finiteness():
-    _assert_boundary_error_parity(
-        jnp.array([1.0, 2.0, 3.0]),
-        jnp.array([1.0, 2.0, 3.0]),
-        exc_type=ValueError,
-        message="X must be a 2D array",
-    )
-    _assert_boundary_error_parity(
-        jnp.array([[1.0, 0.0], [1.0, 1.0]]),
-        jnp.array([1.0]),
-        exc_type=ValueError,
-        message="X and y must have the same number of rows",
-    )
-    _assert_boundary_error_parity(
-        jnp.array([[1.0, 0.0], [1.0, 1.0]]),
-        jnp.array([1.0, 0.0]),
-        offset_eta=jnp.array([0.0]),
-        exc_type=ValueError,
-        message="offset_eta must be a scalar or a 1D array with length equal to the number of rows in X",
-    )
-    _assert_boundary_error_parity(
-        jnp.array([[1.0, 0.0], [1.0, 1.0]]),
-        jnp.array([1.0, 0.0]),
-        init=jnp.array([0.0]),
-        exc_type=ValueError,
-        message="init must be a 1D array with length equal to the number of rows in X",
-    )
-    _assert_boundary_error_parity(
-        jnp.array([[1.0, jnp.nan], [1.0, 1.0]]),
-        jnp.array([1.0, 0.0]),
-        exc_type=ValueError,
-        message="X must contain only finite values",
-    )
-    _assert_boundary_error_parity(
-        jnp.array([[1.0, 0.0], [1.0, 1.0]]),
-        jnp.array([1.0, jnp.inf]),
-        exc_type=ValueError,
-        message="y must contain only finite values",
-    )
+def test_default_fitter_validates_X_y_and_offset_shapes() -> None:
+    with pytest.raises(ValueError, match="GLMData.X"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones(4), y=jnp.ones(4)))
+
+    with pytest.raises(ValueError, match="GLMData.y"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones((4, 1))))
+
+    with pytest.raises(ValueError, match="GLMData.y"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones(3)))
+
+    with pytest.raises(ValueError, match="GLMData.offset"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones(4), offset=jnp.ones((4, 1))))
+
+    with pytest.raises(ValueError, match="GLMData.offset"):
+        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones(4), offset=jnp.ones(3)))
 
 
-def test_valid_input_parity_is_preserved_after_boundary_cleanup(getkey):
-    X, y = simulate_glm_data(getkey(), family="poisson")
-    X_np = np.asarray(X)
-    y_np = np.asarray(y)
-    offset = 0.25
-    solver = glmax.CholeskySolver()
+def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:
+    model = glmax.GLM(family=Gaussian())
+    X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
+    y = jnp.array([1.2, 1.9, 3.1, 4.0])
+    data = GLMData(X=X, y=y)
 
-    direct_state = glmax.fit(X_np, y_np, family=glmax.Poisson(), solver=solver, offset_eta=offset)
-    wrapper_state = glmax.GLM(family=glmax.Poisson(), solver=solver).fit(X_np, y_np, offset_eta=offset)
+    first = glmax.fit(model, data)
+    assert first.beta.shape == (1,)
 
-    assert_glm_state_parity(wrapper_state, direct_state, rtol=1e-7, atol=1e-8)
+    second = glmax.fit(model, data, init=first.params)
+    assert second.beta.shape == (1,)
 
 
-def test_docs_claim_canonical_workflow_is_backed_by_parity_assertions(getkey):
-    doc = _read_glm_api_doc()
-    assert "canonical public entrypoint" in doc
-    assert "compatibility wrapper" in doc
-    assert "two minor releases" in doc
-    assert "Migration guidance" in doc
-
-    X, y = simulate_glm_data(getkey(), family="poisson")
-    direct_state = glmax.fit(X, y, family=glmax.Poisson(), solver=glmax.CholeskySolver())
-    wrapper_state = glmax.GLM(family=glmax.Poisson(), solver=glmax.CholeskySolver()).fit(X, y)
-
-    assert_glm_state_parity(wrapper_state, direct_state, rtol=1e-7, atol=1e-8)
+def test_specify_returns_glm_instance() -> None:
+    model = specify()
+    assert isinstance(model, glmax.GLM)

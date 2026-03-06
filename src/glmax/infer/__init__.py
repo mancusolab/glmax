@@ -1,17 +1,18 @@
-from .fitters import (
-    AbstractGLMFitter as AbstractGLMFitter,
-    IRLSFitter as IRLSFitter,
-)
-from .inference import (
-    AbstractStdErrEstimator as AbstractStdErrEstimator,
-    FisherInfoError as FisherInfoError,
-    HuberError as HuberError,
-)
-from .optimize import (
-    irls as irls,
-)
-from .solvers import (
-    CGSolver as CGSolver,
-    CholeskySolver as CholeskySolver,
-    QRSolver as QRSolver,
-)
+# pattern: Imperative Shell
+
+
+def infer(*args, **kwargs):
+    """Canonical infer verb entrypoint."""
+    from .inference import infer as _infer
+
+    return _infer(*args, **kwargs)
+
+
+def check(*args, **kwargs):
+    """Canonical check verb entrypoint."""
+    from .diagnostics import check as _check
+
+    return _check(*args, **kwargs)
+
+
+__all__ = ["infer", "check"]

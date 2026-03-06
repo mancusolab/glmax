@@ -5,8 +5,8 @@ build-backend = "hatchling.build"
 [project]
 name = "glmax"
 dynamic = ["version"]
-description = ''
-readme = "README.rst"
+description = "Grammar-first generalized linear modeling in JAX."
+readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 keywords = [
@@ -71,8 +71,8 @@ dependencies = [
 ]
 
 [tool.hatch.envs.default.scripts]
-test = "pytest {args:tests}"
-test-cov = "coverage run -m pytest {args:tests}"
+test = "pytest -p no:capture {args:tests}"
+test-cov = "coverage run -m pytest -p no:capture {args:tests}"
 cov-report = [
   "- coverage combine",
   "coverage report",
