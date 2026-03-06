@@ -24,9 +24,10 @@ Verified current-state inputs to this phase:
 - `src/glmax/infer/fitter.py` references `_run_default_pipeline`, which no longer exists.
 - `src/glmax/infer/result.py` only serves the stale `GLMState` path.
 
-Verified during Phase 1 execution:
+Historical Phase 1 checkpoint note:
 
-- `glmax.infer.fitter` is still importable in Phase 1, but it remains a legacy unsupported path because `DefaultFitter()` fails through the stale `_run_default_pipeline` import.
+- During Phase 1, `glmax.infer.fitter` was still importable as a legacy unsupported path because `DefaultFitter()` failed through the stale `_run_default_pipeline` import.
+- Final implemented end state differs: the legacy fitter modules were removed entirely in later phases of this consolidation.
 
 ## Acceptance Criteria Coverage
 
