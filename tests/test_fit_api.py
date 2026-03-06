@@ -245,6 +245,21 @@ def test_glm_fit_signature_does_not_expose_legacy_wrapper_parameters() -> None:
     assert all(param.kind is not inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values())
 
 
+def test_bound_glm_fit_signature_does_not_expose_model_parameter() -> None:
+    sig = inspect.signature(glmax.GLM(family=Gaussian()).fit)
+
+    assert list(sig.parameters) == [
+        "data",
+        "init_eta",
+        "disp_init",
+        "se_estimator",
+        "max_iter",
+        "tol",
+        "step_size",
+    ]
+    assert "model" not in sig.parameters
+
+
 @pytest.mark.parametrize(
     ("legacy_keyword", "match"),
     [
@@ -258,6 +273,29 @@ def test_glm_fit_removed_legacy_keywords_raise_migration_typeerrors(legacy_keywo
 
     with pytest.raises(TypeError, match=match):
         model.fit(data, **{legacy_keyword: jnp.zeros(1)})
+
+
+@pytest.mark.parametrize(
+    ("extra_arg", "match"),
+    [
+        (
+            jnp.zeros(4),
+            r"GLM\.fit\(\.\.\.\) accepts exactly one positional argument after binding: `data`.*Use `init_eta=`",
+        ),
+        (
+            Params(beta=jnp.zeros(1), disp=jnp.array(0.0)),
+            r"GLM\.fit\(\.\.\.\) no longer accepts positional `Params`.*Use `glmax\.fit\(model, data, init=params\)`",
+        ),
+    ],
+)
+def test_glm_fit_rejects_legacy_extra_positional_arguments_with_migration_guidance(
+    extra_arg: object, match: str
+) -> None:
+    model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 2.0, 3.0]))
+
+    with pytest.raises(TypeError, match=match):
+        model.fit(data, extra_arg)
 
 
 def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:

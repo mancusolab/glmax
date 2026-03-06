@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 from typing import Tuple
 
 import equinox as eqx
@@ -19,6 +21,27 @@ from .infer.stderr import AbstractStdErrEstimator, FisherInfoError
 
 
 _REMOVED_KEYWORD = object()
+
+
+def _bound_fit_signature() -> inspect.Signature:
+    signature = inspect.signature(_fit_impl)
+    parameters = list(signature.parameters.values())[1:]
+    return signature.replace(parameters=parameters)
+
+
+def _validate_bound_fit_args(args: tuple[object, ...]) -> None:
+    if len(args) <= 1:
+        return
+    extra_arg = args[1]
+    if isinstance(extra_arg, Params):
+        raise TypeError(
+            "GLM.fit(...) no longer accepts positional `Params`. "
+            "Use `glmax.fit(model, data, init=params)` for Params-based initialization."
+        )
+    raise TypeError(
+        "GLM.fit(...) accepts exactly one positional argument after binding: `data`. "
+        "Use `init_eta=` for a linear predictor or `disp_init=` for dispersion initialization."
+    )
 
 
 def _fit_model(
@@ -152,8 +175,10 @@ class _GLMBoundFit:
         self._instance = instance
         self.__wrapped__ = _fit_impl
         self.__doc__ = _fit_impl.__doc__
+        self.__signature__ = _bound_fit_signature()
 
     def __call__(self, *args: object, **kwargs: object) -> FitResult:
+        _validate_bound_fit_args(args)
         if "init" in kwargs:
             raise TypeError(
                 "GLM.fit(...) no longer accepts `init`. "
