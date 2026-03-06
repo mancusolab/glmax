@@ -55,7 +55,7 @@ DEFAULT_FITTER: Fitter = _ModelFitter()
 
 
 def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Fitter = DEFAULT_FITTER) -> FitResult:
-    """Canonical public fit verb surface over grammar nouns."""
+    """Canonical public fit verb over grammar nouns."""
     if not isinstance(model, GLM):
         raise TypeError("fit(...) expects `model` to be a GLM instance.")
     if not isinstance(data, GLMData):

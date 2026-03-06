@@ -1,3 +1,5 @@
+# pattern: Functional Core
+
 """Internal standard-error estimators used by GLM fit/infer kernels."""
 
 from abc import abstractmethod

@@ -1,3 +1,5 @@
+# pattern: Functional Core
+
 """Internal linear solver adapters used by GLM fit/infer kernels."""
 
 from abc import abstractmethod

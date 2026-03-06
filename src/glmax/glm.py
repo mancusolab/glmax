@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
-
 from typing import Tuple
 
 import equinox as eqx
@@ -31,7 +29,7 @@ def _fit_model(
     tol: float = 1e-3,
     step_size: float = 1.0,
 ) -> FitResult:
-    """Canonical GLM fit kernel shared by the grammar verb and `GLM.fit`."""
+    """Canonical GLM fit kernel used by the public grammar verb."""
     if not isinstance(data, GLMData):
         raise TypeError("GLM.fit(...) expects `data` to be a GLMData instance.")
     if data.weights is not None:
@@ -197,10 +195,9 @@ class GLM(eqx.Module):
         **legacy_kwargs: ArrayLike,
     ) -> FitResult:
         """
-        Represents the fitted state of a Generalized Linear Model (GLM).
+        Internal convenience method over the canonical GLM fit kernel.
 
-        This class stores the estimated parameters, standard errors, diagnostics,
-        and other relevant information from the fitting process of a GLM.
+        Use `glmax.fit(model, data, init=...)` for the public grammar contract.
 
         **Arguments:**
 
@@ -213,8 +210,7 @@ class GLM(eqx.Module):
 
         **Returns:**
 
-        -  A [`glmax.FitResult`][] containing the final estimated parameters and convergence diagnostics
-            from the fitted GLM model.
+        -  A [`glmax.FitResult`][] containing the fitted parameter and diagnostic artifacts.
         """
         if legacy_args:
             raise TypeError(
@@ -244,25 +240,6 @@ class GLM(eqx.Module):
             step_size=step_size,
         )
 
-
-GLM.fit.__signature__ = inspect.Signature(
-    parameters=[
-        inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD),
-        inspect.Parameter("data", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=GLMData),
-        inspect.Parameter("init_eta", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=ArrayLike),
-        inspect.Parameter("disp_init", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=ScalarLike),
-        inspect.Parameter(
-            "se_estimator",
-            inspect.Parameter.KEYWORD_ONLY,
-            default=FisherInfoError(),
-            annotation=AbstractStdErrEstimator,
-        ),
-        inspect.Parameter("max_iter", inspect.Parameter.KEYWORD_ONLY, default=1000, annotation=int),
-        inspect.Parameter("tol", inspect.Parameter.KEYWORD_ONLY, default=1e-3, annotation=float),
-        inspect.Parameter("step_size", inspect.Parameter.KEYWORD_ONLY, default=1.0, annotation=float),
-    ],
-    return_annotation=FitResult,
-)
 
 GLM.__init__.__doc__ = r"""**Arguments:**
 

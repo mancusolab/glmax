@@ -15,6 +15,17 @@ if TYPE_CHECKING:
     from .glm import GLM
 
 
+__all__ = [
+    "GLMData",
+    "Params",
+    "Diagnostics",
+    "FitResult",
+    "InferenceResult",
+    "Fitter",
+    "validate_fit_result",
+]
+
+
 def _is_numeric_dtype(array: Array) -> bool:
     return bool(jnp.issubdtype(array.dtype, jnp.number))
 

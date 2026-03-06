@@ -15,7 +15,7 @@ from glmax.family import Gaussian
 
 
 def _make_fit_result():
-    model = glmax.GLM(family=Gaussian())
+    model = glmax.specify(family=Gaussian())
     data = GLMData(
         X=jnp.array([[1.0], [2.0], [3.0], [4.0]]),
         y=jnp.array([1.2, 1.9, 3.1, 4.2]),

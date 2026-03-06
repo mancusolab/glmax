@@ -51,6 +51,7 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
 
 def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
     assert callable(glmax.fit)
+    assert glmax.fit.__module__ == "glmax.fit"
 
 
 def test_pytest_imports_glmax_from_worktree_src() -> None:
@@ -225,57 +226,11 @@ def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
         glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
 
 
-def test_glm_fit_signature_exposes_only_canonical_public_keywords() -> None:
-    sig = inspect.signature(glmax.GLM.fit)
+def test_glm_fit_is_not_a_curated_public_contract() -> None:
+    doc = glmax.GLM.fit.__doc__ or ""
 
-    assert list(sig.parameters) == [
-        "self",
-        "data",
-        "init_eta",
-        "disp_init",
-        "se_estimator",
-        "max_iter",
-        "tol",
-        "step_size",
-    ]
-    assert sig.parameters["data"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-    assert sig.parameters["init_eta"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert sig.parameters["disp_init"].kind is inspect.Parameter.KEYWORD_ONLY
-
-
-def test_glm_fit_rejects_legacy_public_alias_inputs() -> None:
-    model = glmax.GLM(family=Gaussian())
-    data = GLMData(
-        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
-        y=jnp.array([0.5, 1.1, 1.8, 2.2]),
-    )
-
-    with pytest.raises(
-        TypeError,
-        match=(
-            r"GLM\.fit\(\.\.\.\) no longer accepts separate `X, y` positional inputs; "
-            r"pass a single `GLMData\(X=..., y=...\)` value as `data`\."
-        ),
-    ):
-        model.fit(data.X, data.y)
-
-    with pytest.raises(
-        TypeError,
-        match=(
-            r"GLM\.fit\(\.\.\.\) no longer accepts legacy keyword `init`; "
-            r"pass `init_eta=` and optional `disp_init=` instead\."
-        ),
-    ):
-        model.fit(data, init=jnp.array([0.2, 0.4, 0.6, 0.8]))
-
-    with pytest.raises(
-        TypeError,
-        match=(
-            r"GLM\.fit\(\.\.\.\) no longer accepts legacy keyword `alpha_init`; "
-            r"use canonical `disp_init=` instead\."
-        ),
-    ):
-        model.fit(data, alpha_init=jnp.array(0.0))
+    assert not hasattr(glmax.GLM.fit, "__signature__")
+    assert "Use `glmax.fit(model, data, init=...)` for the public grammar contract." in doc
 
 
 @pytest.mark.parametrize(

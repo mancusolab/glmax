@@ -1,3 +1,5 @@
+# pattern: Functional Core
+
 """Internal IRLS optimizer kernels used by canonical grammar verbs."""
 
 from typing import NamedTuple, Tuple

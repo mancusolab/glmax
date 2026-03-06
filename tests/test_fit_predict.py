@@ -1,3 +1,5 @@
+# pattern: Imperative Shell
+
 import importlib
 
 import pytest
@@ -20,7 +22,7 @@ from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
     ],
 )
 def test_predict_generates_stable_shape_for_supported_families(family, y) -> None:
-    model = glmax.GLM(family=family)
+    model = glmax.specify(family=family)
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), y=y)
     fit_result = glmax.fit(model, data)
 
@@ -39,7 +41,7 @@ def test_predict_generates_stable_shape_for_supported_families(family, y) -> Non
 
 
 def test_predict_boundary_rejects_invalid_nouns() -> None:
-    model = glmax.GLM(family=Gaussian())
+    model = glmax.specify(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
     params = Params(beta=jnp.array([1.0]), disp=jnp.array(0.0))
 
@@ -54,7 +56,7 @@ def test_predict_boundary_rejects_invalid_nouns() -> None:
 
 
 def test_predict_rejects_beta_shape_mismatch() -> None:
-    model = glmax.GLM(family=Gaussian())
+    model = glmax.specify(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
     bad_params = Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0))
 
@@ -63,7 +65,7 @@ def test_predict_rejects_beta_shape_mismatch() -> None:
 
 
 def test_predict_rejects_non_finite_and_non_numeric_params() -> None:
-    model = glmax.GLM(family=Gaussian())
+    model = glmax.specify(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
 
     with pytest.raises(ValueError, match="Params.beta"):
@@ -77,7 +79,7 @@ def test_predict_rejects_non_finite_and_non_numeric_params() -> None:
 
 
 def test_predict_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
-    model = glmax.GLM(family=Gaussian())
+    model = glmax.specify(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
     params = Params(beta=jnp.array([1.0]), disp=jnp.array(0.0))
 
