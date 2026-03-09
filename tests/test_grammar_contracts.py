@@ -1,6 +1,6 @@
 # pattern: Imperative Shell
 
-from dataclasses import replace
+from dataclasses import fields
 
 import pytest
 
@@ -10,6 +10,16 @@ import glmax
 
 from glmax import Diagnostics, FitResult, GLMData, InferenceResult, Params
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+
+
+def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
+    values = {field.name: getattr(base, field.name) for field in fields(type(base))}
+    values.update(overrides)
+
+    result = object.__new__(FitResult)
+    for name, value in values.items():
+        object.__setattr__(result, name, value)
+    return result
 
 
 @pytest.mark.parametrize(
@@ -64,7 +74,7 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
     with pytest.raises(ValueError, match="FitResult.params.beta"):
         glmax.infer(
             model,
-            replace(fit_result, params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0))),
+            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0))),
         )
 
     with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
@@ -73,5 +83,5 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
     with pytest.raises(TypeError, match="FitResult.params.beta must have an inexact dtype"):
         glmax.infer(
             model,
-            replace(fit_result, params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0))),
+            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0))),
         )

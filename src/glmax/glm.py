@@ -12,9 +12,11 @@ from jax import Array, numpy as jnp
 from jax.scipy.stats import norm
 from jaxtyping import ArrayLike, ScalarLike
 
-from .contracts import Diagnostics, FitResult, GLMData, Params
+from .data import GLMData
 from .family.dist import ExponentialFamily, Gaussian, NegativeBinomial, Poisson
 from .family.utils import t_cdf
+from .fit import FitResult, Params
+from .infer.diagnostics import Diagnostics
 from .infer.optimize import irls
 from .infer.solve import AbstractLinearSolver, CholeskySolver
 from .infer.stderr import AbstractStdErrEstimator, FisherInfoError

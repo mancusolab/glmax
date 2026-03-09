@@ -1,6 +1,6 @@
 # pattern: Imperative Shell
 
-from dataclasses import replace
+from dataclasses import fields
 
 import pytest
 
@@ -10,6 +10,16 @@ import glmax
 
 from glmax import Diagnostics, FitResult, GLMData, Params
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+
+
+def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
+    values = {field.name: getattr(base, field.name) for field in fields(type(base))}
+    values.update(overrides)
+
+    result = object.__new__(FitResult)
+    for name, value in values.items():
+        object.__setattr__(result, name, value)
+    return result
 
 
 def _make_fit_result() -> FitResult:
@@ -92,7 +102,7 @@ def test_default_fitter_returns_canonical_fitresult_for_supported_families(famil
 
 
 def test_fit_rejects_custom_fitter_result_with_malformed_contract() -> None:
-    malformed = replace(_make_fit_result(), diagnostics=object())
+    malformed = unchecked_fit_result(_make_fit_result(), diagnostics=object())
 
     class BadFitter:
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:

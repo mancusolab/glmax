@@ -2,7 +2,7 @@
 
 import importlib
 
-from dataclasses import replace
+from dataclasses import fields
 
 import pytest
 
@@ -12,6 +12,16 @@ import glmax
 
 from glmax import GLMData, InferenceResult, Params
 from glmax.family import Gaussian
+
+
+def unchecked_fit_result(base, **overrides: object):
+    values = {field.name: getattr(base, field.name) for field in fields(type(base))}
+    values.update(overrides)
+
+    result = object.__new__(type(base))
+    for name, value in values.items():
+        object.__setattr__(result, name, value)
+    return result
 
 
 def _make_fit_result():
@@ -50,48 +60,48 @@ def test_infer_rejects_invalid_fit_artifacts_deterministically() -> None:
     model, fit_result = _make_fit_result()
 
     with pytest.raises(ValueError, match="FitResult.curvature"):
-        glmax.infer(model, replace(fit_result, curvature=jnp.ones((2, 1))))
+        glmax.infer(model, unchecked_fit_result(fit_result, curvature=jnp.ones((2, 1))))
 
     with pytest.raises(ValueError, match="FitResult.params.beta"):
         glmax.infer(
             model,
-            replace(fit_result, params=Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0))),
+            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0))),
         )
 
     with pytest.raises(ValueError, match="FitResult.params.beta"):
         glmax.infer(
             model,
-            replace(fit_result, params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0))),
+            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0))),
         )
 
     with pytest.raises(TypeError, match="FitResult.params.beta must be numeric"):
         glmax.infer(
             model,
-            replace(fit_result, params=Params(beta=["bad"], disp=jnp.array(0.0))),
+            unchecked_fit_result(fit_result, params=Params(beta=["bad"], disp=jnp.array(0.0))),
         )
 
     with pytest.raises(TypeError, match="FitResult.params.disp must be numeric"):
         glmax.infer(
             model,
-            replace(fit_result, params=Params(beta=jnp.array([1.0]), disp="bad")),
+            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([1.0]), disp="bad")),
         )
 
     with pytest.raises(ValueError, match="FitResult.params.disp"):
         glmax.infer(
             model,
-            replace(fit_result, params=Params(beta=jnp.array([1.0]), disp=jnp.array(jnp.inf))),
+            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([1.0]), disp=jnp.array(jnp.inf))),
         )
 
     with pytest.raises(TypeError, match="FitResult.params.beta must have an inexact dtype"):
         glmax.infer(
             model,
-            replace(fit_result, params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0))),
+            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0))),
         )
 
     with pytest.raises(TypeError, match="FitResult.params.disp must have an inexact dtype"):
         glmax.infer(
             model,
-            replace(fit_result, params=Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32))),
+            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32))),
         )
 
 

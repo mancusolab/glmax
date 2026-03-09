@@ -2,13 +2,27 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import NamedTuple, TYPE_CHECKING
 
-from ..contracts import Diagnostics, FitResult, validate_fit_result
+from jax import Array
+
+from ..fit import FitResult, validate_fit_result
 
 
 if TYPE_CHECKING:
     from ..glm import GLM
+
+
+__all__ = ["Diagnostics", "check"]
+
+
+class Diagnostics(NamedTuple):
+    """Common diagnostics emitted by fit/check verbs."""
+
+    converged: Array
+    num_iters: Array
+    objective: Array
+    objective_delta: Array
 
 
 def check(model: GLM, fit_result: FitResult) -> Diagnostics:

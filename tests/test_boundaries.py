@@ -1,5 +1,3 @@
-from dataclasses import fields
-
 import pytest
 
 import jax.numpy as jnp
@@ -99,7 +97,7 @@ def test_params_schema_is_beta_and_disp_only() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.0, 2.0, 2.9]))
     fit_result = GLM(family=Gaussian()).fit(data)
 
-    assert [field.name for field in fields(fit_result.params)] == ["beta", "disp"]
+    assert list(fit_result.params._fields) == ["beta", "disp"]
     assert not hasattr(fit_result, "alpha")
 
 

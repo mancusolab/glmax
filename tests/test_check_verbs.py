@@ -2,7 +2,7 @@
 
 import importlib
 
-from dataclasses import replace
+from dataclasses import fields
 
 import pytest
 
@@ -12,6 +12,16 @@ import glmax
 
 from glmax import Diagnostics, GLMData
 from glmax.family import Gaussian
+
+
+def unchecked_fit_result(base, **overrides: object):
+    values = {field.name: getattr(base, field.name) for field in fields(type(base))}
+    values.update(overrides)
+
+    result = object.__new__(type(base))
+    for name, value in values.items():
+        object.__setattr__(result, name, value)
+    return result
 
 
 def _make_fit_result():
@@ -46,10 +56,9 @@ def test_check_rejects_invalid_model_and_result_contracts() -> None:
 def test_check_rejects_invalid_fit_artifacts_deterministically() -> None:
     model, fit_result = _make_fit_result()
 
-    bad_result = replace(
+    bad_result = unchecked_fit_result(
         fit_result,
-        diagnostics=replace(
-            fit_result.diagnostics,
+        diagnostics=fit_result.diagnostics._replace(
             objective=jnp.array(jnp.nan),
         ),
     )
@@ -59,7 +68,7 @@ def test_check_rejects_invalid_fit_artifacts_deterministically() -> None:
     with pytest.raises(TypeError, match="FitResult.params.beta must be numeric"):
         glmax.check(
             model,
-            replace(
+            unchecked_fit_result(
                 fit_result,
                 params=glmax.Params(beta=["bad"], disp=jnp.array(0.0)),
             ),
@@ -68,7 +77,7 @@ def test_check_rejects_invalid_fit_artifacts_deterministically() -> None:
     with pytest.raises(ValueError, match="FitResult.params.disp"):
         glmax.check(
             model,
-            replace(
+            unchecked_fit_result(
                 fit_result,
                 params=glmax.Params(beta=jnp.array([1.0]), disp=jnp.array(jnp.inf)),
             ),

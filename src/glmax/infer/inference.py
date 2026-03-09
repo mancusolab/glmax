@@ -2,15 +2,29 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import NamedTuple, TYPE_CHECKING
 
 import jax.numpy as jnp
 
-from ..contracts import FitResult, InferenceResult, validate_fit_result
+from jax import Array
+
+from ..fit import FitResult, Params, validate_fit_result
 
 
 if TYPE_CHECKING:
     from ..glm import GLM
+
+
+__all__ = ["InferenceResult", "infer"]
+
+
+class InferenceResult(NamedTuple):
+    """Canonical infer verb output contract."""
+
+    params: Params
+    se: Array
+    z: Array
+    p: Array
 
 
 def infer(model: GLM, fit_result: FitResult) -> InferenceResult:
