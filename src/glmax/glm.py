@@ -189,7 +189,35 @@ class _GLMBoundFit:
             )
         if "alpha_init" in kwargs:
             raise TypeError("GLM.fit(...) no longer accepts `alpha_init`. Use `disp_init=` instead.")
-        return _fit_impl(self._instance, *args, **kwargs)
+
+        # Bind args/kwargs to the documented signature so defaults are applied.
+        bound = _bound_fit_signature().bind(*args, **kwargs)
+        bound.apply_defaults()
+        ba = bound.arguments
+
+        data = ba["data"]
+        init_eta = ba.get("init_eta")
+        disp_init = ba.get("disp_init")
+        se_estimator = ba.get("se_estimator", FisherInfoError())
+        max_iter = ba.get("max_iter", 1000)
+        tol = ba.get("tol", 1e-3)
+        step_size = ba.get("step_size", 1.0)
+
+        from .fit import fit as _glmax_fit
+
+        def _delegating_fitter(model: "GLM", data: GLMData, init: Params | None = None) -> FitResult:
+            return _fit_model(
+                model,
+                data,
+                init_eta=init_eta,
+                disp_init=disp_init,
+                se_estimator=se_estimator,
+                max_iter=max_iter,
+                tol=tol,
+                step_size=step_size,
+            )
+
+        return _glmax_fit(self._instance, data, fitter=_delegating_fitter)
 
 
 class _GLMFitDescriptor:
