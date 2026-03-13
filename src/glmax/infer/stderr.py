@@ -112,11 +112,39 @@ class FisherInfoError(AbstractStdErrEstimator, strict=True):
         weight: ArrayLike,
         disp: ScalarLike = 0.0,
     ) -> Array:
-        del eta, mu, disp
-        infor = (X * weight[:, jnp.newaxis]).T @ X
-        asmpt_cov = jnpla.inv(infor)
+        r"""Compute $\hat{\mathrm{Cov}}(\hat\beta) = \phi \cdot (X^\top W_\mathrm{pure} X)^{-1}$.
 
-        return asmpt_cov
+        Accepts IRLS weights (which may encode phi internally, e.g. for Gaussian
+        where $W_\mathrm{IRLS} = \mathrm{diag}(1/\sigma^2)$) and renormalises them
+        to pure Fisher information weights $W_\mathrm{pure} = W_\mathrm{IRLS} \cdot \phi$
+        before computing the covariance.  This ensures the formula is correct for
+        all exponential families regardless of whether `variance(mu, disp)` encodes phi.
+
+        **Arguments:**
+
+        - `family`: fitted `ExponentialFamily` instance (used to compute phi via `scale`).
+        - `X`: design matrix, shape `(n, p)`.
+        - `y`: responses, shape `(n,)`.
+        - `eta`: linear predictor (unused).
+        - `mu`: fitted mean, shape `(n,)`.
+        - `weight`: IRLS weights, shape `(n,)`.
+        - `disp`: dispersion parameter (unused; phi computed from `family.scale`).
+
+        **Returns:**
+
+        Covariance matrix, shape `(p, p)`.
+        """
+        del eta, disp
+        # Compute phi via family.scale and renormalize weights to remove any phi
+        # factor already absorbed into the IRLS weights (e.g. Gaussian IRLS
+        # weights = 1/sigma^2 already encode phi = sigma^2). Using
+        # w_pure = weight * phi gives the pure Fisher information weights
+        # so that phi * inv(X'W_pure X) is correct for all exponential families
+        # regardless of whether variance(mu, disp) encodes phi.
+        phi = family.scale(X, y, mu)
+        w_pure = weight * phi
+        infor = (X * w_pure[:, jnp.newaxis]).T @ X
+        return phi * jnpla.inv(infor)
 
 
 class HuberError(AbstractStdErrEstimator, strict=True):

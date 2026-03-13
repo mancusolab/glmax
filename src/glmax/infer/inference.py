@@ -7,7 +7,11 @@ from typing import NamedTuple, TYPE_CHECKING
 import jax.numpy as jnp
 
 from jax import Array
+from jax.scipy.stats import norm
+from jaxtyping import ArrayLike
 
+from ..family.dist import ExponentialFamily, Gaussian
+from ..family.utils import t_cdf
 from ..fit import FitResult, Params, validate_fit_result
 
 
@@ -15,7 +19,7 @@ if TYPE_CHECKING:
     from ..glm import GLM
 
 
-__all__ = ["InferenceResult", "infer"]
+__all__ = ["InferenceResult", "infer", "wald_test"]
 
 
 class InferenceResult(NamedTuple):
@@ -25,6 +29,27 @@ class InferenceResult(NamedTuple):
     se: Array
     z: Array
     p: Array
+
+
+def wald_test(statistic: ArrayLike, df: int, family: ExponentialFamily) -> Array:
+    r"""Two-sided Wald test p-values.
+
+    Uses a $t_{df}$ distribution for Gaussian families and $\mathcal{N}(0, 1)$
+    for all others.
+
+    **Arguments:**
+
+    - `statistic`: test statistics $\hat\beta / \mathrm{SE}(\hat\beta)$, shape `(p,)`.
+    - `df`: residual degrees of freedom $n - p$.
+    - `family`: fitted `ExponentialFamily` instance.
+
+    **Returns:**
+
+    Two-sided p-values, shape `(p,)`.
+    """
+    if isinstance(family, Gaussian):
+        return 2 * t_cdf(-jnp.abs(statistic), df)
+    return 2 * norm.sf(jnp.abs(statistic))
 
 
 def infer(model: GLM, fit_result: FitResult) -> InferenceResult:
@@ -43,6 +68,6 @@ def infer(model: GLM, fit_result: FitResult) -> InferenceResult:
     se = jnp.sqrt(jnp.diag(curvature))
     z = beta / se
     df = int(fit_result.eta.shape[0] - beta.shape[0])
-    p = model.wald_test(z, df)
+    p = wald_test(z, df, model.family)
 
     return InferenceResult(params=fit_result.params, se=se, z=z, p=p)

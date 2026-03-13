@@ -10,6 +10,8 @@ import jax.numpy as jnp
 from jax import Array
 
 from .data import GLMData
+from .infer.optimize import irls
+from .infer.stderr import FisherInfoError
 
 
 if TYPE_CHECKING:
@@ -252,19 +254,142 @@ def _canonicalize_init(init: Params | None, n_features: int) -> tuple[jnp.ndarra
     return beta, disp
 
 
-class _ModelFitter:
-    """Bridge canonical fit verb calls into the canonical GLM fit kernel."""
+# IRLSFitter is Functional Core: pure callable, no file I/O, no mutable state.
+# Lives in fit.py alongside _canonicalize_init and validate_fit_result.
+class IRLSFitter:
+    """IRLS fit strategy implementing the `Fitter` protocol.
 
-    def __call__(self, model: GLM, data: GLMData, init: Params | None = None) -> FitResult:
-        from .glm import _fit_model
+    Encapsulates initialization, IRLS, dispersion estimation, SE computation,
+    and Wald test. Replaces the ``_ModelFitter`` + ``_fit_model`` split.
+    """
 
-        X_array, _, offset_array, _, _ = data.canonical_arrays()
-        init_beta, init_disp = _canonicalize_init(init, X_array.shape[1])
-        init_eta = None if init_beta is None else X_array @ init_beta + offset_array
-        return _fit_model(model, data, init_eta=init_eta, disp_init=init_disp)
+    def __call__(
+        self,
+        model: "GLM",
+        data: GLMData,
+        init: "Params | None" = None,
+        max_iter: int = 1000,
+        tol: float = 1e-3,
+        step_size: float = 1.0,
+    ) -> "FitResult":
+        from .infer.diagnostics import Diagnostics  # lazy: avoids circular import
+        from .infer.inference import wald_test  # lazy: avoids circular import
+
+        # --- Validate data ---
+        if not isinstance(data, GLMData):
+            raise TypeError("fit(...) expects `data` to be a GLMData instance.")
+        if data.weights is not None:
+            raise ValueError("GLMData.weights is not supported yet.")
+        X, y, offset, _, _ = data.canonical_arrays()
+        if X.shape[0] == 0:
+            raise ValueError("GLMData.mask removes all samples; at least one effective sample is required.")
+
+        # --- Initialization ---
+        # Note: irls() adds offset_eta internally, so init_eta must NOT include offset here.
+        init_beta, init_disp = _canonicalize_init(init, X.shape[1])
+        if init_beta is not None:
+            # Derive init_eta without offset; irls adds offset_eta internally
+            init_eta = X @ init_beta
+            init_eta = jnp.asarray(init_eta)
+            if not bool(jnp.all(jnp.isfinite(init_eta))):
+                raise ValueError("init_eta derived from init.beta must be finite.")
+        else:
+            init_eta = model.family.init_eta(y)  # irls adds offset_eta internally
+
+        if init_disp is not None:
+            disp_init = jnp.asarray(init_disp)
+            if not bool(jnp.all(jnp.isfinite(disp_init))):
+                raise ValueError("disp_init must be finite.")
+        else:
+            from .family.dist import NegativeBinomial, Poisson  # lazy: avoids top-level cycle
+
+            if isinstance(model.family, NegativeBinomial):
+                # NB-specific initialization: run Poisson IRLS first to estimate alpha.
+                # This replicates the pre-Phase-5 calc_eta_and_dispersion logic.
+                pois_family = Poisson()
+                pois_init_eta = pois_family.init_eta(y)
+                pois_state = irls(
+                    X,
+                    y,
+                    pois_family,
+                    model.solver,
+                    pois_init_eta,
+                    max_iter,
+                    tol,
+                    step_size,
+                    offset,
+                    disp_init=pois_family.canonical_dispersion(0.0),
+                )
+                pois_beta = pois_state.beta
+                pois_eta = X @ pois_beta + offset
+                pois_mu = pois_family.glink.inverse(pois_eta)
+                n = y.shape[0]
+                alpha_mm = n / jnp.sum((y / pois_mu - 1) ** 2)  # method-of-moments alpha
+                # Run NB dispersion optimizer starting from method-of-moments alpha
+                disp_init = model.family.estimate_dispersion(X, y, pois_eta, 1.0 / alpha_mm)
+                disp_init = model.family.canonical_dispersion(jnp.nan_to_num(disp_init, nan=0.1))
+                # Override init_eta with Poisson-fitted eta for better NB convergence
+                init_eta = pois_eta - offset  # irls adds offset_eta internally
+            else:
+                disp_init = model.family.canonical_dispersion(1.0)
+
+        # --- IRLS ---
+        state = irls(
+            X,
+            y,
+            model.family,
+            model.solver,
+            init_eta,
+            max_iter,
+            tol,
+            step_size,
+            offset,
+            disp_init=disp_init,
+        )
+        beta, n_iter, converged, irls_disp, objective, objective_delta = state
+
+        # --- Post-IRLS dispersion estimation ---
+        eta = X @ beta + offset
+        disp = model.family.estimate_dispersion(X, y, eta, irls_disp)
+
+        # --- Derived quantities ---
+        # Use irls_disp for weights: consistent with the last IRLS step weights.
+        # FisherInfoError renormalises weights by phi internally to avoid
+        # double-counting for families (like Gaussian) whose variance encodes phi.
+        mu = model.family.glink.inverse(eta)
+        score_residual = (y - mu) * model.family.glink.deriv(mu)
+        _, _, weight = model.family.calc_weight(eta, irls_disp)
+
+        # --- SE and Wald test ---
+        se_estimator = FisherInfoError()
+        curvature = se_estimator(model.family, X, y, eta, mu, weight, disp)
+        beta_se = jnp.sqrt(jnp.diag(curvature))
+
+        beta = jnp.ravel(beta)
+        df = X.shape[0] - X.shape[1]
+        stat = beta / beta_se
+        pval = wald_test(stat, df, model.family)
+
+        return FitResult(
+            params=Params(beta=beta, disp=model.family.canonical_dispersion(disp)),
+            se=beta_se,
+            z=stat,
+            p=pval,
+            eta=eta,
+            mu=mu,
+            glm_wt=weight,
+            diagnostics=Diagnostics(
+                converged=converged,
+                num_iters=n_iter,
+                objective=objective,
+                objective_delta=objective_delta,
+            ),
+            curvature=curvature,
+            score_residual=score_residual,
+        )
 
 
-DEFAULT_FITTER: Fitter = _ModelFitter()
+DEFAULT_FITTER: Fitter = IRLSFitter()
 
 
 def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Fitter = DEFAULT_FITTER) -> FitResult:
