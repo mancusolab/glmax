@@ -348,10 +348,12 @@ def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
     assert result.score_residual.shape == (data.n_samples,)
     assert bool(jnp.isfinite(result.objective))
     assert bool(jnp.isfinite(result.objective_delta))
-    if isinstance(family, NegativeBinomial):
+    if isinstance(family, (NegativeBinomial, Gaussian)):
+        # NB and Gaussian estimate a non-zero dispersion after Task 4 (AC2.5)
         assert result.params.disp > 0
     else:
-        assert jnp.allclose(result.params.disp, jnp.array(0.0))
+        # Poisson and Binomial have canonical phi=1; canonical_dispersion returns 1.0
+        assert jnp.allclose(result.params.disp, jnp.array(1.0))
 
 
 def test_fit_boundary_rejects_non_finite_params_init() -> None:

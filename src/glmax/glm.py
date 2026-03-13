@@ -105,7 +105,7 @@ def _fit_model(
     mu = model.family.glink.inverse(eta)
     score_residual = (y_array - mu) * model.family.glink.deriv(mu)
 
-    _, _, weight = model.family.calc_weight(X_array, y_array, eta, disp)
+    _, _, weight = model.family.calc_weight(eta, disp)
     curvature = se_estimator(model.family, X_array, y_array, eta, mu, weight, disp)
     beta_se = jnp.sqrt(jnp.diag(curvature))
 

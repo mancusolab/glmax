@@ -52,7 +52,9 @@ def irls(
     def body_fun(val: Tuple):
         likelihood_o, diff, num_iter, beta_o, eta_o, disp_o = val
 
-        mu_k, g_deriv_k, weight = family.calc_weight(X, y, eta_o, disp_o)
+        # calc_weight returns (mu, variance, weight); variance not needed here — g_deriv computed separately below
+        mu_k, _v, weight = family.calc_weight(eta_o, disp_o)
+        g_deriv_k = family.glink.deriv(mu_k)
         r = eta_o + g_deriv_k * (y - mu_k) * step_size - offset_eta
 
         beta = solver(X, r, weight)
@@ -60,7 +62,7 @@ def irls(
         eta_n = X @ beta + offset_eta
 
         disp_n = family.update_dispersion(X, y, eta_n, disp_o, step_size)
-        likelihood_n = family.negloglikelihood(X, y, eta_n, disp_n)
+        likelihood_n = family.negloglikelihood(y, eta_n, disp_n)
         diff = likelihood_n - likelihood_o
 
         return likelihood_n, diff, num_iter + 1, beta, eta_n, disp_n
@@ -72,7 +74,7 @@ def irls(
 
     init_beta = jnp.zeros((p,))
     init_eta = eta + offset_eta
-    init_likelihood = family.negloglikelihood(X, y, init_eta, disp_init)
+    init_likelihood = family.negloglikelihood(y, init_eta, disp_init)
     init_tuple = (init_likelihood, jnp.inf, 0, init_beta, init_eta, disp_init)
 
     objective, objective_delta, num_iters, beta, eta, disp = lax.while_loop(cond_fun, body_fun, init_tuple)

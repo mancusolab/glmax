@@ -110,4 +110,9 @@ def test_fixed_dispersion_families_emit_deterministic_disp(family) -> None:
         y = jnp.array([0.0, 1.0, 2.0, 3.0, 4.0])
 
     fit_result = GLM(family=family).fit(GLMData(X=X, y=y))
-    assert jnp.allclose(fit_result.params.disp, jnp.array(0.0))
+    if isinstance(family, Gaussian):
+        # Gaussian fits dispersion as RSS/(n-p) — not a fixed canonical value
+        assert jnp.isfinite(fit_result.params.disp)
+    else:
+        # Poisson and Binomial have canonical phi=1; canonical_dispersion returns 1.0
+        assert jnp.allclose(fit_result.params.disp, jnp.array(1.0))
