@@ -87,13 +87,9 @@ def test_check_rejects_invalid_fit_artifacts_deterministically() -> None:
 def test_check_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
     model, fit_result = _make_fit_result()
 
-    def fail_fit(*_args, **_kwargs):
-        raise AssertionError("GLM.fit should never be called by check(...).")
-
     def fail_irls(*_args, **_kwargs):
         raise AssertionError("infer.optimize.irls should never be called by check(...).")
 
-    monkeypatch.setattr(glmax.GLM, "fit", fail_fit)
     infer_optimize = importlib.import_module("glmax.infer.optimize")
     monkeypatch.setattr(infer_optimize, "irls", fail_irls)
 

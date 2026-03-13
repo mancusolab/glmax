@@ -4,12 +4,14 @@ from dataclasses import fields
 
 import pytest
 
+import equinox as eqx
 import jax.numpy as jnp
+import jax.random as jr
 
 import glmax
 
 from glmax import Diagnostics, FitResult, GLMData, Params
-from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
 
 def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
@@ -78,18 +80,24 @@ def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
         glmax.fit(model, data, fitter=BadFitter())
 
 
+_DEFAULT_X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
+# Gamma uses InverseLink (eta = 1/mu); X must not include zero to avoid eta=0 at init.
+_GAMMA_X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
+
+
 @pytest.mark.parametrize(
-    ("family", "y"),
+    ("family", "X", "y"),
     [
-        (Gaussian(), jnp.array([0.2, 1.1, 2.0, 3.3])),
-        (Poisson(), jnp.array([0.0, 1.0, 1.0, 2.0])),
-        (Binomial(), jnp.array([0.0, 1.0, 0.0, 1.0])),
-        (NegativeBinomial(), jnp.array([0.0, 1.0, 2.0, 4.0])),
+        (Gaussian(), _DEFAULT_X, jnp.array([0.2, 1.1, 2.0, 3.3])),
+        (Poisson(), _DEFAULT_X, jnp.array([0.0, 1.0, 1.0, 2.0])),
+        (Binomial(), _DEFAULT_X, jnp.array([0.0, 1.0, 0.0, 1.0])),
+        (NegativeBinomial(), _DEFAULT_X, jnp.array([0.0, 1.0, 2.0, 4.0])),
+        (Gamma(), _GAMMA_X, jr.gamma(jr.PRNGKey(1), 2.0, shape=(4,))),
     ],
 )
-def test_default_fitter_returns_canonical_fitresult_for_supported_families(family, y) -> None:
+def test_default_fitter_returns_canonical_fitresult_for_supported_families(family, X, y) -> None:
     model = glmax.specify(family=family)
-    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=y)
+    data = GLMData(X=X, y=y)
 
     result = glmax.fit(model, data)
 
@@ -114,3 +122,111 @@ def test_fit_rejects_custom_fitter_result_with_malformed_contract() -> None:
 
     with pytest.raises(TypeError, match="FitResult.diagnostics"):
         glmax.fit(model, data, fitter=BadFitter())
+
+
+# ---------------------------------------------------------------------------
+# [HIGH] JIT compatibility: irls, FisherInfoError, wald_test
+# Note: IRLSFitter itself is NOT JIT-safe (Python branching on family type).
+# These tests cover the underlying kernels only.
+# ---------------------------------------------------------------------------
+
+
+def _make_gaussian_xy(n: int = 30, p: int = 2, seed: int = 0):
+    key = jr.PRNGKey(seed)
+    X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key, (n, p - 1))], axis=1)
+    y = X @ jnp.ones(p) + jr.normal(jr.PRNGKey(seed + 1), (n,)) * 0.2
+    return X, y
+
+
+def test_irls_jit_matches_eager():
+    """irls is JIT-safe: filter_jit output matches eager output numerically."""
+    from glmax.infer.optimize import irls
+    from glmax.infer.solve import CholeskySolver
+
+    X, y = _make_gaussian_xy()
+    family = Gaussian()
+    solver = CholeskySolver()
+    init_eta = family.init_eta(y)
+    offset = jnp.zeros(X.shape[0])
+
+    state_ref = irls(X, y, family, solver, init_eta, 200, 1e-3, 1.0, offset, disp_init=1.0)
+
+    def _jit_irls(X, y, init_eta):
+        return irls(X, y, family, solver, init_eta, 200, 1e-3, 1.0, offset, disp_init=1.0)
+
+    state_jit = eqx.filter_jit(_jit_irls)(X, y, init_eta)
+
+    assert bool(jnp.all(jnp.isfinite(state_jit.beta))), "JIT irls beta must be finite"
+    assert bool(
+        jnp.allclose(state_ref.beta, state_jit.beta, atol=1e-5)
+    ), f"JIT irls beta differs from eager: {state_ref.beta} vs {state_jit.beta}"
+
+
+def test_fisher_info_error_jit_is_finite():
+    """FisherInfoError is JIT-safe: filter_jit output is finite."""
+    from glmax.infer.stderr import FisherInfoError
+
+    X, y = _make_gaussian_xy()
+    family = Gaussian()
+    model = glmax.specify(family=family)
+    result = glmax.fit(model, GLMData(X=X, y=y))
+    eta, mu, weight, disp = result.eta, result.mu, result.glm_wt, result.params.disp
+
+    estimator = FisherInfoError()
+
+    def _jit_fisher(X, y, eta, mu, weight, disp):
+        return estimator(family, X, y, eta, mu, weight, disp)
+
+    cov_jit = eqx.filter_jit(_jit_fisher)(X, y, eta, mu, weight, disp)
+
+    assert bool(
+        jnp.all(jnp.isfinite(cov_jit))
+    ), f"JIT FisherInfoError covariance must be finite; got diag={jnp.diag(cov_jit)}"
+
+
+@pytest.mark.parametrize("family", [Gaussian(), Poisson()])
+def test_wald_test_jit_is_finite(family):
+    """wald_test is JIT-safe for Gaussian and Poisson: filter_jit output is finite."""
+    from glmax.infer.inference import wald_test
+
+    stat = jnp.array([2.0, -1.5, 0.5])
+
+    def _jit_wald(stat):
+        return wald_test(stat, 50, family)
+
+    p_jit = eqx.filter_jit(_jit_wald)(stat)
+
+    assert bool(
+        jnp.all(jnp.isfinite(p_jit))
+    ), f"JIT wald_test p-values must be finite for {type(family).__name__}; got {p_jit}"
+
+
+def test_gaussian_se_equals_ols_formula() -> None:
+    import jax.numpy.linalg as jla
+
+    from glmax import GLMData
+    from glmax.family import Gaussian
+
+    key = jr.PRNGKey(7)
+    n, p = 100, 3
+    X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key, (n, p - 1))], axis=1)
+    true_beta = jnp.array([2.0, 1.0, -0.5])
+    sigma = 0.5
+    y = X @ true_beta + jr.normal(jr.PRNGKey(8), (n,)) * sigma
+
+    model = glmax.specify(family=Gaussian())
+    result = glmax.fit(model, GLMData(X=X, y=y))
+
+    # Reconstruct expected SE using the same formula as FisherInfoError:
+    #   phi * inv(X' W_pure X)  where W_pure = weight * phi
+    # For Gaussian: weight = 1/sigma^2 and phi = sigma^2, so W_pure = I.
+    # This reduces to: sigma^2 * inv(X'X)
+    family = Gaussian()
+    _, _, w = family.calc_weight(result.eta, result.params.disp)
+    phi = family.scale(X, y, result.mu)
+    w_pure = w * phi
+    XtWpureX = (X * w_pure[:, jnp.newaxis]).T @ X
+    expected_cov = phi * jla.inv(XtWpureX)
+    expected_se = jnp.sqrt(jnp.diag(expected_cov))
+
+    assert jnp.allclose(result.se, expected_se, atol=1e-5), f"SE mismatch: got {result.se}, expected {expected_se}"

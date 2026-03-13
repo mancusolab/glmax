@@ -44,7 +44,12 @@ def irls(
     :param tol: tolerance for stopping, default to 0.001
     :param step_size: step size to update the parameter at each step, default to 1.0
     :param offset_eta: offset (nx1)
-    :param disp_init: initial value for the canonical dispersion parameter
+    :param disp_init: initial value for the canonical dispersion parameter.
+        **NegativeBinomial callers must supply a strictly positive value**
+        (e.g. 0.1).  Passing ``disp_init=0.0`` with NegativeBinomial will
+        produce a finite but meaningless initial likelihood because
+        ``NegativeBinomial.negloglikelihood`` clips ``disp`` to ``tiny``
+        rather than raising; subsequent dispersion updates will diverge.
     :return: _IRLSState
     """
     n, p = X.shape

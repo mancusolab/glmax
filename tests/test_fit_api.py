@@ -238,75 +238,28 @@ def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
         glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
 
 
-def test_glm_fit_is_not_a_curated_public_contract() -> None:
-    doc = glmax.GLM.fit.__doc__ or ""
-
-    assert not hasattr(glmax.GLM.fit, "__signature__")
-    assert "Use `glmax.fit(model, data, init=...)` for the public grammar contract." in doc
-
-
-def test_glm_fit_signature_does_not_expose_legacy_wrapper_parameters() -> None:
-    sig = inspect.signature(glmax.GLM.fit)
-
-    assert "legacy_args" not in sig.parameters
-    assert "legacy_kwargs" not in sig.parameters
-    assert "init" not in sig.parameters
-    assert "alpha_init" not in sig.parameters
-    assert all(param.kind is not inspect.Parameter.VAR_POSITIONAL for param in sig.parameters.values())
-    assert all(param.kind is not inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values())
-
-
-def test_bound_glm_fit_signature_does_not_expose_model_parameter() -> None:
-    sig = inspect.signature(glmax.GLM(family=Gaussian()).fit)
-
-    assert list(sig.parameters) == [
-        "data",
-        "init_eta",
-        "disp_init",
-        "se_estimator",
-        "max_iter",
-        "tol",
-        "step_size",
-    ]
-    assert "model" not in sig.parameters
+def test_glm_fit_attribute_is_removed() -> None:
+    assert not hasattr(glmax.GLM(), "fit"), "GLM.fit must not exist after Phase 5"
 
 
 @pytest.mark.parametrize(
-    ("legacy_keyword", "match"),
-    [
-        ("init", r"GLM\.fit\(\.\.\.\) no longer accepts `init`.*glmax\.fit\(model, data, init=\.\.\.\)"),
-        ("alpha_init", r"GLM\.fit\(\.\.\.\) no longer accepts `alpha_init`.*Use `disp_init=` instead"),
-    ],
+    "legacy_keyword",
+    ["init", "alpha_init"],
 )
-def test_glm_fit_removed_legacy_keywords_raise_migration_typeerrors(legacy_keyword: str, match: str) -> None:
+def test_glm_fit_removed_raises_attributeerror(legacy_keyword: str) -> None:
     model = glmax.GLM(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 2.0, 3.0]))
 
-    with pytest.raises(TypeError, match=match):
+    with pytest.raises(AttributeError):
         model.fit(data, **{legacy_keyword: jnp.zeros(1)})
 
 
-@pytest.mark.parametrize(
-    ("extra_arg", "match"),
-    [
-        (
-            jnp.zeros(4),
-            r"GLM\.fit\(\.\.\.\) accepts exactly one positional argument after binding: `data`.*Use `init_eta=`",
-        ),
-        (
-            Params(beta=jnp.zeros(1), disp=jnp.array(0.0)),
-            r"GLM\.fit\(\.\.\.\) no longer accepts positional `Params`.*Use `glmax\.fit\(model, data, init=params\)`",
-        ),
-    ],
-)
-def test_glm_fit_rejects_legacy_extra_positional_arguments_with_migration_guidance(
-    extra_arg: object, match: str
-) -> None:
+def test_glm_fit_removed_raises_attributeerror_on_positional_arg() -> None:
     model = glmax.GLM(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 2.0, 3.0]))
 
-    with pytest.raises(TypeError, match=match):
-        model.fit(data, extra_arg)
+    with pytest.raises(AttributeError):
+        model.fit(data, jnp.zeros(4))
 
 
 def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
@@ -349,10 +302,8 @@ def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
     assert bool(jnp.isfinite(result.objective))
     assert bool(jnp.isfinite(result.objective_delta))
     if isinstance(family, (NegativeBinomial, Gaussian)):
-        # NB and Gaussian estimate a non-zero dispersion after Task 4 (AC2.5)
         assert result.params.disp > 0
     else:
-        # Poisson and Binomial have canonical phi=1; canonical_dispersion returns 1.0
         assert jnp.allclose(result.params.disp, jnp.array(1.0))
 
 

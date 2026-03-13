@@ -51,7 +51,7 @@ def simulate_glm_data(
 
     # Generate random design matrix X
     X = rdm.normal(x_key, shape=(n_samples, n_features))
-    X = X - X.mean(axis=0) / (X.std(axis=0))
+    X = (X - X.mean(axis=0)) / X.std(axis=0)
 
     # Generate true coefficients
     beta_true = rdm.normal(beta_key, shape=(n_features,))

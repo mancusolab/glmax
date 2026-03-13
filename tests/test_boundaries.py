@@ -4,7 +4,7 @@ import jax.numpy as jnp
 
 import glmax
 
-from glmax import GLM, GLMData
+from glmax import GLM, GLMData, Params
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 
 
@@ -68,7 +68,7 @@ def test_glmdata_rejects_shape_mismatches_and_malformed_mask() -> None:
 
 def test_glm_fit_accepts_glmdata_noun() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.0, 2.0, 2.9]))
-    fit_result = GLM(family=Gaussian()).fit(data)
+    fit_result = glmax.fit(GLM(family=Gaussian()), data)
     assert fit_result.params.beta.shape == (1,)
 
 
@@ -77,11 +77,11 @@ def test_top_level_fit_rejects_raw_x_y_inputs() -> None:
         glmax.fit(GLM(family=Gaussian()), jnp.ones((4, 1)))
 
 
-def test_glm_fit_accepts_canonical_disp_init_keyword() -> None:
+def test_glmax_fit_accepts_params_init_for_nb() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 1.0, 2.0]))
     model = GLM(family=NegativeBinomial())
 
-    fit_result = model.fit(data, disp_init=jnp.array(0.4))
+    fit_result = glmax.fit(model, data, init=Params(beta=jnp.zeros(1), disp=jnp.array(0.4)))
 
     assert fit_result.params.beta.shape == (1,)
 
@@ -90,12 +90,12 @@ def test_glm_fit_rejects_all_false_mask_with_deterministic_error() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]), mask=False)
 
     with pytest.raises(ValueError, match="mask removes all samples"):
-        GLM(family=Gaussian()).fit(data)
+        glmax.fit(GLM(family=Gaussian()), data)
 
 
 def test_params_schema_is_beta_and_disp_only() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.0, 2.0, 2.9]))
-    fit_result = GLM(family=Gaussian()).fit(data)
+    fit_result = glmax.fit(GLM(family=Gaussian()), data)
 
     assert list(fit_result.params._fields) == ["beta", "disp"]
     assert not hasattr(fit_result, "alpha")
@@ -109,10 +109,8 @@ def test_fixed_dispersion_families_emit_deterministic_disp(family) -> None:
     else:
         y = jnp.array([0.0, 1.0, 2.0, 3.0, 4.0])
 
-    fit_result = GLM(family=family).fit(GLMData(X=X, y=y))
+    fit_result = glmax.fit(GLM(family=family), GLMData(X=X, y=y))
     if isinstance(family, Gaussian):
-        # Gaussian fits dispersion as RSS/(n-p) — not a fixed canonical value
-        assert jnp.isfinite(fit_result.params.disp)
+        assert fit_result.params.disp > 0
     else:
-        # Poisson and Binomial have canonical phi=1; canonical_dispersion returns 1.0
         assert jnp.allclose(fit_result.params.disp, jnp.array(1.0))

@@ -85,3 +85,22 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
             model,
             unchecked_fit_result(fit_result, params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0))),
         )
+
+
+def test_dead_modules_are_not_importable() -> None:
+    import importlib
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.contracts")
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.predict")  # the stub module, not the verb
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("glmax.infer.tests")
+
+
+def test_wald_test_importable_from_infer_inference() -> None:
+    from glmax.infer.inference import wald_test
+
+    assert callable(wald_test)

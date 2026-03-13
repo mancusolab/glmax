@@ -12,7 +12,8 @@
   - Canonical user workflow is `specify -> fit -> predict -> infer -> check`.
   - `glmax.fit(model, data, init=None, *, fitter=...)` is the curated public fit contract.
   - `infer(model, fit_result)` and `check(model, fit_result)` operate on fit artifacts without refitting.
-  - `GLM.fit(...)` remains an internal convenience method; do not expand it into the primary public API.
+  - `GLM` is a pure specification noun (`family`, `solver` fields only). It has no `.fit` method. Use `glmax.fit(model, data)`.
+  - `Gamma` is a supported family (exported from `glmax.family`). Dispersion estimation for Gamma is deferred.
 - **Expects**:
   - `GLMData.X` is rank-2 with shape `(n, p)` and `GLMData.y` is rank-1 with shape `(n,)`.
   - Optional `offset`, `weights`, and `mask` inputs broadcast over the sample axis when present.
@@ -25,7 +26,9 @@
 - **Boundary**:
   - `src/glmax/contracts.py` owns canonical noun contracts and fit-result validation.
   - `src/glmax/fit.py` owns the public `fit` and `predict` verbs.
-  - `src/glmax/glm.py` owns `GLM`, `specify`, and the internal fit kernel used by the public fit verb.
+  - `src/glmax/glm.py` owns `GLM` (pure spec noun) and `specify` only — no fit logic.
+  - `src/glmax/fit.py` owns `IRLSFitter` (the default fitter), `fit`, `predict`, and `Params`/`FitResult` contracts. `IRLSFitter` is not JIT-safe; do not wrap it in `jax.jit`.
+  - `src/glmax/infer/inference.py` owns `InferenceResult`, `infer`, and the standalone `wald_test` function.
   - `src/glmax/infer/__init__.py` only re-exports `infer` and `check`.
   - `src/glmax/infer/solve.py` is the canonical home for linear solver contracts.
   - Other modules under `src/glmax/infer/` are internal numerics seams, not package-root API.
