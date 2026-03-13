@@ -12,7 +12,7 @@ from jax import lax
 from jax.scipy.special import gammaln
 from jaxtyping import Array, ArrayLike, ScalarLike
 
-from .links import AbstractLink, IdentityLink, LogitLink, LogLink, NBLink, PowerLink
+from .links import AbstractLink, IdentityLink, InverseLink, LogitLink, LogLink, NBLink, PowerLink
 
 
 class ExponentialFamily(eqx.Module):
@@ -465,6 +465,12 @@ class NegativeBinomial(ExponentialFamily):
         Uses $r = 1/\alpha$ and the log-probability parameterization to avoid
         catastrophic cancellation for large counts.
 
+        **Precondition:** `disp > 0`.  When `disp` is zero or below-`tiny`
+        (e.g. passed as the IRLS sentinel `0.0` before dispersion estimation
+        is wired in), it is silently clipped to `jnp.finfo(jnp.float64).tiny`
+        so the result remains finite.  Callers that rely on meaningful
+        likelihood values must supply a positive `disp`.
+
         **Arguments:**
 
         - `y`: count responses, shape `(n,)`.
@@ -475,6 +481,9 @@ class NegativeBinomial(ExponentialFamily):
 
         Scalar negative log-likelihood.
         """
+        # Defensive guard added alongside Gamma work (Phase 4): clip prevents
+        # log(0) when disp arrives as the IRLS sentinel 0.0 before estimation.
+        disp = jnp.maximum(jnp.asarray(disp), jnp.finfo(jnp.float64).tiny)
         log_r = -jnp.log(disp)
         r = jnp.exp(log_r)
         # Compute log_mu in log-domain directly (glink is LogLink: inverse = exp(eta)).
@@ -506,6 +515,10 @@ class NegativeBinomial(ExponentialFamily):
 
         Count samples, shape `(n,)`.
         """
+        # Defensive guard added alongside Gamma work (Phase 4): hard-fail at
+        # boundary so sampling never silently draws from an ill-defined r = inf.
+        if float(jnp.asarray(disp)) <= 0:
+            raise ValueError(f"NegativeBinomial.sample: disp must be > 0, got {disp}")
         key1, key2 = rdm.split(key)
         mu = self.glink.inverse(eta)
         r = 1.0 / disp
@@ -612,3 +625,168 @@ class NegativeBinomial(ExponentialFamily):
 
     def _hlink_hess(self, eta: ArrayLike, alpha: ScalarLike = 0.0) -> Array:
         return -alpha * jnp.exp(eta) / (alpha * jnp.exp(eta) + 1) ** 2
+
+
+class Gamma(ExponentialFamily):
+    r"""Gamma exponential family with density
+
+    $$f(y \mid \mu, \phi) = \frac{y^{1/\phi - 1} \exp(-y / (\mu\phi))}
+    {\Gamma(1/\phi)(\mu\phi)^{1/\phi}}$$
+
+    The mean is $\mu > 0$ and the variance is $\phi \mu^2$.
+
+    The canonical link for Gamma is `InverseLink` ($g(\mu) = 1/\mu$).
+    `estimate_dispersion` is a no-op in this release; dispersion estimation is
+    deferred to a future design.
+    """
+
+    glink: AbstractLink = InverseLink()
+    _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, InverseLink, LogLink]
+    _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
+
+    def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
+        r"""Return scale $\phi = 1$ (Gamma uses identity scale).
+
+        **Arguments:**
+
+        - `X`: design matrix, shape `(n, p)`.
+        - `y`: responses, shape `(n,)`.
+        - `mu`: mean, shape `(n,)`.
+
+        **Returns:**
+
+        Scalar `1.0`.
+        """
+        del X, y, mu
+        return jnp.asarray(1.0)
+        # Note: returning 1.0 means FisherInfoError will compute SE = 1.0 * inv(X'WX),
+        # i.e. SE is not phi-scaled for Gamma. This is the correct deferred behaviour —
+        # dispersion estimation for Gamma is a non-goal in this design. When a future
+        # design adds Gamma dispersion estimation, this method will be updated.
+
+    def negloglikelihood(self, y: ArrayLike, eta: ArrayLike, disp: ScalarLike = 1.0) -> Array:
+        r"""Gamma negative log-likelihood.
+
+        Uses `jax.scipy.stats.gamma.logpdf` with shape $k = 1/\phi$ and
+        scale $\theta = \mu \phi$.
+
+        When `disp <= 0` (e.g. the IRLS sentinel `0.0` before dispersion
+        estimation is wired in), falls back to `1.0` so the objective
+        remains finite.
+
+        **Arguments:**
+
+        - `y`: positive responses, shape `(n,)`.
+        - `eta`: linear predictor, shape `(n,)`.
+        - `disp`: dispersion $\phi > 0$, scalar.
+
+        **Returns:**
+
+        Scalar negative log-likelihood.
+        """
+        safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
+        mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
+        k = 1.0 / safe_disp
+        theta = mu * safe_disp
+        return -jnp.sum(jaxstats.gamma.logpdf(y, a=k, scale=theta))
+
+    def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0) -> Array:
+        r"""Gamma variance $V(\mu) = \phi \mu^2$.
+
+        When `disp <= 0` (e.g. the IRLS sentinel `0.0` on the first step
+        before dispersion estimation is available), falls back to `1.0` so
+        the first-step weights remain finite (equivalent to unit-variance
+        Gamma weights, correct for the InverseLink canonical form).
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`.
+        - `disp`: dispersion $\phi$, scalar.
+
+        **Returns:**
+
+        $\phi \mu^2$, shape `(n,)`.
+        """
+        safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
+        return safe_disp * mu**2
+
+    def canonical_dispersion(self, disp: ScalarLike = 1.0) -> Array:
+        r"""Pass dispersion through unchanged.
+
+        **Arguments:**
+
+        - `disp`: dispersion $\phi$, scalar.
+
+        **Returns:**
+
+        `jnp.asarray(disp)`.
+        """
+        return jnp.asarray(disp)
+
+    def update_dispersion(
+        self,
+        X: ArrayLike,
+        y: ArrayLike,
+        eta: ArrayLike,
+        disp: ScalarLike = 1.0,
+        step_size: ScalarLike = 1.0,
+    ) -> Array:
+        r"""Return dispersion unchanged (estimation deferred).
+
+        **Arguments:**
+
+        - `X`: design matrix (unused).
+        - `y`: responses (unused).
+        - `eta`: linear predictor (unused).
+        - `disp`: current dispersion estimate.
+        - `step_size`: unused.
+
+        **Returns:**
+
+        `jnp.asarray(disp)` unchanged.
+        """
+        del X, y, eta, step_size
+        return self.canonical_dispersion(disp)
+
+    def estimate_dispersion(
+        self,
+        X: ArrayLike,
+        y: ArrayLike,
+        eta: ArrayLike,
+        disp: ScalarLike = 1.0,
+        **kwargs,
+    ) -> Array:
+        r"""Return dispersion unchanged (estimation deferred).
+
+        **Arguments:**
+
+        - `X`: design matrix (unused).
+        - `y`: responses (unused).
+        - `eta`: linear predictor (unused).
+        - `disp`: dispersion to return unchanged.
+
+        **Returns:**
+
+        `jnp.asarray(disp)`.
+        """
+        del X, y, eta
+        return self.canonical_dispersion(disp)
+
+    def sample(self, key: Array, eta: ArrayLike, disp: ScalarLike = 1.0) -> Array:
+        r"""Sample from $\mathrm{Gamma}(k, \theta)$ where $k = 1/\phi$, $\theta = \mu\phi$.
+
+        **Arguments:**
+
+        - `key`: JAX PRNGKey.
+        - `eta`: linear predictor, shape `(n,)`.
+        - `disp`: dispersion $\phi > 0$, scalar.
+
+        **Returns:**
+
+        Positive samples, shape `(n,)`.
+        """
+        mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
+        disp = jnp.clip(jnp.asarray(disp), min=jnp.finfo(float).tiny)
+        k = 1.0 / disp
+        theta = mu * disp
+        return rdm.gamma(key, k, shape=mu.shape) * theta
