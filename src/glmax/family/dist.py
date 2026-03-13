@@ -1,3 +1,6 @@
+# pattern: Mixed (unavoidable)
+# Reason: random generation methods use numpy.random inside eqx.Module subclasses alongside pure JAX compute;
+# this is structural and not worth splitting.
 from abc import abstractmethod
 from typing import ClassVar, List, Tuple, Type
 
@@ -12,7 +15,7 @@ from jax import lax
 from jax.scipy.special import gammaln, xlog1py, xlogy
 from jaxtyping import Array, ArrayLike, ScalarLike
 
-from .links import Identity, Link, Log, Logit, NBlink, Power
+from .links import AbstractLink, IdentityLink, LogitLink, LogLink, NBLink, PowerLink
 
 
 class ExponentialFamily(eqx.Module):
@@ -28,8 +31,8 @@ class ExponentialFamily(eqx.Module):
     : log_prob : log joint density of all observations
     """
 
-    glink: Link
-    _links: ClassVar[List[Type[Link]]]
+    glink: AbstractLink
+    _links: ClassVar[List[Type[AbstractLink]]]
 
     def __check_init__(self):
         if not any([isinstance(self.glink, link) for link in self._links]):
@@ -128,8 +131,8 @@ class Gaussian(ExponentialFamily):
     we can treat normal distribution as one-parameter EF
     """
 
-    glink: Link = Identity()
-    _links: ClassVar[List[Type[Link]]] = [Identity, Log, Power]
+    glink: AbstractLink = IdentityLink()
+    _links: ClassVar[List[Type[AbstractLink]]] = [IdentityLink, LogLink, PowerLink]
 
     def random_gen(self, mu: ArrayLike, scale: ScalarLike = 1.0, alpha: ScalarLike = 0.0) -> Array:
         y = np.random.normal(mu, scale)
@@ -165,11 +168,11 @@ class Binomial(ExponentialFamily):
     glink_der = 1/(p*(1-p)) # use log trick to calculate this
     """
 
-    glink: Link = Logit()
-    _links: ClassVar[List[Type[Link]]] = [
-        Logit,
-        Log,
-        Identity,
+    glink: AbstractLink = LogitLink()
+    _links: ClassVar[List[Type[AbstractLink]]] = [
+        LogitLink,
+        LogLink,
+        IdentityLink,
     ]  # Probit, Cauchy, LogC, CLogLog, LogLog
 
     def random_gen(self, mu: ArrayLike, scale: ScalarLike = 1.0, alpha: ScalarLike = 0.0) -> Array:
@@ -201,8 +204,8 @@ class Binomial(ExponentialFamily):
 
 
 class Poisson(ExponentialFamily):
-    glink: Link = Log()
-    _links: ClassVar[List[Type[Link]]] = [Identity, Log]  # Sqrt
+    glink: AbstractLink = LogLink()
+    _links: ClassVar[List[Type[AbstractLink]]] = [IdentityLink, LogLink]  # Sqrt
 
     def random_gen(self, mu: ArrayLike, scale: ScalarLike = 1.0, alpha: ScalarLike = 0.0) -> Array:
         y = np.random.poisson(mu)
@@ -232,8 +235,8 @@ class NegativeBinomial(ExponentialFamily):
     Now only use Log link (not the canonical link of NB)
     """
 
-    glink: Link = Log()
-    _links: ClassVar[List[Type[Link]]] = [Identity, Log, NBlink, Power]  # CLogLog
+    glink: AbstractLink = LogLink()
+    _links: ClassVar[List[Type[AbstractLink]]] = [IdentityLink, LogLink, NBLink, PowerLink]  # CLogLog
 
     def random_gen(self, mu: jnp.ndarray, scale: ScalarLike = 1.0, alpha: ScalarLike = 0.0) -> np.ndarray:
         r = 1 / alpha

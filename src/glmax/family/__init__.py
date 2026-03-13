@@ -1,3 +1,4 @@
+# pattern: Functional Core
 from .dist import (
     Binomial as Binomial,
     ExponentialFamily as ExponentialFamily,
@@ -6,9 +7,11 @@ from .dist import (
     Poisson as Poisson,
 )
 from .links import (
-    Identity as Identity,
-    Log as Log,
-    Logit as Logit,
-    NBlink as NBlink,
-    Power as Power,
+    AbstractLink as AbstractLink,
+    IdentityLink as IdentityLink,
+    InverseLink as InverseLink,
+    LogitLink as LogitLink,
+    LogLink as LogLink,
+    NBLink as NBLink,
+    PowerLink as PowerLink,
 )

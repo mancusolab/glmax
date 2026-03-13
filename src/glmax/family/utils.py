@@ -1,4 +1,4 @@
-import jax
+import equinox as eqx
 import jax.numpy as jnp
 
 from jax.scipy.special import betainc, expit
@@ -11,14 +11,14 @@ def _clipped_expit(x):
 
 
 def _grad_per_sample(func, x):
-    """Get gradient for each sample
-    x.shape = (n,1), eg. x can be mu or eta
-    need to convert x to (n,) in order to apply vmap and grad
-    """
-    grad_fn = jax.vmap(jax.grad(func))
-    deriv_val = grad_fn(x)
+    """Get gradient for each sample via eqx.filter_vmap + eqx.filter_grad.
 
-    return deriv_val
+    Uses eqx.filter_vmap and eqx.filter_grad instead of raw jax.vmap/jax.grad
+    so that eqx.Module dynamic leaves (e.g. PowerLink.power, NBLink.alpha) are
+    partitioned correctly and never treated as a vmap batch axis under nested
+    vmap transforms.
+    """
+    return eqx.filter_vmap(eqx.filter_grad(func))(x)
 
 
 def t_cdf(value: ArrayLike, df: float, loc: ArrayLike = 0.0, scale: ArrayLike = 1.0):
