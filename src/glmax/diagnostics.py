@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-from glmax import FittedGLM
-from glmax._fit import validate_fit_result
-from glmax._fit.types import _matches_fit_result_shape, _matches_fitted_glm_shape
+from ._fit import (
+    FittedGLM,
+    validate_fit_result,
+)
 
 
 __all__ = ["Diagnostics", "check"]
@@ -18,9 +19,8 @@ class Diagnostics(NamedTuple):
 
 def check(fitted: FittedGLM) -> Diagnostics:
     """Placeholder model-fit assessment seam over fit artifacts."""
-    if not _matches_fitted_glm_shape(fitted):
+    if not isinstance(fitted, FittedGLM):
         raise TypeError("check(...) expects `fitted` to be a FittedGLM instance.")
-    if not _matches_fit_result_shape(fitted.result):
-        raise TypeError("check(...) expects `fitted.result` to be a FitResult instance.")
+
     validate_fit_result(fitted.result)
     return Diagnostics()

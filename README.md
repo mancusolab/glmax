@@ -12,7 +12,7 @@ The canonical workflow is:
 
 The canonical nouns are `GLMData`, `Params`, `FitResult`, `FittedGLM`, `InferenceResult`, and `Diagnostics`.
 The package-root also exports inference strategy and stderr types:
-`AbstractInferrer`, `WaldInferrer`, `ScoreInferrer`,
+`AbstractTest`, `WaldTest`, `ScoreTest`,
 `AbstractStdErrEstimator`, `FisherInfoError`, and `HuberError`.
 
 ## Installation

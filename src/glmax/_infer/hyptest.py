@@ -5,23 +5,22 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING
 
 import equinox as eqx
 import jax.numpy as jnp
 
+from jax import Array
 from jax.scipy.stats import norm
+from jaxtyping import ArrayLike
 
-from .._fit import validate_fit_result
-from .._fit.types import _matches_fit_result_shape, _matches_fitted_glm_shape
-from .infer import InferenceResult, wald_test
+from .._fit import FittedGLM
+from ..family import ExponentialFamily, Gaussian
+from ..family.utils import t_cdf
 from .stderr import AbstractStdErrEstimator
+from .types import InferenceResult
 
 
-if TYPE_CHECKING:
-    from .. import FittedGLM
-
-__all__ = ["AbstractTest", "WaldTest", "ScoreTest", "DEFAULT_INFERRER"]
+__all__ = ["AbstractTest", "WaldTest", "ScoreTest"]
 
 
 class AbstractTest(eqx.Module, strict=True):
@@ -51,25 +50,22 @@ class WaldTest(AbstractTest, strict=True):
 
     def __call__(
         self,
-        fitted: "FittedGLM",
+        fitted: FittedGLM,
         stderr: AbstractStdErrEstimator,
     ) -> InferenceResult:
-        if not _matches_fitted_glm_shape(fitted):
-            raise TypeError("WaldInferrer expects `fitted` to be a FittedGLM instance.")
+        if not isinstance(fitted, FittedGLM):
+            raise TypeError("WaldTest(...) expects `fitted` to be a FittedGLM instance.")
         if not isinstance(stderr, AbstractStdErrEstimator):
-            raise TypeError("WaldInferrer expects `stderr` to be an AbstractStdErrEstimator instance.")
+            raise TypeError("WaldTest(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
 
         fit_result = fitted.result
-        if not _matches_fit_result_shape(fit_result):
-            raise TypeError("WaldInferrer expects `fitted.result` to be a FitResult instance.")
-        validate_fit_result(fit_result)
 
-        beta = jnp.asarray(fit_result.params.beta)
-        covariance = jnp.asarray(stderr(fitted))
+        beta = fit_result.beta
+        covariance = stderr(fitted)
         se = jnp.sqrt(jnp.diag(covariance))
         stat = beta / se
         df = int(fit_result.eta.shape[0] - beta.shape[0])
-        p = wald_test(stat, df, fitted.model.family)
+        p = _wald_test(stat, df, fitted.model.family)
 
         return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
 
@@ -90,15 +86,15 @@ class ScoreTest(AbstractTest, strict=True):
 
     def __call__(
         self,
-        fitted: "FittedGLM",
+        fitted: FittedGLM,
         stderr: AbstractStdErrEstimator,
     ) -> InferenceResult:
-        del stderr
-        if not _matches_fitted_glm_shape(fitted):
-            raise TypeError("ScoreInferrer expects `fitted` to be a FittedGLM instance.")
+        if not isinstance(fitted, FittedGLM):
+            raise TypeError("ScoreTest(...) expects `fitted` to be a FittedGLM instance.")
+        if not isinstance(stderr, AbstractStdErrEstimator):
+            raise TypeError("ScoreTest(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
 
         fit_result = fitted.result
-        validate_fit_result(fit_result)
 
         X = fit_result.X
         y = fit_result.y
@@ -108,11 +104,13 @@ class ScoreTest(AbstractTest, strict=True):
         beta = jnp.asarray(fit_result.params.beta)
         phi = jnp.asarray(fitted.model.family.scale(X, y, mu))
         if not bool(jnp.isfinite(phi)) or float(phi) <= 0.0:
-            raise ValueError("ScoreInferrer requires family.scale(X, y, mu) to be finite and > 0.")
+            raise ValueError("ScoreTest requires family.scale(X, y, mu) to be finite and > 0.")
+
         numerator = X.T @ (glm_wt * score_residual)
         fisher_diag = jnp.sum(X * (glm_wt[:, jnp.newaxis] * X), axis=0)
         if not bool(jnp.all(jnp.isfinite(fisher_diag))) or not bool(jnp.all(fisher_diag > 0.0)):
-            raise ValueError("ScoreInferrer requires the Fisher information diagonal to be finite and > 0.")
+            raise ValueError("ScoreTest requires the Fisher information diagonal to be finite and > 0.")
+
         stat = numerator / jnp.sqrt(phi * fisher_diag)
         p = 2.0 * norm.sf(jnp.abs(stat))
         se = jnp.full(beta.shape, jnp.nan)
@@ -120,4 +118,22 @@ class ScoreTest(AbstractTest, strict=True):
         return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
 
 
-DEFAULT_INFERRER: AbstractTest = WaldTest()
+def _wald_test(statistic: ArrayLike, df: int, family: ExponentialFamily) -> Array:
+    r"""Two-sided Wald test p-values.
+
+    Uses a $t_{df}$ distribution for Gaussian families and $\mathcal{N}(0, 1)$
+    for all others.
+
+    **Arguments:**
+
+    - `statistic`: test statistics $\hat\beta / \mathrm{SE}(\hat\beta)$, shape `(p,)`.
+    - `df`: residual degrees of freedom $n - p$.
+    - `family`: fitted `ExponentialFamily` instance.
+
+    **Returns:**
+
+    Two-sided p-values, shape `(p,)`.
+    """
+    if isinstance(family, Gaussian):
+        return 2 * t_cdf(-jnp.abs(statistic), df)
+    return 2 * norm.sf(jnp.abs(statistic))

@@ -23,9 +23,9 @@ Data and parameter contracts are explicit nouns:
 
 Package-root inference helpers are also public:
 
-- `AbstractInferrer`
-- `WaldInferrer`
-- `ScoreInferrer`
+- `AbstractTest`
+- `WaldTest`
+- `ScoreTest`
 - `AbstractStdErrEstimator`
 - `FisherInfoError`
 - `HuberError`

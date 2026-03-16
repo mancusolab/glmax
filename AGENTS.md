@@ -5,7 +5,7 @@
 
 ## Contracts
 - **Exposes**:
-  - Package-root API from `src/glmax/__init__.py`: `GLMData`, `Params`, `GLM`, `Fitter`, `FitResult`, `FittedGLM`, `InferenceResult`, `Diagnostics`, `AbstractInferrer`, `WaldInferrer`, `ScoreInferrer`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `specify`, `predict`, `fit`, `infer`, `check`.
+  - Package-root API from `src/glmax/__init__.py`: `GLMData`, `Params`, `GLM`, `Fitter`, `FitResult`, `FittedGLM`, `InferenceResult`, `Diagnostics`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `specify`, `predict`, `fit`, `infer`, `check`.
   - Family and link implementations from `src/glmax/family/__init__.py`.
   - User-facing grammar docs in `README.md`, `docs/index.md`, and `docs/api/glm.md`.
 - **Guarantees**:

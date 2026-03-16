@@ -62,7 +62,7 @@ import equinox as eqx
 import pytest
 
 import glmax
-from glmax import InferenceResult
+from glmax._infer import InferenceResult
 from glmax._infer.infer import infer as legacy_infer
 # Internal imports: testing strategy objects directly, not the public glmax.* surface
 from glmax._infer.hyptest import WaldTest, ScoreTest, AbstractTest

@@ -152,7 +152,7 @@ class CGSolver(AbstractLinearSolver):
     - Convergence may degrade on poorly conditioned systems depending on tolerance settings.
     """
 
-    solver: lx.AbstractLinearSolver = lx.NormalCG(atol=1e-5, rtol=1e-5)
+    solver: lx.AbstractLinearSolver = lx.Normal(lx.CG(atol=1e-5, rtol=1e-5))
 
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         w_half = jnp.sqrt(weights)

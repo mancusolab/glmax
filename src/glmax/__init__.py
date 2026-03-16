@@ -14,20 +14,16 @@ from ._fit import (
 )
 from ._infer import (
     AbstractStdErrEstimator as AbstractStdErrEstimator,
-    AbstractTest as AbstractInferrer,
     AbstractTest as AbstractTest,
-    check as check,
     FisherInfoError as FisherInfoError,
     HuberError as HuberError,
     infer as infer,
     InferenceResult as InferenceResult,
-    ScoreTest as ScoreInferrer,
     ScoreTest as ScoreTest,
-    WaldTest as WaldInferrer,
     WaldTest as WaldTest,
 )
 from .data import GLMData as GLMData
-from .diagnostics import Diagnostics as Diagnostics
+from .diagnostics import check as check, Diagnostics as Diagnostics
 from .glm import GLM as GLM, specify as specify
 
 
@@ -44,9 +40,9 @@ __all__ = [
     "FittedGLM",
     "InferenceResult",
     "Diagnostics",
-    "AbstractInferrer",
-    "WaldInferrer",
-    "ScoreInferrer",
+    "AbstractTest",
+    "WaldTest",
+    "ScoreTest",
     "AbstractStdErrEstimator",
     "FisherInfoError",
     "HuberError",

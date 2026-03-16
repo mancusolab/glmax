@@ -2,65 +2,21 @@
 
 from __future__ import annotations
 
-from typing import NamedTuple, TYPE_CHECKING
-
-import jax.numpy as jnp
-
-from jax import Array
-from jax.scipy.stats import norm
-from jaxtyping import ArrayLike
-
-from .. import FittedGLM, Params
-from .._fit.types import _matches_fit_result_shape, _matches_fitted_glm_shape
-from ..family.dist import ExponentialFamily, Gaussian
-from ..family.utils import t_cdf
+from .._fit import (
+    FittedGLM,
+)
+from .hyptest import AbstractTest, WaldTest
 from .stderr import AbstractStdErrEstimator, FisherInfoError
+from .types import InferenceResult
 
 
-if TYPE_CHECKING:
-    pass
-
-
-__all__ = ["InferenceResult", "infer", "wald_test"]
-
-
-DEFAULT_STDERR: AbstractStdErrEstimator = FisherInfoError()
-
-
-class InferenceResult(NamedTuple):
-    """Canonical _infer verb output contract."""
-
-    params: Params
-    se: Array
-    stat: Array
-    p: Array
-
-
-def wald_test(statistic: ArrayLike, df: int, family: ExponentialFamily) -> Array:
-    r"""Two-sided Wald test p-values.
-
-    Uses a $t_{df}$ distribution for Gaussian families and $\mathcal{N}(0, 1)$
-    for all others.
-
-    **Arguments:**
-
-    - `statistic`: test statistics $\hat\beta / \mathrm{SE}(\hat\beta)$, shape `(p,)`.
-    - `df`: residual degrees of freedom $n - p$.
-    - `family`: fitted `ExponentialFamily` instance.
-
-    **Returns:**
-
-    Two-sided p-values, shape `(p,)`.
-    """
-    if isinstance(family, Gaussian):
-        return 2 * t_cdf(-jnp.abs(statistic), df)
-    return 2 * norm.sf(jnp.abs(statistic))
+__all__ = ["infer"]
 
 
 def infer(
     fitted: FittedGLM,
-    inferrer=None,
-    stderr: AbstractStdErrEstimator = DEFAULT_STDERR,
+    inferrer: AbstractTest = WaldTest(),
+    stderr: AbstractStdErrEstimator = FisherInfoError(),
 ) -> InferenceResult:
     """Inferential summaries from fit artifacts without refitting.
 
@@ -78,21 +34,15 @@ def infer(
     **Raises:**
 
     - `TypeError`: if `fitted` is not a `FittedGLM`, `fitted.result` is not a
-      `FitResult`, `inferrer` is not an `AbstractInferrer`, or `stderr` is not
+      `FitResult`, `inferrer` is not an `AbstractTest`, or `stderr` is not
       an `AbstractStdErrEstimator`.
     """
-    from .hyptest import AbstractTest as _AbstractInferrer, DEFAULT_INFERRER as _DEFAULT_INFERRER
 
-    if inferrer is None:
-        inferrer = _DEFAULT_INFERRER
-
-    if not _matches_fitted_glm_shape(fitted):
-        raise TypeError("_infer(...) expects `fitted` to be a FittedGLM instance.")
-    if not _matches_fit_result_shape(fitted.result):
-        raise TypeError("_infer(...) expects `fitted.result` to be a FitResult instance.")
-    if not isinstance(inferrer, _AbstractInferrer):
-        raise TypeError("_infer(...) expects `inferrer` to be an AbstractInferrer instance.")
+    if not isinstance(fitted, FittedGLM):
+        raise TypeError("infer(...) expects `fitted` to be a FittedGLM instance.")
+    if not isinstance(inferrer, AbstractTest):
+        raise TypeError("infer(...) expects `inferrer` to be an AbstractTest instance.")
     if not isinstance(stderr, AbstractStdErrEstimator):
-        raise TypeError("_infer(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
+        raise TypeError("infer(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
 
     return inferrer(fitted, stderr)
