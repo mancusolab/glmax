@@ -18,7 +18,6 @@ __pycache__/*
 *.tsv
 
 # planning
-docs/design-plans
 docs/implementation-plans
 
 # generated docs
