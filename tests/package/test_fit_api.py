@@ -186,11 +186,11 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     result = glmax.fit(model, data, init=init, fitter=DummyFitter())
 
     assert isinstance(result, FittedGLM)
-    assert result.model is model
-    assert result.result is expected
-    assert seen["model"] is model
-    assert seen["data"] is data
-    assert seen["init"] is init
+    assert bool(eqx.tree_equal(result.model, model))
+    assert bool(eqx.tree_equal(result.result, expected))
+    assert isinstance(seen["model"], glmax.GLM)
+    assert isinstance(seen["data"], GLMData)
+    assert isinstance(seen["init"], Params)
 
 
 def test_fit_rejects_non_fitter_with_deterministic_error() -> None:

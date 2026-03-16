@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import equinox as eqx
 import jax.numpy as jnp
 
 from ..data import GLMData
@@ -19,6 +20,7 @@ from .types import (
 __all__ = ["fit", "predict"]
 
 
+@eqx.filter_jit
 def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: AbstractFitter = IRLSFitter()) -> FittedGLM:
     """Canonical public fit verb over grammar nouns."""
 
@@ -39,6 +41,7 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Abstra
     return FittedGLM(model=model, result=result)
 
 
+@eqx.filter_jit
 def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:
     """Pure prediction verb over grammar nouns."""
 

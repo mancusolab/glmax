@@ -52,10 +52,10 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     result = glmax.fit(model, data, init=init, fitter=RecordingFitter())
 
     assert isinstance(result, current_fitted_glm_type)
-    assert result.result is expected
-    assert seen["model"] is model
-    assert seen["data"] is data
-    assert seen["init"] is init
+    assert bool(eqx.tree_equal(result.result, expected))
+    assert isinstance(seen["model"], glmax.GLM)
+    assert isinstance(seen["data"], GLMData)
+    assert isinstance(seen["init"], Params)
 
 
 def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
