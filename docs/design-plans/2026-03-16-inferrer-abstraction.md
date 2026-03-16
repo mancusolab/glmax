@@ -140,7 +140,7 @@ Draft
 ## Risks and Open Questions
 | ID | Risk or Question | Severity | Mitigation or Next Step | Owner |
 | --- | --- | --- | --- | --- |
-| R1 | `ScoreInferrer` uses `glm_wt` at convergence, not at the null. For tests of individual coefficients at MLE this is correct, but callers may expect a restricted-model score test. | low | Document that `ScoreInferrer` is an MLE-point score test, not a restricted-model Rao test. | |
+| R1 | `ScoreInferrer` uses `glm_wt` at convergence, not at the null. Callers may expect a restricted-model Rao score test instead of an MLE-point score-style diagnostic. | medium | Accepted for this branch. Document that `ScoreInferrer` is an MLE-point score-style statistic, not a restricted-model Rao test, and validate it against its direct formula rather than Wald equivalence. | |
 | R2 | `InferenceResult.z → stat` is a breaking change for any downstream code using the attribute by name. | medium | Single-phase rename; note in changelog. No migration shim — YAGNI. | |
 | R3 | `AbstractStdErrEstimator` and friends are now public; their `strict=True` eqx.Module constraint limits subclassing flexibility. | low | Accepted; follows existing `AbstractStdErrEstimator` precedent. | |
 
@@ -162,10 +162,11 @@ Draft
 - **inferrer-abstraction.AC2.4 Failure:** non-`FittedGLM` first arg raises `TypeError`
 
 ### inferrer-abstraction.AC3: `ScoreInferrer` correctness
-- **inferrer-abstraction.AC3.1 Success:** `ScoreInferrer()(fitted, stderr)` returns `InferenceResult` with `stat` finite, `p` in `[0,1]`, `se` all-NaN
+- **inferrer-abstraction.AC3.1 Success:** for regular fitted models with positive finite scale/information, `ScoreInferrer()(fitted, stderr)` returns `InferenceResult` with `stat` finite, `p` in `[0,1]`, `se` all-NaN
 - **inferrer-abstraction.AC3.2 Success:** `ScoreInferrer` does not call `stderr` (verified via mock or counter)
 - **inferrer-abstraction.AC3.3 Success:** `stat` shape matches `(p,)` for all supported families
-- **inferrer-abstraction.AC3.4 Edge:** Gaussian family produces valid two-sided p-values from score statistic
+- **inferrer-abstraction.AC3.4 Edge:** for Gaussian, `ScoreInferrer` matches the direct MLE-point score-style formula `Xᵀ (glm_wt * score_residual) / sqrt(phi * diag(Xᵀ diag(glm_wt) X))` and produces valid two-sided p-values
+- **inferrer-abstraction.AC3.5 Failure:** degenerate scale or Fisher information raises `ValueError` instead of returning invalid statistics
 
 ### inferrer-abstraction.AC4: `infer()` signature and delegation
 - **inferrer-abstraction.AC4.1 Success:** `infer(fitted)` with no extra args produces same result as pre-refactor
