@@ -11,9 +11,9 @@ import jax.numpy as jnp
 import glmax
 
 from glmax import FittedGLM, GLMData, InferenceResult, Params
+from glmax._infer.hyptest import ScoreTest, WaldTest
+from glmax._infer.stderr import AbstractStdErrEstimator, HuberError
 from glmax.family import Gaussian
-from glmax.infer.inferrer import ScoreInferrer, WaldInferrer
-from glmax.infer.stderr import AbstractStdErrEstimator, HuberError
 
 
 def unchecked_fit_result(base, **overrides: object):
@@ -164,10 +164,10 @@ def test_infer_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
     fitted = _make_fitted()
 
     def fail_irls(*_args, **_kwargs):
-        raise AssertionError("infer.optimize.irls should never be called by infer(...).")
+        raise AssertionError("_fit.irls.irls should never be called by _infer(...).")
 
-    infer_optimize = importlib.import_module("glmax.infer.optimize")
-    monkeypatch.setattr(infer_optimize, "irls", fail_irls)
+    irls_module = importlib.import_module("glmax._fit.irls")
+    monkeypatch.setattr(irls_module, "irls", fail_irls)
 
     inferred = glmax.infer(fitted)
     assert isinstance(inferred, InferenceResult)
@@ -177,7 +177,7 @@ def test_infer_default_inferrer_matches_explicit_wald_inferrer() -> None:
     fitted = _make_fitted()
 
     result_default = glmax.infer(fitted)
-    result_explicit = glmax.infer(fitted, inferrer=WaldInferrer())
+    result_explicit = glmax.infer(fitted, inferrer=WaldTest())
 
     assert jnp.allclose(result_default.stat, result_explicit.stat)
     assert jnp.allclose(result_default.se, result_explicit.se)
@@ -187,7 +187,7 @@ def test_infer_default_inferrer_matches_explicit_wald_inferrer() -> None:
 def test_infer_routes_to_score_inferrer_when_specified() -> None:
     fitted = _make_fitted()
 
-    result = glmax.infer(fitted, inferrer=ScoreInferrer())
+    result = glmax.infer(fitted, inferrer=ScoreTest())
 
     assert isinstance(result, InferenceResult)
     assert jnp.all(jnp.isnan(result.se))
@@ -222,11 +222,11 @@ def test_infer_accepts_huber_error_stderr_estimator() -> None:
 
 
 def test_inferrer_types_are_importable_from_top_level_glmax() -> None:
-    from glmax import AbstractInferrer, ScoreInferrer, WaldInferrer  # noqa: F401
+    from glmax import AbstractTest, ScoreTest, WaldTest  # noqa: F401
 
-    assert AbstractInferrer is not None
-    assert WaldInferrer is not None
-    assert ScoreInferrer is not None
+    assert AbstractTest is not None
+    assert WaldTest is not None
+    assert ScoreTest is not None
 
 
 def test_stderr_types_are_importable_from_top_level_glmax() -> None:

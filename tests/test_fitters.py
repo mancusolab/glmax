@@ -12,7 +12,7 @@ import jax.random as jr
 
 import glmax
 
-from glmax import FitResult, FittedGLM, GLMData, Params
+from glmax import FitResult, Fitter, GLMData, Params
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
 
@@ -45,8 +45,9 @@ def _make_fit_result() -> FitResult:
 def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     seen: dict[str, object] = {}
     expected = _make_fit_result()
+    current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
 
-    class RecordingFitter:
+    class RecordingFitter(Fitter, strict=True):
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             seen["model"] = model
             seen["data"] = data
@@ -59,7 +60,7 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
 
     result = glmax.fit(model, data, init=init, fitter=RecordingFitter())
 
-    assert isinstance(result, FittedGLM)
+    assert isinstance(result, current_fitted_glm_type)
     assert result.result is expected
     assert seen["model"] is model
     assert seen["data"] is data
@@ -67,7 +68,7 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
 
 
 def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
-    class BadFitter:
+    class BadFitter(Fitter, strict=True):
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> object:
             del model, data, init
             return object()
@@ -95,7 +96,7 @@ _GAMMA_X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     ],
 )
 def test_default_fitter_returns_canonical_fitresult_for_supported_families(family, X, y) -> None:
-    current_fitted_glm_type = importlib.import_module("glmax.fit").FittedGLM
+    current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
     model = glmax.specify(family=family)
     data = GLMData(X=X, y=y)
 
@@ -112,7 +113,7 @@ def test_default_fitter_returns_canonical_fitresult_for_supported_families(famil
 def test_fit_rejects_custom_fitter_result_with_malformed_contract() -> None:
     malformed = unchecked_fit_result(_make_fit_result(), objective="bad")
 
-    class BadFitter:
+    class BadFitter(Fitter, strict=True):
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             del model, data, init
             return malformed
@@ -125,8 +126,9 @@ def test_fit_rejects_custom_fitter_result_with_malformed_contract() -> None:
 
 
 def test_negative_binomial_fit_does_not_run_poisson_warm_start(monkeypatch) -> None:
-    fit_module = importlib.import_module("glmax.fit")
-    original_irls = fit_module.irls
+    irls_module = importlib.import_module("glmax._fit.irls")
+    fit_module = importlib.import_module("glmax._fit")
+    original_irls = irls_module.irls
     seen_families: list[str] = []
 
     def recording_irls(
@@ -135,7 +137,7 @@ def test_negative_binomial_fit_does_not_run_poisson_warm_start(monkeypatch) -> N
         seen_families.append(type(family).__name__)
         return original_irls(X, y, family, solver, eta, max_iter, tol, step_size, offset_eta, disp_init)
 
-    monkeypatch.setattr(fit_module, "irls", recording_irls)
+    monkeypatch.setattr(irls_module, "irls", recording_irls)
 
     model = glmax.specify(family=NegativeBinomial())
     data = GLMData(X=_DEFAULT_X, y=jnp.array([0.0, 1.0, 2.0, 4.0]))
@@ -162,8 +164,8 @@ def _make_gaussian_xy(n: int = 30, p: int = 2, seed: int = 0):
 
 def test_irls_jit_matches_eager():
     """irls is JIT-safe: filter_jit output matches eager output numerically."""
-    from glmax.infer.optimize import irls
-    from glmax.infer.solve import CholeskySolver
+    from glmax._fit.irls import irls
+    from glmax._fit.solve import CholeskySolver
 
     X, y = _make_gaussian_xy()
     family = Gaussian()
@@ -186,7 +188,7 @@ def test_irls_jit_matches_eager():
 
 def test_fisher_info_error_jit_is_finite():
     """FisherInfoError is JIT-safe: filter_jit output is finite."""
-    from glmax.infer.stderr import FisherInfoError
+    from glmax._infer.stderr import FisherInfoError
 
     X, y = _make_gaussian_xy()
     family = Gaussian()
@@ -206,7 +208,7 @@ def test_fisher_info_error_jit_is_finite():
 
 
 def test_huber_error_is_finite_and_symmetric() -> None:
-    from glmax.infer.stderr import HuberError
+    from glmax._infer.stderr import HuberError
 
     X, y = _make_gaussian_xy()
     model = glmax.specify(family=Gaussian())
@@ -221,7 +223,7 @@ def test_huber_error_is_finite_and_symmetric() -> None:
 @pytest.mark.parametrize("family", [Gaussian(), Poisson()])
 def test_wald_test_jit_is_finite(family):
     """wald_test is JIT-safe for Gaussian and Poisson: filter_jit output is finite."""
-    from glmax.infer.inference import wald_test
+    from glmax._infer.infer import wald_test
 
     stat = jnp.array([2.0, -1.5, 0.5])
 

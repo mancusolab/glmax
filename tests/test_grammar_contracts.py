@@ -44,7 +44,7 @@ def unchecked_fitted(base: FittedGLM, **overrides: object) -> FittedGLM:
     ],
 )
 def test_grammar_contract_matrix_across_all_verbs(family, y) -> None:
-    current_fitted_glm_type = importlib.import_module("glmax.fit").FittedGLM
+    current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
     model = glmax.specify(family=family)
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), y=y)
 
@@ -118,11 +118,8 @@ def test_dead_modules_are_not_importable() -> None:
     with pytest.raises(ModuleNotFoundError):
         importlib.import_module("glmax.predict")  # the stub module, not the verb
 
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.infer.tests")
-
 
 def test_wald_test_importable_from_infer_inference() -> None:
-    from glmax.infer.inference import wald_test
+    from glmax._infer.infer import wald_test
 
     assert callable(wald_test)

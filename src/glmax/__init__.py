@@ -4,8 +4,7 @@ from importlib.metadata import version  # pragma: no cover
 
 import jax
 
-from .data import GLMData as GLMData
-from .fit import (
+from ._fit import (
     fit as fit,
     FitResult as FitResult,
     FittedGLM as FittedGLM,
@@ -13,20 +12,23 @@ from .fit import (
     Params as Params,
     predict as predict,
 )
-from .glm import GLM as GLM, specify as specify
-from .infer import check as check, infer as infer
-from .infer.diagnostics import Diagnostics as Diagnostics
-from .infer.inference import InferenceResult as InferenceResult
-from .infer.inferrer import (
-    AbstractInferrer as AbstractInferrer,
-    ScoreInferrer as ScoreInferrer,
-    WaldInferrer as WaldInferrer,
-)
-from .infer.stderr import (
+from ._infer import (
     AbstractStdErrEstimator as AbstractStdErrEstimator,
+    AbstractTest as AbstractInferrer,
+    AbstractTest as AbstractTest,
+    check as check,
     FisherInfoError as FisherInfoError,
     HuberError as HuberError,
+    infer as infer,
+    InferenceResult as InferenceResult,
+    ScoreTest as ScoreInferrer,
+    ScoreTest as ScoreTest,
+    WaldTest as WaldInferrer,
+    WaldTest as WaldTest,
 )
+from .data import GLMData as GLMData
+from .diagnostics import Diagnostics as Diagnostics
+from .glm import GLM as GLM, specify as specify
 
 
 jax.config.update("jax_enable_x64", True)  # noqa: E402

@@ -1,6 +1,6 @@
 # pattern: Functional Core
 
-"""Internal standard-error estimators used by GLM fit/infer kernels."""
+"""Internal standard-error estimators used by GLM fit/_infer kernels."""
 
 from abc import abstractmethod
 from typing import TYPE_CHECKING
@@ -13,12 +13,12 @@ from jax.numpy import linalg as jnpla
 
 
 if TYPE_CHECKING:
-    from ..fit import FittedGLM
+    from .. import FittedGLM
 
 
 class AbstractStdErrEstimator(eqx.Module, strict=True):
     """
-    Base protocol for covariance estimators used by `infer(fitted, stderr=...)`.
+    Base protocol for covariance estimators used by `_infer(fitted, stderr=...)`.
     """
 
     @abstractmethod

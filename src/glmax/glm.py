@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import equinox as eqx
 
+from glmax._fit.solve import AbstractLinearSolver, CholeskySolver
+
 from .family.dist import ExponentialFamily, Gaussian
-from .infer.solve import AbstractLinearSolver, CholeskySolver
 
 
 class GLM(eqx.Module):

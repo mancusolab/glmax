@@ -82,7 +82,7 @@ DEFAULT_STDERR: AbstractStdErrEstimator = FisherInfoError()
 
 
 class InferenceResult(NamedTuple):
-    """Canonical infer verb output contract."""
+    """Canonical _infer verb output contract."""
 
     params: Params
     se: Array
@@ -123,13 +123,13 @@ def infer(
         inferrer = _DEFAULT_INFERRER
 
     if not _matches_fitted_glm_shape(fitted):
-        raise TypeError("infer(...) expects `fitted` to be a FittedGLM instance.")
+        raise TypeError("_infer(...) expects `fitted` to be a FittedGLM instance.")
     if not _matches_fit_result_shape(fitted.result):
-        raise TypeError("infer(...) expects `fitted.result` to be a FitResult instance.")
+        raise TypeError("_infer(...) expects `fitted.result` to be a FitResult instance.")
     if not isinstance(inferrer, _AbstractInferrer):
-        raise TypeError("infer(...) expects `inferrer` to be an AbstractInferrer instance.")
+        raise TypeError("_infer(...) expects `inferrer` to be an AbstractInferrer instance.")
     if not isinstance(stderr, AbstractStdErrEstimator):
-        raise TypeError("infer(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
+        raise TypeError("_infer(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
 
     return inferrer(fitted, stderr)
 ```
@@ -177,7 +177,7 @@ def infer(
     inferrer: "AbstractInferrer" = None,
     stderr: "AbstractStdErrEstimator" = None,
 ) -> "InferenceResult":
-    """Canonical infer verb entrypoint."""
+    """Canonical _infer verb entrypoint."""
     from .inference import infer as _infer
 
     kwargs = {}
@@ -276,7 +276,7 @@ __all__ = [
     "specify",
     "predict",
     "fit",
-    "infer",
+    "_infer",
     "check",
 ]
 ```
@@ -329,7 +329,7 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
         "specify",
         "predict",
         "fit",
-        "infer",
+        "_infer",
         "check",
     }
 ```
@@ -345,7 +345,7 @@ def test_infer_signature_matches_canonical_surface() -> None:
     assert sig.parameters["fitted"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["inferrer"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["stderr"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-    # inferrer default must be None (lazy-resolved inside infer() body, not at module load)
+    # inferrer default must be None (lazy-resolved inside _infer() body, not at module load)
     assert sig.parameters["inferrer"].default is None
 ```
 
@@ -378,8 +378,8 @@ Add these tests at the end of the file. Start by updating the import block at th
 ```python
 from glmax import FittedGLM, GLMData, InferenceResult, Params
 from glmax.family import Gaussian
-from glmax.infer.inferrer import ScoreInferrer, WaldInferrer
-from glmax.infer.stderr import AbstractStdErrEstimator, HuberError
+from glmax._infer.hyptest import ScoreTest, WaldTest
+from glmax._infer.stderr import AbstractStdErrEstimator, HuberError
 ```
 
 Then add the following test functions.
@@ -451,11 +451,11 @@ Add a new assertion to the existing `test_infer_rejects_invalid_model_and_result
 
 ```python
 def test_inferrer_types_are_importable_from_top_level_glmax() -> None:
-    from glmax import AbstractInferrer, WaldInferrer, ScoreInferrer  # noqa: F401
+    from glmax import AbstractTest, WaldTest, ScoreTest  # noqa: F401
 
-    assert AbstractInferrer is not None
-    assert WaldInferrer is not None
-    assert ScoreInferrer is not None
+    assert AbstractTest is not None
+    assert WaldTest is not None
+    assert ScoreTest is not None
 
 
 def test_stderr_types_are_importable_from_top_level_glmax() -> None:
@@ -474,8 +474,8 @@ Expected: `217 passed` (baseline) + new tests → total passes increase; **zero 
 **Commit:**
 
 ```bash
-git add src/glmax/infer/inference.py \
-        src/glmax/infer/__init__.py \
+git add src/glmax/_infer/infer.py \
+        src/glmax/_infer/__init__.py \
         src/glmax/__init__.py \
         tests/test_fit_api.py \
         tests/test_infer_verbs.py

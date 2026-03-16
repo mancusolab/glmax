@@ -276,7 +276,7 @@ class Gaussian(ExponentialFamily):
 
         **Note on standard errors:** `FisherInfoError` phi-scaling is deferred
         to Phase 5.  Until Phase 5 lands, Gaussian standard errors returned by
-        `infer()` are *not* phi-scaled (they assume $\phi = 1$).
+        `_infer()` are *not* phi-scaled (they assume $\phi = 1$).
 
         **Arguments:**
 

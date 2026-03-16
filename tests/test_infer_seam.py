@@ -9,14 +9,14 @@ import jax.numpy as jnp
 import glmax
 
 from glmax import Diagnostics, FitResult, FittedGLM, GLMData, Params
+from glmax._fit.solve import QRSolver
 from glmax.family import Gaussian
-from glmax.infer.solve import QRSolver
 
 
 STALE_INFER_MODULES = (
-    "glmax.infer.fitter",
-    "glmax.infer.fitters",
-    "glmax.infer.result",
+    "glmax._infer.fitter",
+    "glmax._infer.fitters",
+    "glmax._infer.result",
 )
 
 
@@ -41,16 +41,16 @@ def _make_fit_result() -> FitResult:
     )
 
 
-def test_glm_defaults_to_solver_from_infer_solve() -> None:
+def test_glm_defaults_to_solver_from_fit_solve() -> None:
     model = glmax.GLM()
-    solve_module = importlib.import_module("glmax.infer.solve")
+    solve_module = importlib.import_module("glmax._fit.solve")
 
     assert isinstance(model.solver, solve_module.AbstractLinearSolver)
     assert isinstance(model.solver, solve_module.CholeskySolver)
 
 
 def test_qr_solver_import_path_remains_supported() -> None:
-    solve_module = importlib.import_module("glmax.infer.solve")
+    solve_module = importlib.import_module("glmax._fit.solve")
 
     assert solve_module.QRSolver is QRSolver
     assert isinstance(QRSolver(), solve_module.AbstractLinearSolver)
@@ -58,26 +58,26 @@ def test_qr_solver_import_path_remains_supported() -> None:
 
 def test_duplicate_solver_modules_are_not_importable() -> None:
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.infer.contracts")
+        importlib.import_module("glmax._infer.contracts")
 
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.infer.solvers")
+        importlib.import_module("glmax._infer.solve")
 
 
 def test_legacy_fitter_modules_are_not_importable() -> None:
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.infer.fitter")
+        importlib.import_module("glmax._infer.fitter")
 
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.infer.fitters")
+        importlib.import_module("glmax._infer.fitters")
 
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.infer.result")
+        importlib.import_module("glmax._infer.result")
 
 
 def test_importing_canonical_fit_module_does_not_touch_stale_infer_modules() -> None:
     _drop_stale_infer_modules()
-    fit_module = importlib.reload(importlib.import_module("glmax.fit"))
+    fit_module = importlib.reload(importlib.import_module("glmax._fit"))
 
     assert not hasattr(fit_module, "_run_default_pipeline")
     assert all(name not in sys.modules for name in STALE_INFER_MODULES)
@@ -85,7 +85,7 @@ def test_importing_canonical_fit_module_does_not_touch_stale_infer_modules() -> 
 
 def test_canonical_fit_execution_does_not_import_stale_infer_modules() -> None:
     _drop_stale_infer_modules()
-    current_fitted_glm_type = importlib.import_module("glmax.fit").FittedGLM
+    current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
 
     result = glmax.fit(
         glmax.GLM(family=Gaussian(), solver=QRSolver()),

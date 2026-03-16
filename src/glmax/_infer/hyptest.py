@@ -1,6 +1,6 @@
 # pattern: Functional Core
 
-"""Inferrer strategies for the `infer()` verb."""
+"""Inferrer strategies for the `_infer()` verb."""
 
 from __future__ import annotations
 
@@ -12,24 +12,20 @@ import jax.numpy as jnp
 
 from jax.scipy.stats import norm
 
-from ..fit import (
-    _matches_fit_result_shape,
-    _matches_fitted_glm_shape,
-    validate_fit_result,
-)
-from .inference import InferenceResult, wald_test
+from .._fit import validate_fit_result
+from .._fit.types import _matches_fit_result_shape, _matches_fitted_glm_shape
+from .infer import InferenceResult, wald_test
 from .stderr import AbstractStdErrEstimator
 
 
 if TYPE_CHECKING:
-    from ..fit import FittedGLM
+    from .. import FittedGLM
+
+__all__ = ["AbstractTest", "WaldTest", "ScoreTest", "DEFAULT_INFERRER"]
 
 
-__all__ = ["AbstractInferrer", "WaldInferrer", "ScoreInferrer", "DEFAULT_INFERRER"]
-
-
-class AbstractInferrer(eqx.Module, strict=True):
-    """Base class for inference strategies used by `infer(fitted, inferrer=...)`."""
+class AbstractTest(eqx.Module, strict=True):
+    """Base class for inference strategies used by `_infer(fitted, inferrer=...)`."""
 
     @abstractmethod
     def __call__(
@@ -50,7 +46,7 @@ class AbstractInferrer(eqx.Module, strict=True):
         """
 
 
-class WaldInferrer(AbstractInferrer, strict=True):
+class WaldTest(AbstractTest, strict=True):
     """Wald (z/t) hypothesis test."""
 
     def __call__(
@@ -78,7 +74,7 @@ class WaldInferrer(AbstractInferrer, strict=True):
         return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
 
 
-class ScoreInferrer(AbstractInferrer, strict=True):
+class ScoreTest(AbstractTest, strict=True):
     """Per-coefficient MLE-point score-style statistic built from fit artifacts.
 
     Computes the per-coefficient score statistic directly from `score_residual`,
@@ -124,4 +120,4 @@ class ScoreInferrer(AbstractInferrer, strict=True):
         return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
 
 
-DEFAULT_INFERRER: AbstractInferrer = WaldInferrer()
+DEFAULT_INFERRER: AbstractTest = WaldTest()

@@ -2,10 +2,10 @@
 """TDD tests for Phase 5 tasks 1–6.
 
 Covers:
-- Task 1: standalone wald_test importable from glmax.infer.inference
-- Task 2: infer() uses standalone wald_test (not model.wald_test)
+- Task 1: standalone wald_test importable from glmax._infer.inference
+- Task 2: _infer() uses standalone wald_test (not model.wald_test)
 - Task 3: FisherInfoError scales covariance by phi
-- Task 4: IRLSFitter in fit.py; DEFAULT_FITTER = IRLSFitter()
+- Task 4: IRLSFitter in fit.py
 - Task 5/6 (AC3 spot checks): GLM stripped to pure noun
 """
 
@@ -24,22 +24,23 @@ from glmax.family import Gaussian, Poisson
 
 
 def test_standalone_wald_test_is_importable():
-    """expfam-port.AC3.5: from glmax.infer.inference import wald_test succeeds."""
-    from glmax.infer.inference import wald_test  # noqa: F401
+    """expfam-port.AC3.5: from glmax._infer.inference import wald_test succeeds."""
+    from glmax._infer.infer import wald_test  # noqa: F401
 
     assert callable(wald_test)
 
 
 def test_standalone_wald_test_is_in_all():
-    """wald_test is exported from glmax.infer.inference.__all__."""
-    from glmax.infer import inference
+    """wald_test is exported from glmax._infer.inference.__all__."""
+    import importlib
 
-    assert "wald_test" in inference.__all__
+    infer_module = importlib.import_module("glmax._infer.infer")
+    assert "wald_test" in infer_module.__all__
 
 
 def test_standalone_wald_test_gaussian_uses_t_distribution():
     """Gaussian wald_test produces p-values in (0, 1] using t-distribution."""
-    from glmax.infer.inference import wald_test
+    from glmax._infer.infer import wald_test
 
     statistic = jnp.array([2.0, -1.5, 0.0])
     p = wald_test(statistic, df=50, family=Gaussian())
@@ -53,7 +54,7 @@ def test_standalone_wald_test_gaussian_uses_t_distribution():
 
 def test_standalone_wald_test_non_gaussian_uses_normal():
     """Non-Gaussian wald_test produces p-values consistent with normal distribution."""
-    from glmax.infer.inference import wald_test
+    from glmax._infer.infer import wald_test
 
     statistic = jnp.array([1.96])
     p_poisson = wald_test(statistic, df=100, family=Poisson())
@@ -62,7 +63,7 @@ def test_standalone_wald_test_non_gaussian_uses_normal():
 
 
 # ---------------------------------------------------------------------------
-# Task 2: infer() uses standalone wald_test (not model.wald_test)
+# Task 2: _infer() uses standalone wald_test (not model.wald_test)
 # ---------------------------------------------------------------------------
 
 
@@ -78,13 +79,13 @@ def _make_gaussian_fit():
 
 
 def test_infer_does_not_call_model_wald_test(monkeypatch):
-    """infer() must not call model.wald_test after Task 2."""
+    """_infer() must not call model.wald_test after Task 2."""
     from glmax.glm import GLM
 
     fitted = _make_gaussian_fit()
 
     def _reject(*_args, **_kwargs):
-        raise AssertionError("model.wald_test should not be called by infer()")
+        raise AssertionError("model.wald_test should not be called by _infer()")
 
     monkeypatch.setattr(GLM, "wald_test", _reject, raising=False)
 
@@ -104,7 +105,7 @@ def test_fisher_info_error_scales_by_phi():
     This renormalization ensures correct SEs for families (like Gaussian) where
     IRLS weights already encode phi in the variance function.
     """
-    from glmax.infer.stderr import FisherInfoError
+    from glmax._infer.stderr import FisherInfoError
 
     n, p = 50, 3
     key = jr.PRNGKey(0)
@@ -154,22 +155,25 @@ def test_gaussian_se_positive_and_finite():
 
 
 def test_irls_fitter_importable_from_fit():
-    """IRLSFitter is importable from glmax.fit."""
-    from glmax.fit import IRLSFitter  # noqa: F401
+    """IRLSFitter is importable from glmax._fit."""
+    from glmax._fit import IRLSFitter  # noqa: F401
 
     assert callable(IRLSFitter)
 
 
-def test_default_fitter_is_irls_fitter():
-    """DEFAULT_FITTER is an IRLSFitter instance."""
-    from glmax.fit import DEFAULT_FITTER, IRLSFitter
+def test_fit_signature_uses_irls_fitter_default():
+    """fit(...) uses an IRLSFitter default directly in the signature."""
+    import inspect
 
-    assert isinstance(DEFAULT_FITTER, IRLSFitter)
+    from glmax._fit import fit, IRLSFitter
+
+    default = inspect.signature(fit).parameters["fitter"].default
+    assert isinstance(default, IRLSFitter)
 
 
 def test_irls_fitter_returns_fit_artifacts_without_inference_summaries():
-    """IRLSFitter produces fit artifacts and leaves summaries to infer()."""
-    from glmax.fit import IRLSFitter
+    """IRLSFitter produces fit artifacts and leaves summaries to _infer()."""
+    from glmax._fit import IRLSFitter
 
     n, p = 50, 3
     key = jr.PRNGKey(0)
@@ -180,7 +184,7 @@ def test_irls_fitter_returns_fit_artifacts_without_inference_summaries():
     fitter = IRLSFitter()
     result = fitter(model, GLMData(X=X, y=y))
 
-    current_fit_result_type = __import__("glmax.fit", fromlist=["FitResult"]).FitResult
+    current_fit_result_type = __import__("glmax._fit", fromlist=["FitResult"]).FitResult
     assert isinstance(result, current_fit_result_type)
     assert bool(jnp.all(jnp.isfinite(result.params.beta)))
     assert not hasattr(result, "se")

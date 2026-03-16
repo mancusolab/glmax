@@ -9,15 +9,16 @@ from pathlib import Path
 
 import pytest
 
+import equinox as eqx
 import jax.numpy as jnp
 import jax.tree_util as jtu
 
 import glmax
 
 from glmax import Diagnostics, FitResult, FittedGLM, Fitter, GLMData, InferenceResult, Params
+from glmax._fit.solve import QRSolver
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 from glmax.glm import specify
-from glmax.infer.solve import QRSolver
 
 
 WORKTREE_ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,13 @@ def test_canonical_contract_imports_exist() -> None:
     assert InferenceResult is not None
     assert Diagnostics is not None
     assert Fitter is not None
+
+
+def test_fitter_is_abstract_equinox_model() -> None:
+    assert issubclass(Fitter, eqx.Module)
+
+    with pytest.raises(TypeError):
+        Fitter()
 
 
 def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
@@ -60,7 +68,7 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
 
 def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
     assert callable(glmax.fit)
-    assert glmax.fit.__module__ == "glmax.fit"
+    assert glmax.fit.__module__ == "glmax._fit.fit"
 
 
 def test_pytest_imports_glmax_from_worktree_src() -> None:
@@ -92,8 +100,8 @@ def test_legacy_fit_state_alias_is_not_publicly_exported() -> None:
     assert "GLMState" not in glmax.__all__
 
 
-def test_infer_shims_are_not_publicly_reexported() -> None:
-    infer_module = importlib.import_module("glmax.infer")
+def test_infer_package_reexports_only_inference_surface() -> None:
+    infer_module = importlib.import_module("glmax._infer")
 
     assert not hasattr(infer_module, "irls")
     assert not hasattr(infer_module, "AbstractFitter")
@@ -101,11 +109,19 @@ def test_infer_shims_are_not_publicly_reexported() -> None:
     assert not hasattr(infer_module, "CholeskySolver")
     assert not hasattr(infer_module, "QRSolver")
     assert not hasattr(infer_module, "CGSolver")
-    assert not hasattr(infer_module, "FisherInfoError")
-    assert not hasattr(infer_module, "HuberError")
+    assert hasattr(infer_module, "InferenceResult")
+    assert hasattr(infer_module, "infer")
+    assert hasattr(infer_module, "wald_test")
+    assert hasattr(infer_module, "check")
+    assert hasattr(infer_module, "AbstractTest")
+    assert hasattr(infer_module, "WaldTest")
+    assert hasattr(infer_module, "ScoreTest")
+    assert hasattr(infer_module, "AbstractStdErrEstimator")
+    assert hasattr(infer_module, "FisherInfoError")
+    assert hasattr(infer_module, "HuberError")
 
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.infer.state")
+        importlib.import_module("glmax._infer.state")
 
 
 def test_family_surface_does_not_expose_hlink_derivative_hooks() -> None:
@@ -153,7 +169,7 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     expected = _make_fit_result()
     seen: dict[str, object] = {}
 
-    class DummyFitter:
+    class DummyFitter(Fitter, strict=True):
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             seen["model"] = model
             seen["data"] = data
@@ -174,11 +190,11 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     assert seen["init"] is init
 
 
-def test_fit_rejects_non_callable_fitter_with_deterministic_error() -> None:
+def test_fit_rejects_non_fitter_with_deterministic_error() -> None:
     model = glmax.GLM()
     data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
 
-    with pytest.raises(TypeError, match=r"expects `fitter` to be callable"):
+    with pytest.raises(TypeError, match=r"expects `fitter` to be a Fitter instance"):
         glmax.fit(model, data, fitter="not-a-fitter")
 
 
@@ -304,7 +320,7 @@ def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
 
 def test_legacy_array_first_fitter_module_is_not_importable() -> None:
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.infer.fitter")
+        importlib.import_module("glmax._infer.fitter")
 
 
 @pytest.mark.parametrize(
@@ -360,7 +376,7 @@ def test_default_fitter_validates_scalar_disp() -> None:
 
 
 def test_fit_rejects_malformed_fitresult_from_custom_fitter() -> None:
-    class BadFitter:
+    class BadFitter(Fitter, strict=True):
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             del model, data, init
             return FitResult(

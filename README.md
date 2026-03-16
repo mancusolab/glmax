@@ -43,7 +43,7 @@ params = fitted.params
 pred = glmax.predict(model, params, data)
 infer_result = glmax.infer(fitted)
 # Route through an explicit inferrer when needed.
-score_result = glmax.infer(fitted, inferrer=glmax.ScoreInferrer())
+score_result = glmax.infer(fitted, inferrer=glmax.ScoreTest())
 diagnostics = glmax.check(fitted)
 ```
 

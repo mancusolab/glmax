@@ -9,6 +9,7 @@ import pytest
 import jax.numpy as jnp
 
 import glmax
+import glmax._fit.types
 
 from glmax import Diagnostics, FittedGLM, GLMData
 from glmax.family import Gaussian
@@ -79,7 +80,7 @@ def test_check_rejects_invalid_fit_artifacts_deterministically() -> None:
                 fitted,
                 result=unchecked_fit_result(
                     fit_result,
-                    params=glmax.Params(beta=["bad"], disp=jnp.array(0.0)),
+                    params=glmax._fit.types.Params(beta=["bad"], disp=jnp.array(0.0)),
                 ),
             ),
         )
@@ -90,7 +91,7 @@ def test_check_rejects_invalid_fit_artifacts_deterministically() -> None:
                 fitted,
                 result=unchecked_fit_result(
                     fit_result,
-                    params=glmax.Params(beta=jnp.array([1.0]), disp=jnp.array(jnp.inf)),
+                    params=glmax._fit.types.Params(beta=jnp.array([1.0]), disp=jnp.array(jnp.inf)),
                 ),
             ),
         )
@@ -100,10 +101,10 @@ def test_check_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
     fitted = _make_fitted()
 
     def fail_irls(*_args, **_kwargs):
-        raise AssertionError("infer.optimize.irls should never be called by check(...).")
+        raise AssertionError("_fit.irls.irls should never be called by check(...).")
 
-    infer_optimize = importlib.import_module("glmax.infer.optimize")
-    monkeypatch.setattr(infer_optimize, "irls", fail_irls)
+    irls_module = importlib.import_module("glmax._fit.irls")
+    monkeypatch.setattr(irls_module, "irls", fail_irls)
 
     diagnostics = glmax.check(fitted)
     assert isinstance(diagnostics, Diagnostics)

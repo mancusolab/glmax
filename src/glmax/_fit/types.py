@@ -1,81 +1,17 @@
-# pattern: Functional Core
-
 from __future__ import annotations
 
-from typing import NamedTuple, Protocol, runtime_checkable, TYPE_CHECKING
+from abc import abstractmethod
+from typing import NamedTuple, TYPE_CHECKING
 
 import equinox as eqx
-import jax.numpy as jnp
 
-from jax import Array
+from jax import Array, numpy as jnp
 
-from .data import GLMData
-from .infer.optimize import irls
+from ..data import GLMData
 
 
 if TYPE_CHECKING:
-    from .glm import GLM
-
-
-__all__ = ["Params", "FitResult", "FittedGLM", "Fitter", "validate_fit_result", "fit", "predict"]
-
-
-def _is_numeric_dtype(array: Array) -> bool:
-    return bool(jnp.issubdtype(array.dtype, jnp.number))
-
-
-def _as_contract_numeric_array(name: str, value: object) -> Array:
-    try:
-        array = jnp.asarray(value)
-    except TypeError as exc:
-        raise TypeError(f"{name} must be numeric.") from exc
-    if not _is_numeric_dtype(array):
-        raise TypeError(f"{name} must be numeric.")
-    return array
-
-
-def _require_contract_finite(name: str, array: Array) -> None:
-    if not bool(jnp.all(jnp.isfinite(array))):
-        raise ValueError(f"{name} must contain only finite values.")
-
-
-def _require_contract_inexact_dtype(name: str, array: Array) -> None:
-    if not bool(jnp.issubdtype(array.dtype, jnp.inexact)):
-        raise TypeError(f"{name} must have an inexact dtype.")
-
-
-def _matches_namedtuple_shape(value: object, *, type_name: str, fields: tuple[str, ...]) -> bool:
-    return (
-        isinstance(value, tuple)
-        and getattr(type(value), "__name__", None) == type_name
-        and tuple(getattr(value, "_fields", ())) == fields
-    )
-
-
-def _matches_fit_result_shape(value: object) -> bool:
-    required_fields = (
-        "params",
-        "X",
-        "y",
-        "eta",
-        "mu",
-        "glm_wt",
-        "converged",
-        "num_iters",
-        "objective",
-        "objective_delta",
-        "score_residual",
-    )
-    return getattr(type(value), "__name__", None) == "FitResult" and all(
-        hasattr(value, name) for name in required_fields
-    )
-
-
-def _matches_fitted_glm_shape(value: object) -> bool:
-    required_fields = ("model", "result")
-    return getattr(type(value), "__name__", None) == "FittedGLM" and all(
-        hasattr(value, name) for name in required_fields
-    )
+    from ..glm import GLM
 
 
 class Params(NamedTuple):
@@ -176,10 +112,7 @@ class FitResult(eqx.Module, strict=True):
             raise ValueError("FitResult.objective must be scalar.")
         _require_contract_finite("FitResult.objective", objective)
 
-        objective_delta = _as_contract_numeric_array(
-            "FitResult.objective_delta",
-            self.objective_delta,
-        )
+        objective_delta = _as_contract_numeric_array("FitResult.objective_delta", self.objective_delta)
         if objective_delta.ndim > 0 and objective_delta.size != 1:
             raise ValueError("FitResult.objective_delta must be scalar.")
         _require_contract_finite("FitResult.objective_delta", objective_delta)
@@ -240,7 +173,7 @@ class FittedGLM(eqx.Module, strict=True):
         return self.result.score_residual
 
     def __check_init__(self) -> None:
-        from .glm import GLM as _GLM
+        from ..glm import GLM as _GLM
 
         if not isinstance(self.model, _GLM):
             raise TypeError("FittedGLM.model must be a GLM instance.")
@@ -249,16 +182,79 @@ class FittedGLM(eqx.Module, strict=True):
         validate_fit_result(self.result)
 
 
-@runtime_checkable
-class Fitter(Protocol):
-    """Callable fit strategy over grammar nouns."""
+class Fitter(eqx.Module, strict=True):
+    """Abstract fit strategy over grammar nouns."""
 
+    @abstractmethod
     def __call__(self, model: GLM, data: GLMData, init: Params | None = None) -> FitResult:
-        ...
+        """Fit `model` against `data` with optional parameter initialisation."""
+
+
+def _is_numeric_dtype(array: Array) -> bool:
+    return bool(jnp.issubdtype(array.dtype, jnp.number))
+
+
+def _as_contract_numeric_array(name: str, value: object) -> Array:
+    try:
+        array = jnp.asarray(value)
+    except TypeError as exc:
+        raise TypeError(f"{name} must be numeric.") from exc
+    if not _is_numeric_dtype(array):
+        raise TypeError(f"{name} must be numeric.")
+    return array
+
+
+def _require_contract_finite(name: str, array: Array) -> None:
+    if not bool(jnp.all(jnp.isfinite(array))):
+        raise ValueError(f"{name} must contain only finite values.")
+
+
+def _require_contract_inexact_dtype(name: str, array: Array) -> None:
+    if not bool(jnp.issubdtype(array.dtype, jnp.inexact)):
+        raise TypeError(f"{name} must have an inexact dtype.")
+
+
+def _matches_namedtuple_shape(value: object, *, type_name: str, fields: tuple[str, ...]) -> bool:
+    return (
+        isinstance(value, tuple)
+        and getattr(type(value), "__name__", None) == type_name
+        and tuple(getattr(value, "_fields", ())) == fields
+    )
+
+
+def _matches_fit_result_shape(value: object) -> bool:
+    required_fields = (
+        "params",
+        "X",
+        "y",
+        "eta",
+        "mu",
+        "glm_wt",
+        "converged",
+        "num_iters",
+        "objective",
+        "objective_delta",
+        "score_residual",
+    )
+    return getattr(type(value), "__name__", None) == "FitResult" and all(
+        hasattr(value, name) for name in required_fields
+    )
+
+
+def _matches_fitted_glm_shape(value: object) -> bool:
+    required_fields = ("model", "result")
+    return getattr(type(value), "__name__", None) == "FittedGLM" and all(
+        hasattr(value, name) for name in required_fields
+    )
+
+
+def _matches_fitter_shape(value: object) -> bool:
+    valid_modules = {"glmax.fit", "glmax._fit.fit", "glmax._fit.types"}
+    return any(base.__name__ == "Fitter" and base.__module__ in valid_modules for base in type(value).__mro__)
 
 
 def validate_fit_result(result: FitResult) -> None:
-    """Validate FitResult artifacts used by infer/check verbs."""
+    """Validate FitResult artifacts used by _infer/check verbs."""
     if not _matches_fit_result_shape(result):
         raise TypeError("validate_fit_result(...) expects `result` to be a FitResult instance.")
     result.__check_init__()
@@ -295,135 +291,3 @@ def _canonicalize_init(init: Params | None, n_features: int) -> tuple[jnp.ndarra
         raise ValueError("Params.disp must contain only finite values.")
 
     return beta, disp
-
-
-# IRLSFitter is Functional Core: pure callable, no file I/O, no mutable state.
-# Lives in fit.py alongside _canonicalize_init and validate_fit_result.
-class IRLSFitter:
-    """IRLS fit strategy implementing the `Fitter` protocol.
-
-    Encapsulates initialization, IRLS, dispersion estimation.
-    """
-
-    def __call__(
-        self,
-        model: "GLM",
-        data: GLMData,
-        init: "Params | None" = None,
-        max_iter: int = 1000,
-        tol: float = 1e-3,
-        step_size: float = 1.0,
-    ) -> "FitResult":
-        # --- Validate data ---
-        if not isinstance(data, GLMData):
-            raise TypeError("fit(...) expects `data` to be a GLMData instance.")
-        if data.weights is not None:
-            raise ValueError("GLMData.weights is not supported yet.")
-        X, y, offset, _, _ = data.canonical_arrays()
-        if X.shape[0] == 0:
-            raise ValueError("GLMData.mask removes all samples; at least one effective sample is required.")
-
-        # --- Initialization ---
-        # Note: irls() adds offset_eta internally, so init_eta must NOT include offset here.
-        init_beta, init_disp = _canonicalize_init(init, X.shape[1])
-        if init_beta is not None:
-            # Derive init_eta without offset; irls adds offset_eta internally
-            init_eta = X @ init_beta
-            init_eta = jnp.asarray(init_eta)
-            if not bool(jnp.all(jnp.isfinite(init_eta))):
-                raise ValueError("init_eta derived from init.beta must be finite.")
-        else:
-            init_eta = model.family.init_eta(y)  # irls adds offset_eta internally
-
-        if init_disp is not None:
-            disp_init = jnp.asarray(init_disp)
-            if not bool(jnp.all(jnp.isfinite(disp_init))):
-                raise ValueError("disp_init must be finite.")
-        else:
-            disp_init = model.family.canonical_dispersion(1.0)
-
-        # --- IRLS ---
-        state = irls(
-            X,
-            y,
-            model.family,
-            model.solver,
-            init_eta,
-            max_iter,
-            tol,
-            step_size,
-            offset,
-            disp_init=disp_init,
-        )
-        beta, n_iter, converged, irls_disp, objective, objective_delta = state
-
-        # --- Post-IRLS dispersion estimation ---
-        eta = X @ beta + offset
-        disp = model.family.estimate_dispersion(X, y, eta, irls_disp)
-
-        # --- Derived quantities ---
-        # Use irls_disp for weights: consistent with the last IRLS step weights.
-        # FisherInfoError renormalises weights by phi internally to avoid
-        # double-counting for families (like Gaussian) whose variance encodes phi.
-        mu = model.family.glink.inverse(eta)
-        score_residual = (y - mu) * model.family.glink.deriv(mu)
-        _, _, weight = model.family.calc_weight(eta, irls_disp)
-
-        beta = jnp.ravel(beta)
-
-        return FitResult(
-            params=Params(beta=beta, disp=model.family.canonical_dispersion(disp)),
-            X=X,
-            y=y,
-            eta=eta,
-            mu=mu,
-            glm_wt=weight,
-            converged=converged,
-            num_iters=n_iter,
-            objective=objective,
-            objective_delta=objective_delta,
-            score_residual=score_residual,
-        )
-
-
-DEFAULT_FITTER: Fitter = IRLSFitter()
-
-
-def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Fitter = DEFAULT_FITTER) -> FittedGLM:
-    """Canonical public fit verb over grammar nouns."""
-    from .glm import GLM as _GLM
-
-    if not isinstance(model, _GLM):
-        raise TypeError("fit(...) expects `model` to be a GLM instance.")
-    if not isinstance(data, GLMData):
-        raise TypeError("fit(...) expects `data` to be a GLMData instance.")
-    if init is not None and not _matches_namedtuple_shape(init, type_name="Params", fields=("beta", "disp")):
-        raise TypeError("fit(...) expects `init` to be a Params instance or None.")
-    if not callable(fitter):
-        raise TypeError("fit(...) expects `fitter` to be callable.")
-    result = fitter(model, data, init)
-    if not _matches_fit_result_shape(result):
-        raise TypeError("fit(...) expects `fitter` to return a FitResult instance.")
-    validate_fit_result(result)
-    return FittedGLM(model=model, result=result)
-
-
-def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:
-    """Pure prediction verb over grammar nouns."""
-    from .glm import GLM as _GLM
-
-    if not isinstance(model, _GLM):
-        raise TypeError("predict(...) expects `model` to be a GLM instance.")
-    if not _matches_namedtuple_shape(params, type_name="Params", fields=("beta", "disp")):
-        raise TypeError("predict(...) expects `params` to be a Params instance.")
-    if not isinstance(data, GLMData):
-        raise TypeError("predict(...) expects `data` to be a GLMData instance.")
-    if data.weights is not None:
-        raise ValueError("GLMData.weights is not supported in predict yet.")
-
-    X_array, _, offset_array, _, _ = data.canonical_arrays()
-    beta, disp = _canonicalize_init(params, X_array.shape[1])
-    assert beta is not None and disp is not None
-
-    eta = X_array @ beta + offset_array
-    return model.family.glink.inverse(eta)

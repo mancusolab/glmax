@@ -48,7 +48,7 @@ data = GLMData(
 fitted = glmax.fit(model, data)
 pred = glmax.predict(model, fitted.params, data)
 infer_result = glmax.infer(fitted)
-score_result = glmax.infer(fitted, inferrer=glmax.ScoreInferrer())
+score_result = glmax.infer(fitted, inferrer=glmax.ScoreTest())
 diagnostics = glmax.check(fitted)
 ```
 

@@ -1,6 +1,6 @@
 # pattern: Functional Core
 
-"""Internal linear solver adapters used by GLM fit/infer kernels."""
+"""Internal linear solver adapters used by GLM fit/_infer kernels."""
 
 from abc import abstractmethod
 from typing_extensions import TypeAlias

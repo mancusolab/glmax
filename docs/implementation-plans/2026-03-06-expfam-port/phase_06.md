@@ -262,7 +262,7 @@ r = glmax.fit(glmax.GLM(), data)
 print('Gaussian disp > 0:', float(r.params.disp) > 0)
 "
 
-# AC3.5: wald_test importable from infer.inference
+# AC3.5: wald_test importable from _infer.inference
 python -c "from glmax.infer.inference import wald_test; print('wald_test:', wald_test)"
 ```
 

@@ -69,7 +69,7 @@ def test_glmdata_rejects_shape_mismatches_and_malformed_mask() -> None:
 def test_glm_fit_accepts_glmdata_noun() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.0, 2.0, 2.9]))
     fit_result = glmax.fit(GLM(family=Gaussian()), data)
-    current_fitted_glm_type = __import__("glmax.fit", fromlist=["FittedGLM"]).FittedGLM
+    current_fitted_glm_type = __import__("glmax._fit", fromlist=["FittedGLM"]).FittedGLM
     assert isinstance(fit_result, current_fitted_glm_type)
     assert fit_result.params.beta.shape == (1,)
 

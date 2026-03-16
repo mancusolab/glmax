@@ -10,9 +10,10 @@ from jax import Array
 from jax.scipy.stats import norm
 from jaxtyping import ArrayLike
 
+from .. import FittedGLM, Params
+from .._fit.types import _matches_fit_result_shape, _matches_fitted_glm_shape
 from ..family.dist import ExponentialFamily, Gaussian
 from ..family.utils import t_cdf
-from ..fit import _matches_fit_result_shape, _matches_fitted_glm_shape, FittedGLM, Params
 from .stderr import AbstractStdErrEstimator, FisherInfoError
 
 
@@ -27,7 +28,7 @@ DEFAULT_STDERR: AbstractStdErrEstimator = FisherInfoError()
 
 
 class InferenceResult(NamedTuple):
-    """Canonical infer verb output contract."""
+    """Canonical _infer verb output contract."""
 
     params: Params
     se: Array
@@ -80,18 +81,18 @@ def infer(
       `FitResult`, `inferrer` is not an `AbstractInferrer`, or `stderr` is not
       an `AbstractStdErrEstimator`.
     """
-    from .inferrer import AbstractInferrer as _AbstractInferrer, DEFAULT_INFERRER as _DEFAULT_INFERRER
+    from .hyptest import AbstractTest as _AbstractInferrer, DEFAULT_INFERRER as _DEFAULT_INFERRER
 
     if inferrer is None:
         inferrer = _DEFAULT_INFERRER
 
     if not _matches_fitted_glm_shape(fitted):
-        raise TypeError("infer(...) expects `fitted` to be a FittedGLM instance.")
+        raise TypeError("_infer(...) expects `fitted` to be a FittedGLM instance.")
     if not _matches_fit_result_shape(fitted.result):
-        raise TypeError("infer(...) expects `fitted.result` to be a FitResult instance.")
+        raise TypeError("_infer(...) expects `fitted.result` to be a FitResult instance.")
     if not isinstance(inferrer, _AbstractInferrer):
-        raise TypeError("infer(...) expects `inferrer` to be an AbstractInferrer instance.")
+        raise TypeError("_infer(...) expects `inferrer` to be an AbstractInferrer instance.")
     if not isinstance(stderr, AbstractStdErrEstimator):
-        raise TypeError("infer(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
+        raise TypeError("_infer(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
 
     return inferrer(fitted, stderr)

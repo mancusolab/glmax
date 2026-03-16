@@ -84,10 +84,10 @@ def test_predict_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> Non
     params = Params(beta=jnp.array([1.0]), disp=jnp.array(0.0))
 
     def fail_irls(*_args, **_kwargs):
-        raise AssertionError("infer.optimize.irls should never be called by predict(...).")
+        raise AssertionError("_fit.irls.irls should never be called by predict(...).")
 
-    infer_optimize = importlib.import_module("glmax.infer.optimize")
-    monkeypatch.setattr(infer_optimize, "irls", fail_irls)
+    irls_module = importlib.import_module("glmax._fit.irls")
+    monkeypatch.setattr(irls_module, "irls", fail_irls)
 
     pred = glmax.predict(model, params, data)
 

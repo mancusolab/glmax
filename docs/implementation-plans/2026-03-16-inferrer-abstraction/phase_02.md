@@ -63,10 +63,10 @@ import pytest
 
 import glmax
 from glmax import InferenceResult
-from glmax.infer.inference import infer as legacy_infer
+from glmax._infer.infer import infer as legacy_infer
 # Internal imports: testing strategy objects directly, not the public glmax.* surface
-from glmax.infer.inferrer import WaldInferrer, ScoreInferrer, AbstractInferrer
-from glmax.infer.stderr import AbstractStdErrEstimator, FisherInfoError
+from glmax._infer.hyptest import WaldTest, ScoreTest, AbstractTest
+from glmax._infer.stderr import AbstractStdErrEstimator, FisherInfoError
 from glmax.family import Gaussian, Poisson, Binomial, NegativeBinomial
 from glmax import GLMData
 ```
@@ -131,7 +131,7 @@ Create `src/glmax/infer/inferrer.py` with the following content:
 ```python
 # pattern: Functional Core
 
-"""Inferrer strategies for the `infer()` verb."""
+"""Inferrer strategies for the `_infer()` verb."""
 
 from __future__ import annotations
 
@@ -157,7 +157,7 @@ __all__ = ["AbstractInferrer", "WaldInferrer", "ScoreInferrer", "DEFAULT_INFERRE
 
 
 class AbstractInferrer(eqx.Module, strict=True):
-    """Base class for inference strategies used by `infer(fitted, inferrer=...)`."""
+    """Base class for inference strategies used by `_infer(fitted, inferrer=...)`."""
 
     @abstractmethod
     def __call__(
@@ -179,7 +179,7 @@ class AbstractInferrer(eqx.Module, strict=True):
 
 
 class WaldInferrer(AbstractInferrer, strict=True):
-    """Wald (z/t) hypothesis test. Default inferrer for `infer()`.
+    """Wald (z/t) hypothesis test. Default inferrer for `_infer()`.
 
     Calls `stderr(fitted)` to compute the covariance matrix, extracts per-coefficient
     standard errors, and computes two-sided p-values via the Wald statistic
@@ -337,7 +337,7 @@ class ScoreInferrer(AbstractInferrer, strict=True):
         fitted: "FittedGLM",
         stderr: AbstractStdErrEstimator,  # intentionally ignored — ScoreInferrer does not call stderr
         # stderr type is not validated here because this inferrer never uses it;
-        # infer() at the boundary already guards isinstance(stderr, AbstractStdErrEstimator).
+        # _infer() at the boundary already guards isinstance(stderr, AbstractStdErrEstimator).
     ) -> InferenceResult:
         if not _matches_fitted_glm_shape(fitted):
             raise TypeError("ScoreInferrer expects `fitted` to be a FittedGLM instance.")
@@ -407,7 +407,7 @@ Expected: All tests pass (217+ previously; new tests in test_inferrers.py increa
 **Commit:**
 
 ```bash
-git add src/glmax/infer/inferrer.py tests/test_inferrers.py
+git add src/glmax/_infer/hyptest.py tests/test_inferrers.py
 git commit -m "feat: add AbstractInferrer, WaldInferrer, ScoreInferrer
 
 New src/glmax/infer/inferrer.py introduces the AbstractInferrer

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-from ..fit import _matches_fit_result_shape, _matches_fitted_glm_shape, FittedGLM, validate_fit_result
+from glmax import FittedGLM
+from glmax._fit import validate_fit_result
+from glmax._fit.types import _matches_fit_result_shape, _matches_fitted_glm_shape
 
 
 __all__ = ["Diagnostics", "check"]
