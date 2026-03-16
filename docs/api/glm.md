@@ -29,7 +29,8 @@ This page summarizes the canonical noun/verb contracts for `glmax`.
   - `model`, `result`
   - forwards common fit artifacts like `params`, `eta`, and `mu`
 - `InferenceResult`
-  - `params`, `se`, `z`, `p`
+  - `params`, `se`, `stat`, `p`
+  - `stat` is the public test-statistic field; the legacy `.z` attribute is removed
 - `Diagnostics`
   - placeholder model-fit diagnostics contract
 

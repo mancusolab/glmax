@@ -53,8 +53,10 @@ def test_infer_returns_inference_result_without_refitting() -> None:
     assert isinstance(inferred, InferenceResult)
     assert inferred.params is fitted.params
     assert inferred.se.shape == fitted.params.beta.shape
-    assert inferred.z.shape == fitted.params.beta.shape
+    assert inferred.stat.shape == fitted.params.beta.shape
     assert inferred.p.shape == fitted.params.beta.shape
+    with pytest.raises(AttributeError):
+        inferred.z
 
 
 def test_infer_uses_injected_stderr_estimator() -> None:

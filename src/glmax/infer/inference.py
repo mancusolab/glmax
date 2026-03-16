@@ -31,7 +31,7 @@ class InferenceResult(NamedTuple):
 
     params: Params
     se: Array
-    z: Array
+    stat: Array
     p: Array
 
 
@@ -75,8 +75,8 @@ def infer(
     beta = jnp.asarray(fit_result.params.beta)
     covariance = jnp.asarray(stderr(fitted))
     se = jnp.sqrt(jnp.diag(covariance))
-    z = beta / se
+    stat = beta / se
     df = int(fit_result.eta.shape[0] - beta.shape[0])
-    p = wald_test(z, df, model.family)
+    p = wald_test(stat, df, model.family)
 
-    return InferenceResult(params=fit_result.params, se=se, z=z, p=p)
+    return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
