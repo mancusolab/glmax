@@ -13,11 +13,10 @@ from .solve import (
     SolverState as SolverState,
 )
 from .types import (
+    AbstractFitter as AbstractFitter,
     FitResult as FitResult,
     FittedGLM as FittedGLM,
-    Fitter as Fitter,
     Params as Params,
-    validate_fit_result as validate_fit_result,
 )
 
 
@@ -25,9 +24,8 @@ __all__ = [
     "Params",
     "FitResult",
     "FittedGLM",
-    "Fitter",
+    "AbstractFitter",
     "IRLSFitter",
-    "validate_fit_result",
     "fit",
     "predict",
     "AbstractLinearSolver",

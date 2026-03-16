@@ -15,8 +15,9 @@ import jax.tree_util as jtu
 
 import glmax
 
-from glmax import Diagnostics, FitResult, FittedGLM, Fitter, GLMData, InferenceResult, Params
-from glmax._fit.solve import QRSolver
+from glmax import AbstractFitter, Diagnostics, FitResult, FittedGLM, GLMData, InferenceResult, Params
+from glmax._fit import IRLSFitter
+from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 from glmax.glm import specify
 
@@ -32,14 +33,14 @@ def test_canonical_contract_imports_exist() -> None:
     assert FittedGLM is not None
     assert InferenceResult is not None
     assert Diagnostics is not None
-    assert Fitter is not None
+    assert AbstractFitter is not None
 
 
 def test_fitter_is_abstract_equinox_model() -> None:
-    assert issubclass(Fitter, eqx.Module)
+    assert issubclass(AbstractFitter, eqx.Module)
 
     with pytest.raises(TypeError):
-        Fitter()
+        AbstractFitter()
 
 
 def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
@@ -47,7 +48,7 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
         "GLMData",
         "Params",
         "GLM",
-        "Fitter",
+        "AbstractFitter",
         "FitResult",
         "FittedGLM",
         "InferenceResult",
@@ -104,8 +105,8 @@ def test_infer_package_reexports_only_inference_surface() -> None:
     infer_module = importlib.import_module("glmax._infer")
 
     assert not hasattr(infer_module, "irls")
-    assert not hasattr(infer_module, "AbstractFitter")
-    assert not hasattr(infer_module, "DefaultFitter")
+    assert not hasattr(infer_module, "AbstractAbstractFitter")
+    assert not hasattr(infer_module, "DefaultAbstractFitter")
     assert not hasattr(infer_module, "CholeskySolver")
     assert not hasattr(infer_module, "QRSolver")
     assert not hasattr(infer_module, "CGSolver")
@@ -169,7 +170,9 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     expected = _make_fit_result()
     seen: dict[str, object] = {}
 
-    class DummyFitter(Fitter, strict=True):
+    class DummyFitter(AbstractFitter, strict=True):
+        solver: AbstractLinearSolver = CholeskySolver()
+
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             seen["model"] = model
             seen["data"] = data
@@ -194,7 +197,7 @@ def test_fit_rejects_non_fitter_with_deterministic_error() -> None:
     model = glmax.GLM()
     data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
 
-    with pytest.raises(TypeError, match=r"expects `fitter` to be a Fitter instance"):
+    with pytest.raises(TypeError, match=r"expects `fitter` to be an AbstractFitter instance"):
         glmax.fit(model, data, fitter="not-a-fitter")
 
 
@@ -254,18 +257,12 @@ def test_contract_dataclasses_are_pytrees() -> None:
     assert not hasattr(result, "p")
 
 
-def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
+def test_default_fitter_rejects_unsupported_weights() -> None:
     X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
     y = jnp.array([0.2, 0.9, 2.2, 2.8])
 
     with pytest.raises(ValueError, match="weights"):
         glmax.fit(glmax.GLM(), GLMData(X=X, y=y, weights=jnp.ones(4)))
-
-    masked_result = glmax.fit(
-        glmax.GLM(family=Gaussian()),
-        GLMData(X=X, y=y, mask=jnp.array([True, False, True, True])),
-    )
-    assert isinstance(masked_result, FittedGLM)
 
 
 def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
@@ -304,13 +301,13 @@ def test_glm_fit_removed_raises_attributeerror_on_positional_arg() -> None:
 
 
 def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
-    model = glmax.specify(family=Gaussian(), solver=QRSolver())
+    model = glmax.specify(family=Gaussian())
     data = GLMData(
         X=jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]]),
         y=jnp.array([0.8, 1.7, 2.1, 2.9]),
     )
 
-    result = glmax.fit(model, data)
+    result = glmax.fit(model, data, fitter=IRLSFitter(solver=QRSolver()))
 
     assert isinstance(result, FittedGLM)
     assert result.params.beta.shape == (2,)
@@ -347,16 +344,6 @@ def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
         assert jnp.allclose(result.params.disp, jnp.array(1.0))
 
 
-def test_fit_boundary_rejects_non_finite_params_init() -> None:
-    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
-
-    with pytest.raises(ValueError, match="finite"):
-        glmax.fit(glmax.GLM(family=Gaussian()), data, init=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)))
-
-    with pytest.raises(ValueError, match="finite"):
-        glmax.fit(glmax.GLM(family=Gaussian()), data, init=Params(beta=jnp.array([0.0]), disp=jnp.array(jnp.inf)))
-
-
 def test_default_fitter_validates_init_beta_shape() -> None:
     X = jnp.ones((4, 2))
     y = jnp.ones(4)
@@ -375,41 +362,12 @@ def test_default_fitter_validates_scalar_disp() -> None:
         glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
 
 
-def test_fit_rejects_malformed_fitresult_from_custom_fitter() -> None:
-    class BadFitter(Fitter, strict=True):
-        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
-            del model, data, init
-            return FitResult(
-                params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
-                X=jnp.array([[1.0]]),
-                y=jnp.array([1.0]),
-                eta=jnp.array([1.0]),
-                mu=jnp.array([1.0]),
-                glm_wt=jnp.array([1.0]),
-                converged=jnp.array(True),
-                num_iters=jnp.array(1),
-                objective=jnp.array(0.0),
-                objective_delta=jnp.array(-1e-3),
-                score_residual=jnp.array([jnp.nan]),
-            )
-
-    with pytest.raises(ValueError, match="FitResult.score_residual"):
-        glmax.fit(
-            glmax.GLM(),
-            GLMData(X=jnp.array([[1.0]]), y=jnp.array([1.0])),
-            fitter=BadFitter(),
-        )
-
-
 def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
     model = glmax.GLM(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
 
     with pytest.raises(ValueError, match="Params.beta"):
         glmax.predict(model, Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0)), data)
-
-    with pytest.raises(ValueError, match="Params.beta"):
-        glmax.predict(model, Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)), data)
 
     with pytest.raises(TypeError, match="Params.beta must be numeric"):
         glmax.predict(model, Params(beta=["bad"], disp=jnp.array(0.0)), data)

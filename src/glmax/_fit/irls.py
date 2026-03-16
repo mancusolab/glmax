@@ -12,13 +12,13 @@ from jax import Array, lax
 from jaxtyping import ArrayLike, ScalarLike
 
 from ..data import GLMData
-from ..family.dist import ExponentialFamily
+from ..family import ExponentialFamily
 from ..glm import GLM
-from .solve import AbstractLinearSolver
-from .types import _canonicalize_init, FitResult, Fitter, Params
+from .solve import AbstractLinearSolver, CholeskySolver
+from .types import _canonicalize_init, AbstractFitter, FitResult, Params
 
 
-__all__ = ["irls", "IRLSFitter"]
+__all__ = ["IRLSFitter"]
 
 
 class _IRLSState(NamedTuple):
@@ -30,7 +30,7 @@ class _IRLSState(NamedTuple):
     objective_delta: Array
 
 
-def irls(
+def _irls(
     X: ArrayLike,
     y: ArrayLike,
     family: ExponentialFamily,
@@ -77,46 +77,35 @@ def irls(
     return _IRLSState(beta, num_iters, converged, disp, objective, objective_delta)
 
 
-class IRLSFitter(Fitter, strict=True):
-    """IRLS fit strategy implementing the `Fitter` contract."""
+class IRLSFitter(AbstractFitter, strict=True):
+    """IRLS fit strategy implementing the `AbstractFitter` contract."""
+
+    solver: AbstractLinearSolver = CholeskySolver()
 
     def __call__(
         self,
-        model: "GLM",
+        model: GLM,
         data: GLMData,
-        init: "Params | None" = None,
+        init: Params | None = None,
         max_iter: int = 1000,
         tol: float = 1e-3,
         step_size: float = 1.0,
-    ) -> "FitResult":
+    ) -> FitResult:
         if not isinstance(data, GLMData):
             raise TypeError("fit(...) expects `data` to be a GLMData instance.")
         if data.weights is not None:
             raise ValueError("GLMData.weights is not supported yet.")
-        X, y, offset, _, _ = data.canonical_arrays()
-        if X.shape[0] == 0:
-            raise ValueError("GLMData.mask removes all samples; at least one effective sample is required.")
+        X, y, offset, _ = data.canonical_arrays()
 
         init_beta, init_disp = _canonicalize_init(init, X.shape[1])
-        if init_beta is not None:
-            init_eta = jnp.asarray(X @ init_beta)
-            if not bool(jnp.all(jnp.isfinite(init_eta))):
-                raise ValueError("init_eta derived from init.beta must be finite.")
-        else:
-            init_eta = model.family.init_eta(y)
+        init_eta = X @ init_beta + 0.0 if init_beta is not None else model.family.init_eta(y)
+        disp_init = init_disp if init_disp is not None else model.family.canonical_dispersion(1.0)
 
-        if init_disp is not None:
-            disp_init = jnp.asarray(init_disp)
-            if not bool(jnp.all(jnp.isfinite(disp_init))):
-                raise ValueError("disp_init must be finite.")
-        else:
-            disp_init = model.family.canonical_dispersion(1.0)
-
-        state = irls(
+        state = _irls(
             X,
             y,
             model.family,
-            model.solver,
+            self.solver,
             init_eta,
             max_iter,
             tol,

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-from ._fit import (
-    FittedGLM,
-    validate_fit_result,
-)
+from ._fit import FittedGLM
 
 
 __all__ = ["Diagnostics", "check"]
@@ -22,5 +19,4 @@ def check(fitted: FittedGLM) -> Diagnostics:
     if not isinstance(fitted, FittedGLM):
         raise TypeError("check(...) expects `fitted` to be a FittedGLM instance.")
 
-    validate_fit_result(fitted.result)
     return Diagnostics()

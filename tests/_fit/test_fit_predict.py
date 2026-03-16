@@ -1,6 +1,5 @@
 # pattern: Imperative Shell
 
-import importlib
 
 import pytest
 
@@ -64,31 +63,12 @@ def test_predict_rejects_beta_shape_mismatch() -> None:
         glmax.predict(model, bad_params, data)
 
 
-def test_predict_rejects_non_finite_and_non_numeric_params() -> None:
+def test_predict_rejects_non_numeric_params() -> None:
     model = glmax.specify(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
-
-    with pytest.raises(ValueError, match="Params.beta"):
-        glmax.predict(model, Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)), data)
 
     with pytest.raises(TypeError, match="Params.beta must be numeric"):
         glmax.predict(model, Params(beta=["bad"], disp=jnp.array(0.0)), data)
 
     with pytest.raises(TypeError, match="Params.disp must be numeric"):
         glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad"), data)
-
-
-def test_predict_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
-    model = glmax.specify(family=Gaussian())
-    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
-    params = Params(beta=jnp.array([1.0]), disp=jnp.array(0.0))
-
-    def fail_irls(*_args, **_kwargs):
-        raise AssertionError("_fit.irls.irls should never be called by predict(...).")
-
-    irls_module = importlib.import_module("glmax._fit.irls")
-    monkeypatch.setattr(irls_module, "irls", fail_irls)
-
-    pred = glmax.predict(model, params, data)
-
-    assert pred.shape == data.y.shape

@@ -44,19 +44,6 @@ def _canonicalize_numeric_vector(name: str, value: ArrayLike, n_samples: int) ->
     return vector
 
 
-def _canonicalize_mask(mask: ArrayLike, n_samples: int) -> Array:
-    array = jnp.asarray(mask)
-    if not jnp.issubdtype(array.dtype, jnp.bool_):
-        raise TypeError("GLMData.mask must be boolean.")
-
-    if array.ndim == 0:
-        return jnp.full((n_samples,), array, dtype=jnp.bool_)
-    if array.ndim == 1 and array.shape[0] == n_samples:
-        return array
-
-    raise ValueError("GLMData.mask must be scalar-broadcastable or length n.")
-
-
 class GLMData(eqx.Module, strict=True):
     """Canonical data noun for GLM workflows."""
 
@@ -64,7 +51,6 @@ class GLMData(eqx.Module, strict=True):
     y: Array
     offset: Array | None = None
     weights: Array | None = None
-    mask: Array | None = None
 
     def __init__(
         self,
@@ -72,7 +58,6 @@ class GLMData(eqx.Module, strict=True):
         y: ArrayLike,
         offset: ArrayLike | None = None,
         weights: ArrayLike | None = None,
-        mask: ArrayLike | None = None,
     ) -> None:
         X = _as_numeric_array("X", X)
         y = _as_numeric_array("y", y)
@@ -86,15 +71,10 @@ class GLMData(eqx.Module, strict=True):
         if weights is not None:
             canonical_weights = _canonicalize_numeric_vector("weights", weights, n_samples)
 
-        canonical_mask = None
-        if mask is not None:
-            canonical_mask = _canonicalize_mask(mask, n_samples)
-
         self.X = X
         self.y = y
         self.offset = canonical_offset
         self.weights = canonical_weights
-        self.mask = canonical_mask
 
     def __check_init__(self) -> None:
         if self.X.ndim != 2:
@@ -126,17 +106,10 @@ class GLMData(eqx.Module, strict=True):
             return jnp.ones((self.n_samples,), dtype=dtype)
         return self.weights
 
-    def canonical_mask(self) -> Array:
-        if self.mask is None:
-            return jnp.ones((self.n_samples,), dtype=jnp.bool_)
-        return self.mask
-
-    def canonical_arrays(self) -> tuple[Array, Array, Array, Array, Array]:
-        mask = self.canonical_mask()
+    def canonical_arrays(self) -> tuple[Array, Array, Array, Array]:
         return (
-            self.X[mask],
-            self.y[mask],
-            self.canonical_offset()[mask],
-            self.canonical_weights()[mask],
-            mask,
+            self.X,
+            self.y,
+            self.canonical_offset(),
+            self.canonical_weights(),
         )

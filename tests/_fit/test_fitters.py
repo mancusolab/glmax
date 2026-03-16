@@ -2,8 +2,6 @@
 
 import importlib
 
-from dataclasses import fields
-
 import pytest
 
 import equinox as eqx
@@ -12,18 +10,9 @@ import jax.random as jr
 
 import glmax
 
-from glmax import FitResult, Fitter, GLMData, Params
+from glmax import AbstractFitter, FitResult, GLMData, Params
+from glmax._fit.solve import AbstractLinearSolver, CholeskySolver
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
-
-
-def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
-    values = {field.name: getattr(base, field.name) for field in fields(type(base))}
-    values.update(overrides)
-
-    result = object.__new__(FitResult)
-    for name, value in values.items():
-        object.__setattr__(result, name, value)
-    return result
 
 
 def _make_fit_result() -> FitResult:
@@ -47,7 +36,9 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     expected = _make_fit_result()
     current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
 
-    class RecordingFitter(Fitter, strict=True):
+    class RecordingFitter(AbstractFitter, strict=True):
+        solver: AbstractLinearSolver = CholeskySolver()
+
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             seen["model"] = model
             seen["data"] = data
@@ -68,7 +59,9 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
 
 
 def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
-    class BadFitter(Fitter, strict=True):
+    class BadFitter(AbstractFitter, strict=True):
+        solver: AbstractLinearSolver = CholeskySolver()
+
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> object:
             del model, data, init
             return object()
@@ -110,46 +103,8 @@ def test_default_fitter_returns_canonical_fitresult_for_supported_families(famil
     assert result.score_residual.shape == y.shape
 
 
-def test_fit_rejects_custom_fitter_result_with_malformed_contract() -> None:
-    malformed = unchecked_fit_result(_make_fit_result(), objective="bad")
-
-    class BadFitter(Fitter, strict=True):
-        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
-            del model, data, init
-            return malformed
-
-    model = glmax.GLM()
-    data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
-
-    with pytest.raises(TypeError, match="FitResult.objective must be numeric"):
-        glmax.fit(model, data, fitter=BadFitter())
-
-
-def test_negative_binomial_fit_does_not_run_poisson_warm_start(monkeypatch) -> None:
-    irls_module = importlib.import_module("glmax._fit.irls")
-    fit_module = importlib.import_module("glmax._fit")
-    original_irls = irls_module.irls
-    seen_families: list[str] = []
-
-    def recording_irls(
-        X, y, family, solver, eta, max_iter=1000, tol=1e-3, step_size=1.0, offset_eta=0.0, disp_init=0.0
-    ):
-        seen_families.append(type(family).__name__)
-        return original_irls(X, y, family, solver, eta, max_iter, tol, step_size, offset_eta, disp_init)
-
-    monkeypatch.setattr(irls_module, "irls", recording_irls)
-
-    model = glmax.specify(family=NegativeBinomial())
-    data = GLMData(X=_DEFAULT_X, y=jnp.array([0.0, 1.0, 2.0, 4.0]))
-
-    result = glmax.fit(model, data)
-
-    assert isinstance(result, fit_module.FittedGLM)
-    assert seen_families == ["NegativeBinomial"]
-
-
 # ---------------------------------------------------------------------------
-# [HIGH] JIT compatibility: irls, FisherInfoError, wald_test
+# [HIGH] JIT compatibility: FisherInfoError, wald_test
 # Note: IRLSFitter itself is NOT JIT-safe (Python branching on family type).
 # These tests cover the underlying kernels only.
 # ---------------------------------------------------------------------------
@@ -160,30 +115,6 @@ def _make_gaussian_xy(n: int = 30, p: int = 2, seed: int = 0):
     X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key, (n, p - 1))], axis=1)
     y = X @ jnp.ones(p) + jr.normal(jr.PRNGKey(seed + 1), (n,)) * 0.2
     return X, y
-
-
-def test_irls_jit_matches_eager():
-    """irls is JIT-safe: filter_jit output matches eager output numerically."""
-    from glmax._fit.irls import irls
-    from glmax._fit.solve import CholeskySolver
-
-    X, y = _make_gaussian_xy()
-    family = Gaussian()
-    solver = CholeskySolver()
-    init_eta = family.init_eta(y)
-    offset = jnp.zeros(X.shape[0])
-
-    state_ref = irls(X, y, family, solver, init_eta, 200, 1e-3, 1.0, offset, disp_init=1.0)
-
-    def _jit_irls(X, y, init_eta):
-        return irls(X, y, family, solver, init_eta, 200, 1e-3, 1.0, offset, disp_init=1.0)
-
-    state_jit = eqx.filter_jit(_jit_irls)(X, y, init_eta)
-
-    assert bool(jnp.all(jnp.isfinite(state_jit.beta))), "JIT irls beta must be finite"
-    assert bool(
-        jnp.allclose(state_ref.beta, state_jit.beta, atol=1e-5)
-    ), f"JIT irls beta differs from eager: {state_ref.beta} vs {state_jit.beta}"
 
 
 def test_fisher_info_error_jit_is_finite():

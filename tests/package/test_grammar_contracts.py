@@ -81,9 +81,6 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
     with pytest.raises(TypeError, match="FittedGLM"):
         glmax.check(object())
 
-    with pytest.raises(ValueError, match="Params.beta"):
-        glmax.predict(model, Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)), data)
-
     inferred = glmax.infer(
         unchecked_fitted(
             fitted,

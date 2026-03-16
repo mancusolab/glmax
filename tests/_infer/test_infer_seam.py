@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import glmax
 
 from glmax import Diagnostics, FitResult, FittedGLM, GLMData, Params
+from glmax._fit import IRLSFitter
 from glmax._fit.solve import QRSolver
 from glmax.family import Gaussian
 
@@ -42,11 +43,11 @@ def _make_fit_result() -> FitResult:
 
 
 def test_glm_defaults_to_solver_from_fit_solve() -> None:
-    model = glmax.GLM()
     solve_module = importlib.import_module("glmax._fit.solve")
+    default_fitter = IRLSFitter()
 
-    assert isinstance(model.solver, solve_module.AbstractLinearSolver)
-    assert isinstance(model.solver, solve_module.CholeskySolver)
+    assert isinstance(default_fitter.solver, solve_module.AbstractLinearSolver)
+    assert isinstance(default_fitter.solver, solve_module.CholeskySolver)
 
 
 def test_qr_solver_import_path_remains_supported() -> None:
@@ -88,11 +89,12 @@ def test_canonical_fit_execution_does_not_import_stale_infer_modules() -> None:
     current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
 
     result = glmax.fit(
-        glmax.GLM(family=Gaussian(), solver=QRSolver()),
+        glmax.GLM(family=Gaussian()),
         GLMData(
             X=jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]]),
             y=jnp.array([0.8, 1.7, 2.1, 2.9]),
         ),
+        fitter=IRLSFitter(solver=QRSolver()),
     )
 
     assert isinstance(result, current_fitted_glm_type)

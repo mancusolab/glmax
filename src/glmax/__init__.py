@@ -5,10 +5,10 @@ from importlib.metadata import version  # pragma: no cover
 import jax
 
 from ._fit import (
+    AbstractFitter as AbstractFitter,
     fit as fit,
     FitResult as FitResult,
     FittedGLM as FittedGLM,
-    Fitter as Fitter,
     Params as Params,
     predict as predict,
 )
@@ -35,7 +35,7 @@ __all__ = [
     "GLMData",
     "Params",
     "GLM",
-    "Fitter",
+    "AbstractFitter",
     "FitResult",
     "FittedGLM",
     "InferenceResult",

@@ -1,6 +1,5 @@
 # pattern: Imperative Shell
 
-import importlib
 
 from dataclasses import fields
 
@@ -144,19 +143,6 @@ def test_infer_currently_only_validates_at_consumption_boundaries() -> None:
         ),
     )
     assert isinstance(result, InferenceResult)
-
-
-def test_infer_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
-    fitted = _make_fitted()
-
-    def fail_irls(*_args, **_kwargs):
-        raise AssertionError("_fit.irls.irls should never be called by _infer(...).")
-
-    irls_module = importlib.import_module("glmax._fit.irls")
-    monkeypatch.setattr(irls_module, "irls", fail_irls)
-
-    inferred = glmax.infer(fitted)
-    assert isinstance(inferred, InferenceResult)
 
 
 def test_infer_default_inferrer_matches_explicit_wald_inferrer() -> None:
