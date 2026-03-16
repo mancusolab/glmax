@@ -5,13 +5,13 @@
 
 ## Contracts
 - **Exposes**:
-  - Package-root API from `src/glmax/__init__.py`: `GLMData`, `Params`, `GLM`, `Fitter`, `FitResult`, `FittedGLM`, `InferenceResult`, `Diagnostics`, `specify`, `predict`, `fit`, `infer`, `check`.
+  - Package-root API from `src/glmax/__init__.py`: `GLMData`, `Params`, `GLM`, `Fitter`, `FitResult`, `FittedGLM`, `InferenceResult`, `Diagnostics`, `AbstractInferrer`, `WaldInferrer`, `ScoreInferrer`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `specify`, `predict`, `fit`, `infer`, `check`.
   - Family and link implementations from `src/glmax/family/__init__.py`.
   - User-facing grammar docs in `README.md`, `docs/index.md`, and `docs/api/glm.md`.
 - **Guarantees**:
   - Canonical user workflow is `specify -> fit -> predict -> infer -> check`.
   - `glmax.fit(model, data, init=None, *, fitter=...)` is the curated public fit contract and returns `FittedGLM`.
-  - `infer(fitted, stderr=...)` and `check(fitted)` operate on the fitted noun without refitting.
+  - `infer(fitted, inferrer=None, stderr=...)` and `check(fitted)` operate on the fitted noun without refitting.
   - `GLM` is a pure specification noun (`family`, `solver` fields only). It has no `.fit` method. Use `glmax.fit(model, data)`.
   - `Gamma` is a supported family (exported from `glmax.family`). Dispersion estimation for Gamma is deferred.
 - **Expects**:
@@ -20,7 +20,7 @@
   - `Params.beta` is a finite inexact rank-1 vector of length `p`; `Params.disp` is a finite inexact scalar.
   - `FitResult` is the fitter contract and carries `params`, `X`, `y`, `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`, `objective_delta`, and `score_residual`.
   - `FittedGLM` is the public fitted noun and binds `model` plus `result`, forwarding common fit artifacts for ergonomics.
-  - `InferenceResult` carries `params`, `se`, `z`, and `p`; those summaries are produced by `infer(fitted, stderr=...)`, not `fit(...)`.
+  - `InferenceResult` carries `params`, `se`, `stat`, and `p`; those summaries are produced by `infer(fitted, inferrer=None, stderr=...)`, not `fit(...)`.
   - `Diagnostics` is reserved for `check(fitted)` model-fit assessment. The current `check()` seam is a placeholder contract and does not yet expose finalized model-diagnostic fields.
   - `FitResult` artifacts stay shape-aligned with `Params.beta` and the effective sample count, and invalid artifacts fail deterministic validation.
   - `GLMData.weights` is not part of the supported public `fit` or `predict` contract unless docs and tests are updated in the same change.

@@ -7,10 +7,13 @@ The canonical workflow is:
 1. `specify(...) -> GLM`
 2. `fit(model, data, init=None, *, fitter=...) -> FittedGLM`
 3. `predict(model, params, data)` for fitted means
-4. `infer(fitted, stderr=...)` for inferential summaries without refitting
+4. `infer(fitted, inferrer=None, stderr=...)` for inferential summaries without refitting
 5. `check(fitted)` for diagnostics without refitting
 
 The canonical nouns are `GLMData`, `Params`, `FitResult`, `FittedGLM`, `InferenceResult`, and `Diagnostics`.
+The package-root also exports inference strategy and stderr types:
+`AbstractInferrer`, `WaldInferrer`, `ScoreInferrer`,
+`AbstractStdErrEstimator`, `FisherInfoError`, and `HuberError`.
 
 ## Installation
 
@@ -39,6 +42,8 @@ fitted = glmax.fit(model, data)
 params = fitted.params
 pred = glmax.predict(model, params, data)
 infer_result = glmax.infer(fitted)
+# Route through an explicit inferrer when needed.
+score_result = glmax.infer(fitted, inferrer=glmax.ScoreInferrer())
 diagnostics = glmax.check(fitted)
 ```
 

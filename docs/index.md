@@ -9,7 +9,7 @@
 - `specify(...)` creates a `GLM` model
 - `fit(model, data, init=None, *, fitter=...)` estimates model parameters and returns a `FittedGLM`
 - `predict(model, params, data)` computes predictions
-- `infer(fitted, stderr=...)` computes inferential summaries without refitting
+- `infer(fitted, inferrer=None, stderr=...)` computes inferential summaries without refitting
 - `check(fitted)` returns diagnostics without refitting
 
 Data and parameter contracts are explicit nouns:
@@ -20,6 +20,15 @@ Data and parameter contracts are explicit nouns:
 - `FittedGLM`
 - `InferenceResult`
 - `Diagnostics`
+
+Package-root inference helpers are also public:
+
+- `AbstractInferrer`
+- `WaldInferrer`
+- `ScoreInferrer`
+- `AbstractStdErrEstimator`
+- `FisherInfoError`
+- `HuberError`
 
 ## Quick Example
 
@@ -39,6 +48,7 @@ data = GLMData(
 fitted = glmax.fit(model, data)
 pred = glmax.predict(model, fitted.params, data)
 infer_result = glmax.infer(fitted)
+score_result = glmax.infer(fitted, inferrer=glmax.ScoreInferrer())
 diagnostics = glmax.check(fitted)
 ```
 

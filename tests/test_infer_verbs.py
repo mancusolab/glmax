@@ -12,7 +12,8 @@ import glmax
 
 from glmax import FittedGLM, GLMData, InferenceResult, Params
 from glmax.family import Gaussian
-from glmax.infer.stderr import AbstractStdErrEstimator
+from glmax.infer.inferrer import ScoreInferrer, WaldInferrer
+from glmax.infer.stderr import AbstractStdErrEstimator, HuberError
 
 
 def unchecked_fit_result(base, **overrides: object):
@@ -83,6 +84,9 @@ def test_infer_rejects_invalid_model_and_result_contracts() -> None:
 
     with pytest.raises(TypeError, match="AbstractStdErrEstimator"):
         glmax.infer(fitted, stderr=object())
+
+    with pytest.raises(TypeError, match="AbstractInferrer"):
+        glmax.infer(fitted, inferrer=object())
 
 
 def test_infer_rejects_invalid_fit_artifacts_deterministically() -> None:
@@ -167,3 +171,67 @@ def test_infer_never_calls_fit_or_irls(monkeypatch: pytest.MonkeyPatch) -> None:
 
     inferred = glmax.infer(fitted)
     assert isinstance(inferred, InferenceResult)
+
+
+def test_infer_default_inferrer_matches_explicit_wald_inferrer() -> None:
+    fitted = _make_fitted()
+
+    result_default = glmax.infer(fitted)
+    result_explicit = glmax.infer(fitted, inferrer=WaldInferrer())
+
+    assert jnp.allclose(result_default.stat, result_explicit.stat)
+    assert jnp.allclose(result_default.se, result_explicit.se)
+    assert jnp.allclose(result_default.p, result_explicit.p)
+
+
+def test_infer_routes_to_score_inferrer_when_specified() -> None:
+    fitted = _make_fitted()
+
+    result = glmax.infer(fitted, inferrer=ScoreInferrer())
+
+    assert isinstance(result, InferenceResult)
+    assert jnp.all(jnp.isnan(result.se))
+    assert jnp.all(jnp.isfinite(result.stat))
+    assert jnp.all((result.p >= 0.0) & (result.p <= 1.0))
+    assert result.stat.shape == fitted.params.beta.shape
+
+
+def test_infer_passes_stderr_into_wald_inferrer() -> None:
+    fitted = _make_fitted()
+    call_count = {"n": 0}
+
+    class CountingStdErr(AbstractStdErrEstimator):
+        def __call__(self, fitted_arg):
+            call_count["n"] += 1
+            return jnp.array([[4.0]])
+
+    result = glmax.infer(fitted, stderr=CountingStdErr())
+
+    assert call_count["n"] == 1
+    assert result.se.shape == fitted.params.beta.shape
+    assert jnp.allclose(result.se, jnp.array([2.0]))
+
+
+def test_infer_accepts_huber_error_stderr_estimator() -> None:
+    fitted = _make_fitted()
+
+    result = glmax.infer(fitted, stderr=HuberError())
+
+    assert isinstance(result, InferenceResult)
+    assert result.se.shape == fitted.params.beta.shape
+
+
+def test_inferrer_types_are_importable_from_top_level_glmax() -> None:
+    from glmax import AbstractInferrer, ScoreInferrer, WaldInferrer  # noqa: F401
+
+    assert AbstractInferrer is not None
+    assert WaldInferrer is not None
+    assert ScoreInferrer is not None
+
+
+def test_stderr_types_are_importable_from_top_level_glmax() -> None:
+    from glmax import AbstractStdErrEstimator, FisherInfoError, HuberError  # noqa: F401
+
+    assert AbstractStdErrEstimator is not None
+    assert FisherInfoError is not None
+    assert HuberError is not None

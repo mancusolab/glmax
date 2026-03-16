@@ -44,6 +44,12 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
         "FittedGLM",
         "InferenceResult",
         "Diagnostics",
+        "AbstractInferrer",
+        "WaldInferrer",
+        "ScoreInferrer",
+        "AbstractStdErrEstimator",
+        "FisherInfoError",
+        "HuberError",
         "specify",
         "predict",
         "fit",
@@ -136,9 +142,11 @@ def test_fit_signature_matches_canonical_surface() -> None:
 
 def test_infer_signature_matches_canonical_surface() -> None:
     sig = inspect.signature(glmax.infer)
-    assert list(sig.parameters) == ["fitted", "stderr"]
+    assert list(sig.parameters) == ["fitted", "inferrer", "stderr"]
     assert sig.parameters["fitted"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert sig.parameters["inferrer"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["stderr"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert sig.parameters["inferrer"].default is None
 
 
 def test_fit_returns_fittedglm_using_injected_fitter() -> None:

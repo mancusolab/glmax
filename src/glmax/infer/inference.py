@@ -12,7 +12,7 @@ from jaxtyping import ArrayLike
 
 from ..family.dist import ExponentialFamily, Gaussian
 from ..family.utils import t_cdf
-from ..fit import _matches_fit_result_shape, _matches_fitted_glm_shape, FittedGLM, Params, validate_fit_result
+from ..fit import _matches_fit_result_shape, _matches_fitted_glm_shape, FittedGLM, Params
 from .stderr import AbstractStdErrEstimator, FisherInfoError
 
 
@@ -58,25 +58,40 @@ def wald_test(statistic: ArrayLike, df: int, family: ExponentialFamily) -> Array
 
 def infer(
     fitted: FittedGLM,
+    inferrer=None,
     stderr: AbstractStdErrEstimator = DEFAULT_STDERR,
 ) -> InferenceResult:
-    """Inferential summaries from fit artifacts without refitting."""
+    """Inferential summaries from fit artifacts without refitting.
+
+    **Arguments:**
+
+    - `fitted`: validated fitted-model carrier produced by `glmax.fit(...)`.
+    - `inferrer`: optional inference strategy. `None` resolves lazily to
+      `DEFAULT_INFERRER` at call time.
+    - `stderr`: standard-error estimator forwarded to the selected inferrer.
+
+    **Returns:**
+
+    - `InferenceResult` carrying `(params, se, stat, p)`.
+
+    **Raises:**
+
+    - `TypeError`: if `fitted` is not a `FittedGLM`, `fitted.result` is not a
+      `FitResult`, `inferrer` is not an `AbstractInferrer`, or `stderr` is not
+      an `AbstractStdErrEstimator`.
+    """
+    from .inferrer import AbstractInferrer as _AbstractInferrer, DEFAULT_INFERRER as _DEFAULT_INFERRER
+
+    if inferrer is None:
+        inferrer = _DEFAULT_INFERRER
+
     if not _matches_fitted_glm_shape(fitted):
         raise TypeError("infer(...) expects `fitted` to be a FittedGLM instance.")
+    if not _matches_fit_result_shape(fitted.result):
+        raise TypeError("infer(...) expects `fitted.result` to be a FitResult instance.")
+    if not isinstance(inferrer, _AbstractInferrer):
+        raise TypeError("infer(...) expects `inferrer` to be an AbstractInferrer instance.")
     if not isinstance(stderr, AbstractStdErrEstimator):
         raise TypeError("infer(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
 
-    model = fitted.model
-    fit_result = fitted.result
-    if not _matches_fit_result_shape(fit_result):
-        raise TypeError("infer(...) expects `fitted.result` to be a FitResult instance.")
-    validate_fit_result(fit_result)
-
-    beta = jnp.asarray(fit_result.params.beta)
-    covariance = jnp.asarray(stderr(fitted))
-    se = jnp.sqrt(jnp.diag(covariance))
-    stat = beta / se
-    df = int(fit_result.eta.shape[0] - beta.shape[0])
-    p = wald_test(stat, df, model.family)
-
-    return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
+    return inferrer(fitted, stderr)

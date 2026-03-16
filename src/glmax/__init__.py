@@ -17,6 +17,16 @@ from .glm import GLM as GLM, specify as specify
 from .infer import check as check, infer as infer
 from .infer.diagnostics import Diagnostics as Diagnostics
 from .infer.inference import InferenceResult as InferenceResult
+from .infer.inferrer import (
+    AbstractInferrer as AbstractInferrer,
+    ScoreInferrer as ScoreInferrer,
+    WaldInferrer as WaldInferrer,
+)
+from .infer.stderr import (
+    AbstractStdErrEstimator as AbstractStdErrEstimator,
+    FisherInfoError as FisherInfoError,
+    HuberError as HuberError,
+)
 
 
 jax.config.update("jax_enable_x64", True)  # noqa: E402
@@ -32,6 +42,12 @@ __all__ = [
     "FittedGLM",
     "InferenceResult",
     "Diagnostics",
+    "AbstractInferrer",
+    "WaldInferrer",
+    "ScoreInferrer",
+    "AbstractStdErrEstimator",
+    "FisherInfoError",
+    "HuberError",
     "specify",
     "predict",
     "fit",
