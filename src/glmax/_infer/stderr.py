@@ -44,7 +44,7 @@ class FisherInfoError(AbstractStdErrEstimator, strict=True):
         """
         model = fitted.model
         fit_result = fitted.result
-        phi = jnp.asarray(model.family.scale(fit_result.X, fit_result.y, fit_result.mu))
+        phi = jnp.asarray(model.scale(fit_result.X, fit_result.y, fit_result.mu))
         w_pure = fit_result.glm_wt * phi
         information = (fit_result.X * w_pure[:, jnp.newaxis]).T @ fit_result.X
         return phi * jnpla.inv(information)
@@ -59,7 +59,7 @@ class HuberError(AbstractStdErrEstimator, strict=True):
         model = fitted.model
         fit_result = fitted.result
         X = fit_result.X
-        phi = jnp.asarray(model.family.scale(X, fit_result.y, fit_result.mu))
+        phi = jnp.asarray(model.scale(X, fit_result.y, fit_result.mu))
         w_pure = fit_result.glm_wt * phi
         bread = phi * jnpla.inv((X * w_pure[:, jnp.newaxis]).T @ X)
 

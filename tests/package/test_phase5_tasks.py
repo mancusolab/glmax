@@ -44,7 +44,7 @@ def test_standalone_wald_test_gaussian_uses_t_distribution():
     from glmax._infer.hyptest import _wald_test
 
     statistic = jnp.array([2.0, -1.5, 0.0])
-    p = _wald_test(statistic, df=50, family=Gaussian())
+    p = _wald_test(statistic, df=50, model=glmax.GLM(family=Gaussian()))
 
     assert p.shape == (3,)
     assert bool(jnp.all(p > 0))
@@ -58,7 +58,7 @@ def test_standalone_wald_test_non_gaussian_uses_normal():
     from glmax._infer.hyptest import _wald_test
 
     statistic = jnp.array([1.96])
-    p_poisson = _wald_test(statistic, df=100, family=Poisson())
+    p_poisson = _wald_test(statistic, df=100, model=glmax.GLM(family=Poisson()))
     # 2 * norm.sf(1.96) ≈ 0.05
     assert bool(jnp.abs(p_poisson[0] - 0.05) < 0.005)
 

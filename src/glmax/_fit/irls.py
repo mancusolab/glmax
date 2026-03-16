@@ -12,7 +12,6 @@ from jax import Array, lax
 from jaxtyping import ArrayLike, ScalarLike
 
 from ..data import GLMData
-from ..family import ExponentialFamily
 from ..glm import GLM
 from .solve import AbstractLinearSolver, CholeskySolver
 from .types import _canonicalize_init, AbstractFitter, FitResult, Params
@@ -33,7 +32,7 @@ class _IRLSState(NamedTuple):
 def _irls(
     X: ArrayLike,
     y: ArrayLike,
-    family: ExponentialFamily,
+    model: GLM,
     solver: AbstractLinearSolver,
     eta: ArrayLike,
     max_iter: int = 1000,
@@ -43,20 +42,20 @@ def _irls(
     disp_init: ScalarLike = 0.0,
 ) -> _IRLSState:
     """IRLS to solve GLM."""
-    n, p = X.shape
+    _, p = X.shape
 
     def body_fun(val: Tuple):
-        likelihood_o, diff, num_iter, beta_o, eta_o, disp_o = val
+        likelihood_o, diff, num_iter, _beta_o, eta_o, disp_o = val
 
-        mu_k, _v, weight = family.calc_weight(eta_o, disp_o)
-        g_deriv_k = family.glink.deriv(mu_k)
+        mu_k, _v, weight = model.working_weights(eta_o, disp_o)
+        g_deriv_k = model.link_deriv(mu_k)
         r = eta_o + g_deriv_k * (y - mu_k) * step_size - offset_eta
 
         beta = solver(X, r, weight)
         eta_n = X @ beta + offset_eta
 
-        disp_n = family.update_dispersion(X, y, eta_n, disp_o, step_size)
-        likelihood_n = family.negloglikelihood(y, eta_n, disp_n)
+        disp_n = model.update_dispersion(X, y, eta_n, disp_o, step_size)
+        likelihood_n = -model.log_prob(y, eta_n, disp_n)
         diff = likelihood_n - likelihood_o
 
         return likelihood_n, diff, num_iter + 1, beta, eta_n, disp_n
@@ -68,7 +67,7 @@ def _irls(
 
     init_beta = jnp.zeros((p,))
     init_eta = eta + offset_eta
-    init_likelihood = family.negloglikelihood(y, init_eta, disp_init)
+    init_likelihood = -model.log_prob(y, init_eta, disp_init)
     init_tuple = (init_likelihood, jnp.inf, 0, init_beta, init_eta, disp_init)
 
     objective, objective_delta, num_iters, beta, eta, disp = lax.while_loop(cond_fun, body_fun, init_tuple)
@@ -98,13 +97,13 @@ class IRLSFitter(AbstractFitter, strict=True):
         X, y, offset, _ = data.canonical_arrays()
 
         init_beta, init_disp = _canonicalize_init(init, X.shape[1])
-        init_eta = X @ init_beta + 0.0 if init_beta is not None else model.family.init_eta(y)
-        disp_init = init_disp if init_disp is not None else model.family.canonical_dispersion(1.0)
+        init_eta = X @ init_beta + 0.0 if init_beta is not None else model.init_eta(y)
+        disp_init = init_disp if init_disp is not None else model.canonicalize_dispersion(1.0)
 
         state = _irls(
             X,
             y,
-            model.family,
+            model,
             self.solver,
             init_eta,
             max_iter,
@@ -116,15 +115,15 @@ class IRLSFitter(AbstractFitter, strict=True):
         beta, n_iter, converged, irls_disp, objective, objective_delta = state
 
         eta = X @ beta + offset
-        disp = model.family.estimate_dispersion(X, y, eta, irls_disp)
-        mu = model.family.glink.inverse(eta)
-        score_residual = (y - mu) * model.family.glink.deriv(mu)
-        _, _, weight = model.family.calc_weight(eta, irls_disp)
+        disp = model.estimate_dispersion(X, y, eta, irls_disp)
+        mu = model.mean(eta)
+        score_residual = (y - mu) * model.link_deriv(mu)
+        _, _, weight = model.working_weights(eta, irls_disp)
 
         beta = jnp.ravel(beta)
 
         return FitResult(
-            params=Params(beta=beta, disp=model.family.canonical_dispersion(disp)),
+            params=Params(beta=beta, disp=model.canonicalize_dispersion(disp)),
             X=X,
             y=y,
             eta=eta,

@@ -14,8 +14,9 @@ from jax.scipy.stats import norm
 from jaxtyping import ArrayLike
 
 from .._fit import FittedGLM
-from ..family import ExponentialFamily, Gaussian
+from ..family.dist import Gaussian
 from ..family.utils import t_cdf
+from ..glm import GLM
 from .stderr import AbstractStdErrEstimator
 from .types import InferenceResult
 
@@ -65,7 +66,7 @@ class WaldTest(AbstractTest, strict=True):
         se = jnp.sqrt(jnp.diag(covariance))
         stat = beta / se
         df = int(fit_result.eta.shape[0] - beta.shape[0])
-        p = _wald_test(stat, df, fitted.model.family)
+        p = _wald_test(stat, df, fitted.model)
 
         return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
 
@@ -102,7 +103,7 @@ class ScoreTest(AbstractTest, strict=True):
         glm_wt = fit_result.glm_wt
         score_residual = fit_result.score_residual
         beta = jnp.asarray(fit_result.params.beta)
-        phi = jnp.asarray(fitted.model.family.scale(X, y, mu))
+        phi = jnp.asarray(fitted.model.scale(X, y, mu))
         if not bool(jnp.isfinite(phi)) or float(phi) <= 0.0:
             raise ValueError("ScoreTest requires family.scale(X, y, mu) to be finite and > 0.")
 
@@ -118,7 +119,7 @@ class ScoreTest(AbstractTest, strict=True):
         return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
 
 
-def _wald_test(statistic: ArrayLike, df: int, family: ExponentialFamily) -> Array:
+def _wald_test(statistic: ArrayLike, df: int, model: GLM) -> Array:
     r"""Two-sided Wald test p-values.
 
     Uses a $t_{df}$ distribution for Gaussian families and $\mathcal{N}(0, 1)$
@@ -128,12 +129,12 @@ def _wald_test(statistic: ArrayLike, df: int, family: ExponentialFamily) -> Arra
 
     - `statistic`: test statistics $\hat\beta / \mathrm{SE}(\hat\beta)$, shape `(p,)`.
     - `df`: residual degrees of freedom $n - p$.
-    - `family`: fitted `ExponentialFamily` instance.
+    - `model`: fitted `GLM` instance.
 
     **Returns:**
 
     Two-sided p-values, shape `(p,)`.
     """
-    if isinstance(family, Gaussian):
+    if isinstance(model.family, Gaussian):
         return 2 * t_cdf(-jnp.abs(statistic), df)
     return 2 * norm.sf(jnp.abs(statistic))

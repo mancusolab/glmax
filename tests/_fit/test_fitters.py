@@ -156,10 +156,11 @@ def test_wald_test_jit_is_finite(family):
     """wald_test is JIT-safe for Gaussian and Poisson: filter_jit output is finite."""
     from glmax._infer.hyptest import _wald_test
 
+    model = glmax.GLM(family=family)
     stat = jnp.array([2.0, -1.5, 0.5])
 
     def _jit_wald(stat):
-        return _wald_test(stat, 50, family)
+        return _wald_test(stat, 50, model)
 
     p_jit = eqx.filter_jit(_jit_wald)(stat)
 

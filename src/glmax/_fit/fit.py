@@ -59,4 +59,4 @@ def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:
     assert beta is not None and disp is not None
 
     eta = X_array @ beta + offset_array
-    return model.family.glink.inverse(eta)
+    return model.mean(eta)
