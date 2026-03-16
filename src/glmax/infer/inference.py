@@ -12,14 +12,18 @@ from jaxtyping import ArrayLike
 
 from ..family.dist import ExponentialFamily, Gaussian
 from ..family.utils import t_cdf
-from ..fit import FitResult, Params, validate_fit_result
+from ..fit import _matches_fit_result_shape, _matches_fitted_glm_shape, FittedGLM, Params, validate_fit_result
+from .stderr import AbstractStdErrEstimator, FisherInfoError
 
 
 if TYPE_CHECKING:
-    from ..glm import GLM
+    pass
 
 
 __all__ = ["InferenceResult", "infer", "wald_test"]
+
+
+DEFAULT_STDERR: AbstractStdErrEstimator = FisherInfoError()
 
 
 class InferenceResult(NamedTuple):
@@ -52,20 +56,25 @@ def wald_test(statistic: ArrayLike, df: int, family: ExponentialFamily) -> Array
     return 2 * norm.sf(jnp.abs(statistic))
 
 
-def infer(model: GLM, fit_result: FitResult) -> InferenceResult:
+def infer(
+    fitted: FittedGLM,
+    stderr: AbstractStdErrEstimator = DEFAULT_STDERR,
+) -> InferenceResult:
     """Inferential summaries from fit artifacts without refitting."""
-    from ..glm import GLM as _GLM
+    if not _matches_fitted_glm_shape(fitted):
+        raise TypeError("infer(...) expects `fitted` to be a FittedGLM instance.")
+    if not isinstance(stderr, AbstractStdErrEstimator):
+        raise TypeError("infer(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
 
-    if not isinstance(model, _GLM):
-        raise TypeError("infer(...) expects `model` to be a GLM instance.")
-    if not isinstance(fit_result, FitResult):
-        raise TypeError("infer(...) expects `fit_result` to be a FitResult instance.")
-
+    model = fitted.model
+    fit_result = fitted.result
+    if not _matches_fit_result_shape(fit_result):
+        raise TypeError("infer(...) expects `fitted.result` to be a FitResult instance.")
     validate_fit_result(fit_result)
 
     beta = jnp.asarray(fit_result.params.beta)
-    curvature = jnp.asarray(fit_result.curvature)
-    se = jnp.sqrt(jnp.diag(curvature))
+    covariance = jnp.asarray(stderr(fitted))
+    se = jnp.sqrt(jnp.diag(covariance))
     z = beta / se
     df = int(fit_result.eta.shape[0] - beta.shape[0])
     p = wald_test(z, df, model.family)

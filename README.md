@@ -5,12 +5,12 @@
 The canonical workflow is:
 
 1. `specify(...) -> GLM`
-2. `fit(model, data, init=None, *, fitter=...) -> FitResult`
+2. `fit(model, data, init=None, *, fitter=...) -> FittedGLM`
 3. `predict(model, params, data)` for fitted means
-4. `infer(model, fit_result)` for inferential summaries without refitting
-5. `check(model, fit_result)` for diagnostics without refitting
+4. `infer(fitted, stderr=...)` for inferential summaries without refitting
+5. `check(fitted)` for diagnostics without refitting
 
-The canonical nouns are `GLMData`, `Params`, `FitResult`, `InferenceResult`, and `Diagnostics`.
+The canonical nouns are `GLMData`, `Params`, `FitResult`, `FittedGLM`, `InferenceResult`, and `Diagnostics`.
 
 ## Installation
 
@@ -35,11 +35,11 @@ data = GLMData(
     y=jnp.array([0.1, 1.2, 1.9, 3.1]),
 )
 
-fit_result = glmax.fit(model, data)
-params = fit_result.params
+fitted = glmax.fit(model, data)
+params = fitted.params
 pred = glmax.predict(model, params, data)
-infer_result = glmax.infer(model, fit_result)
-diagnostics = glmax.check(model, fit_result)
+infer_result = glmax.infer(fitted)
+diagnostics = glmax.check(fitted)
 ```
 
 ## Testing

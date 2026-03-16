@@ -155,21 +155,6 @@ class ExponentialFamily(eqx.Module):
         del disp
         return jnp.asarray(0.0)
 
-    def _hlink(self, eta: ArrayLike, alpha: ScalarLike = 0.0) -> Array:
-        """
-        If canonical link, then this is identity function
-        """
-        return jnp.asarray(eta)
-
-    def _hlink_score(self, eta: ArrayLike, alpha: ScalarLike = 0.0) -> Array:
-        """
-        If canonical link, then this is identity function
-        """
-        return jnp.ones_like(eta)
-
-    def _hlink_hess(self, eta: ArrayLike, alpha: ScalarLike = 0.0) -> Array:
-        return jnp.zeros_like(eta)
-
 
 class Gaussian(ExponentialFamily):
     """
@@ -613,18 +598,6 @@ class NegativeBinomial(ExponentialFamily):
 
     def canonical_dispersion(self, disp: ScalarLike = 0.0) -> Array:
         return jnp.asarray(disp)
-
-    def _hlink(self, eta: ArrayLike, alpha: ScalarLike = 0.0) -> Array:
-        """
-        Using log link in g function
-        """
-        return jnp.log1p(-1.0 / (alpha * jnp.exp(eta)))
-
-    def _hlink_score(self, eta: ArrayLike, alpha: ScalarLike = 0.0) -> Array:
-        return 1.0 / (alpha * jnp.exp(eta) + 1.0)
-
-    def _hlink_hess(self, eta: ArrayLike, alpha: ScalarLike = 0.0) -> Array:
-        return -alpha * jnp.exp(eta) / (alpha * jnp.exp(eta) + 1) ** 2
 
 
 class Gamma(ExponentialFamily):

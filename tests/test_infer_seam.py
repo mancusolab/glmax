@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 import glmax
 
-from glmax import Diagnostics, FitResult, GLMData, Params
+from glmax import Diagnostics, FitResult, FittedGLM, GLMData, Params
 from glmax.family import Gaussian
 from glmax.infer.solve import QRSolver
 
@@ -28,19 +28,15 @@ def _drop_stale_infer_modules() -> None:
 def _make_fit_result() -> FitResult:
     return FitResult(
         params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
-        se=jnp.array([0.5]),
-        z=jnp.array([2.0]),
-        p=jnp.array([0.05]),
+        X=jnp.array([[1.0]]),
+        y=jnp.array([1.0]),
         eta=jnp.array([1.0]),
         mu=jnp.array([1.0]),
         glm_wt=jnp.array([1.0]),
-        diagnostics=Diagnostics(
-            converged=jnp.array(True),
-            num_iters=jnp.array(1),
-            objective=jnp.array(0.1),
-            objective_delta=jnp.array(-1e-3),
-        ),
-        curvature=jnp.array([[1.0]]),
+        converged=jnp.array(True),
+        num_iters=jnp.array(1),
+        objective=jnp.array(0.1),
+        objective_delta=jnp.array(-1e-3),
         score_residual=jnp.array([0.0]),
     )
 
@@ -89,6 +85,7 @@ def test_importing_canonical_fit_module_does_not_touch_stale_infer_modules() -> 
 
 def test_canonical_fit_execution_does_not_import_stale_infer_modules() -> None:
     _drop_stale_infer_modules()
+    current_fitted_glm_type = importlib.import_module("glmax.fit").FittedGLM
 
     result = glmax.fit(
         glmax.GLM(family=Gaussian(), solver=QRSolver()),
@@ -98,17 +95,17 @@ def test_canonical_fit_execution_does_not_import_stale_infer_modules() -> None:
         ),
     )
 
-    assert isinstance(result, FitResult)
+    assert isinstance(result, current_fitted_glm_type)
     assert all(name not in sys.modules for name in STALE_INFER_MODULES)
 
 
 def test_canonical_infer_and_check_do_not_import_stale_infer_modules() -> None:
     _drop_stale_infer_modules()
-    model = glmax.GLM(family=Gaussian())
     fit_result = _make_fit_result()
+    fitted = FittedGLM(model=glmax.GLM(family=Gaussian()), result=fit_result)
 
-    inference_result = glmax.infer(model, fit_result)
-    diagnostics = glmax.check(model, fit_result)
+    inference_result = glmax.infer(fitted)
+    diagnostics = glmax.check(fitted)
 
     assert isinstance(inference_result, glmax.InferenceResult)
     assert isinstance(diagnostics, Diagnostics)

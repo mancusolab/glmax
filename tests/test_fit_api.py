@@ -14,7 +14,7 @@ import jax.tree_util as jtu
 
 import glmax
 
-from glmax import Diagnostics, FitResult, Fitter, GLMData, InferenceResult, Params
+from glmax import Diagnostics, FitResult, FittedGLM, Fitter, GLMData, InferenceResult, Params
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 from glmax.glm import specify
 from glmax.infer.solve import QRSolver
@@ -28,6 +28,7 @@ def test_canonical_contract_imports_exist() -> None:
     assert GLMData is not None
     assert Params is not None
     assert FitResult is not None
+    assert FittedGLM is not None
     assert InferenceResult is not None
     assert Diagnostics is not None
     assert Fitter is not None
@@ -40,6 +41,7 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
         "GLM",
         "Fitter",
         "FitResult",
+        "FittedGLM",
         "InferenceResult",
         "Diagnostics",
         "specify",
@@ -100,22 +102,25 @@ def test_infer_shims_are_not_publicly_reexported() -> None:
         importlib.import_module("glmax.infer.state")
 
 
+def test_family_surface_does_not_expose_hlink_derivative_hooks() -> None:
+    assert not hasattr(Gaussian(), "_hlink_score")
+    assert not hasattr(Gaussian(), "_hlink_hess")
+    assert not hasattr(NegativeBinomial(), "_hlink_score")
+    assert not hasattr(NegativeBinomial(), "_hlink_hess")
+
+
 def _make_fit_result() -> FitResult:
     return FitResult(
         params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
-        se=jnp.array([0.5]),
-        z=jnp.array([2.0]),
-        p=jnp.array([0.05]),
+        X=jnp.array([[1.0]]),
+        y=jnp.array([1.0]),
         eta=jnp.array([1.0]),
         mu=jnp.array([1.0]),
         glm_wt=jnp.array([1.0]),
-        diagnostics=Diagnostics(
-            converged=jnp.array(True),
-            num_iters=jnp.array(1),
-            objective=jnp.array(0.1),
-            objective_delta=jnp.array(-1e-3),
-        ),
-        curvature=jnp.array([[1.0]]),
+        converged=jnp.array(True),
+        num_iters=jnp.array(1),
+        objective=jnp.array(0.1),
+        objective_delta=jnp.array(-1e-3),
         score_residual=jnp.array([0.0]),
     )
 
@@ -129,7 +134,14 @@ def test_fit_signature_matches_canonical_surface() -> None:
     assert sig.parameters["fitter"].kind is inspect.Parameter.KEYWORD_ONLY
 
 
-def test_fit_returns_fitresult_using_injected_fitter() -> None:
+def test_infer_signature_matches_canonical_surface() -> None:
+    sig = inspect.signature(glmax.infer)
+    assert list(sig.parameters) == ["fitted", "stderr"]
+    assert sig.parameters["fitted"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert sig.parameters["stderr"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+
+
+def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     expected = _make_fit_result()
     seen: dict[str, object] = {}
 
@@ -146,8 +158,9 @@ def test_fit_returns_fitresult_using_injected_fitter() -> None:
 
     result = glmax.fit(model, data, init=init, fitter=DummyFitter())
 
-    assert result is expected
-    assert isinstance(result, FitResult)
+    assert isinstance(result, FittedGLM)
+    assert result.model is model
+    assert result.result is expected
     assert seen["model"] is model
     assert seen["data"] is data
     assert seen["init"] is init
@@ -172,7 +185,7 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     result_1 = glmax.fit(model, data, init=init)
     result_2 = glmax.fit(model, data, init=init)
 
-    assert isinstance(result_1, FitResult)
+    assert isinstance(result_1, FittedGLM)
     assert jnp.allclose(result_1.beta, result_2.beta)
     assert jnp.allclose(result_1.params.disp, result_2.params.disp)
 
@@ -193,7 +206,7 @@ def test_default_top_level_fit_does_not_dispatch_through_model_fit_override() ->
 
     result = glmax.fit(model, data, init=init)
 
-    assert isinstance(result, FitResult)
+    assert isinstance(result, FittedGLM)
     assert result.params.beta.shape == (2,)
     assert jnp.ndim(result.params.disp) == 0
 
@@ -208,9 +221,13 @@ def test_contract_dataclasses_are_pytrees() -> None:
 
     result = _make_fit_result()
     fit_leaves, _ = jtu.tree_flatten(result)
-    assert len(fit_leaves) == 14
+    assert len(fit_leaves) == 12
+    assert not hasattr(result, "information")
     assert not hasattr(result, "infor_inv")
     assert not hasattr(result, "resid")
+    assert not hasattr(result, "se")
+    assert not hasattr(result, "z")
+    assert not hasattr(result, "p")
 
 
 def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
@@ -224,7 +241,7 @@ def test_default_fitter_rejects_unsupported_weights_and_mask() -> None:
         glmax.GLM(family=Gaussian()),
         GLMData(X=X, y=y, mask=jnp.array([True, False, True, True])),
     )
-    assert isinstance(masked_result, FitResult)
+    assert isinstance(masked_result, FittedGLM)
 
 
 def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
@@ -271,7 +288,7 @@ def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
 
     result = glmax.fit(model, data)
 
-    assert isinstance(result, FitResult)
+    assert isinstance(result, FittedGLM)
     assert result.params.beta.shape == (2,)
     assert bool(result.converged)
     assert jnp.all(jnp.isfinite(result.params.beta))
@@ -295,9 +312,8 @@ def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), y=y)
     result = glmax.fit(glmax.GLM(family=family), data)
 
-    assert isinstance(result, FitResult)
+    assert isinstance(result, FittedGLM)
     assert isinstance(result.params, Params)
-    assert result.curvature.shape == (1, 1)
     assert result.score_residual.shape == (data.n_samples,)
     assert bool(jnp.isfinite(result.objective))
     assert bool(jnp.isfinite(result.objective_delta))
@@ -341,23 +357,19 @@ def test_fit_rejects_malformed_fitresult_from_custom_fitter() -> None:
             del model, data, init
             return FitResult(
                 params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
-                se=jnp.array([0.5]),
-                z=jnp.array([2.0]),
-                p=jnp.array([0.05]),
+                X=jnp.array([[1.0]]),
+                y=jnp.array([1.0]),
                 eta=jnp.array([1.0]),
                 mu=jnp.array([1.0]),
                 glm_wt=jnp.array([1.0]),
-                diagnostics=Diagnostics(
-                    converged=jnp.array(True),
-                    num_iters=jnp.array(1),
-                    objective=jnp.array(0.0),
-                    objective_delta=jnp.array(-1e-3),
-                ),
-                curvature=jnp.array([[jnp.nan]]),
-                score_residual=jnp.array([0.0]),
+                converged=jnp.array(True),
+                num_iters=jnp.array(1),
+                objective=jnp.array(0.0),
+                objective_delta=jnp.array(-1e-3),
+                score_residual=jnp.array([jnp.nan]),
             )
 
-    with pytest.raises(ValueError, match="FitResult.curvature"):
+    with pytest.raises(ValueError, match="FitResult.score_residual"):
         glmax.fit(
             glmax.GLM(),
             GLMData(X=jnp.array([[1.0]]), y=jnp.array([1.0])),

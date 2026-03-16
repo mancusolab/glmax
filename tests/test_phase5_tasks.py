@@ -14,7 +14,7 @@ import jax.random as jr
 
 import glmax
 
-from glmax import FitResult, GLMData
+from glmax import GLMData
 from glmax.family import Gaussian, Poisson
 
 
@@ -74,22 +74,22 @@ def _make_gaussian_fit():
     model = glmax.specify(family=Gaussian())
     data = GLMData(X=X, y=y)
     result = glmax.fit(model, data)
-    return model, result
+    return result
 
 
 def test_infer_does_not_call_model_wald_test(monkeypatch):
     """infer() must not call model.wald_test after Task 2."""
     from glmax.glm import GLM
 
-    model, fit_result = _make_gaussian_fit()
+    fitted = _make_gaussian_fit()
 
     def _reject(*_args, **_kwargs):
         raise AssertionError("model.wald_test should not be called by infer()")
 
-    monkeypatch.setattr(GLM, "wald_test", _reject)
+    monkeypatch.setattr(GLM, "wald_test", _reject, raising=False)
 
     # Should not raise
-    ir = glmax.infer(model, fit_result)
+    ir = glmax.infer(fitted)
     assert bool(jnp.all(jnp.isfinite(ir.p)))
 
 
@@ -117,18 +117,14 @@ def test_fisher_info_error_scales_by_phi():
     data = GLMData(X=X, y=y)
     result = glmax.fit(model, data)
 
-    eta = result.eta
-    mu = result.mu
-    weight = result.glm_wt
-
-    # Expected: phi * inv(X' W_pure X) where W_pure = weight * phi
-    phi = model.family.scale(X, y, mu)
-    w_pure = weight * phi
-    infor = (X * w_pure[:, jnp.newaxis]).T @ X
+    # Expected: phi * inv(X' W_pure X), reconstructed from fit artifacts.
+    phi = result.params.disp
+    w_pure = result.glm_wt * phi
+    infor = (result.X * w_pure[:, jnp.newaxis]).T @ result.X
     expected_cov = phi * jnp.linalg.inv(infor)
 
     estimator = FisherInfoError()
-    actual_cov = estimator(model.family, X, y, eta, mu, weight, result.params.disp)
+    actual_cov = estimator(result)
 
     assert bool(jnp.allclose(actual_cov, expected_cov, atol=1e-5)), (
         f"FisherInfoError does not scale by phi correctly.\n"
@@ -145,7 +141,8 @@ def test_gaussian_se_positive_and_finite():
     y = X @ true_beta + jr.normal(jr.PRNGKey(1), (n,)) * 0.5
 
     model = glmax.specify(family=Gaussian())
-    result = glmax.fit(model, GLMData(X=X, y=y))
+    fitted = glmax.fit(model, GLMData(X=X, y=y))
+    result = glmax.infer(fitted)
 
     assert bool(jnp.all(result.se > 0)), "SEs must be positive"
     assert bool(jnp.all(jnp.isfinite(result.se))), "SEs must be finite"
@@ -170,8 +167,8 @@ def test_default_fitter_is_irls_fitter():
     assert isinstance(DEFAULT_FITTER, IRLSFitter)
 
 
-def test_irls_fitter_returns_finite_fitresult():
-    """IRLSFitter produces a FitResult with all fields finite (Gaussian)."""
+def test_irls_fitter_returns_fit_artifacts_without_inference_summaries():
+    """IRLSFitter produces fit artifacts and leaves summaries to infer()."""
     from glmax.fit import IRLSFitter
 
     n, p = 50, 3
@@ -183,10 +180,12 @@ def test_irls_fitter_returns_finite_fitresult():
     fitter = IRLSFitter()
     result = fitter(model, GLMData(X=X, y=y))
 
-    assert isinstance(result, FitResult)
+    current_fit_result_type = __import__("glmax.fit", fromlist=["FitResult"]).FitResult
+    assert isinstance(result, current_fit_result_type)
     assert bool(jnp.all(jnp.isfinite(result.params.beta)))
-    assert bool(jnp.all(jnp.isfinite(result.se)))
-    assert bool(jnp.all(jnp.isfinite(result.p)))
+    assert not hasattr(result, "se")
+    assert not hasattr(result, "z")
+    assert not hasattr(result, "p")
 
 
 def test_gaussian_dispersion_positive_after_irls():

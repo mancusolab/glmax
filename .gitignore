@@ -17,6 +17,13 @@ __pycache__/*
 # any data for human testing
 *.tsv
 
+# planning
+docs/design-plans
+docs/implementation-plans
+
+# generated docs
+site
+
 # Project files
 .ropeproject
 .project

@@ -7,16 +7,17 @@
 `glmax` exposes five canonical verbs:
 
 - `specify(...)` creates a `GLM` model
-- `fit(model, data, init=None, *, fitter=...)` estimates model parameters
+- `fit(model, data, init=None, *, fitter=...)` estimates model parameters and returns a `FittedGLM`
 - `predict(model, params, data)` computes predictions
-- `infer(model, fit_result)` computes inferential summaries without refitting
-- `check(model, fit_result)` returns diagnostics without refitting
+- `infer(fitted, stderr=...)` computes inferential summaries without refitting
+- `check(fitted)` returns diagnostics without refitting
 
 Data and parameter contracts are explicit nouns:
 
 - `GLMData`
 - `Params`
 - `FitResult`
+- `FittedGLM`
 - `InferenceResult`
 - `Diagnostics`
 
@@ -35,10 +36,10 @@ data = GLMData(
     y=jnp.array([0.0, 1.0, 1.0, 2.0]),
 )
 
-fit_result = glmax.fit(model, data)
-pred = glmax.predict(model, fit_result.params, data)
-infer_result = glmax.infer(model, fit_result)
-diagnostics = glmax.check(model, fit_result)
+fitted = glmax.fit(model, data)
+pred = glmax.predict(model, fitted.params, data)
+infer_result = glmax.infer(fitted)
+diagnostics = glmax.check(fitted)
 ```
 
 ## Verification

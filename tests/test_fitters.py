@@ -1,5 +1,7 @@
 # pattern: Imperative Shell
 
+import importlib
+
 from dataclasses import fields
 
 import pytest
@@ -10,7 +12,7 @@ import jax.random as jr
 
 import glmax
 
-from glmax import Diagnostics, FitResult, GLMData, Params
+from glmax import FitResult, FittedGLM, GLMData, Params
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
 
@@ -27,19 +29,15 @@ def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
 def _make_fit_result() -> FitResult:
     return FitResult(
         params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
-        se=jnp.array([0.5]),
-        z=jnp.array([2.0]),
-        p=jnp.array([0.05]),
+        X=jnp.array([[1.0], [1.0]]),
+        y=jnp.array([1.0, 1.0]),
         eta=jnp.array([1.0, 1.0]),
         mu=jnp.array([1.0, 1.0]),
         glm_wt=jnp.array([1.0, 1.0]),
-        diagnostics=Diagnostics(
-            converged=jnp.array(True),
-            num_iters=jnp.array(1),
-            objective=jnp.array(0.0),
-            objective_delta=jnp.array(-1e-4),
-        ),
-        curvature=jnp.array([[1.0]]),
+        converged=jnp.array(True),
+        num_iters=jnp.array(1),
+        objective=jnp.array(0.0),
+        objective_delta=jnp.array(-1e-4),
         score_residual=jnp.array([0.0, 0.0]),
     )
 
@@ -61,7 +59,8 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
 
     result = glmax.fit(model, data, init=init, fitter=RecordingFitter())
 
-    assert result is expected
+    assert isinstance(result, FittedGLM)
+    assert result.result is expected
     assert seen["model"] is model
     assert seen["data"] is data
     assert seen["init"] is init
@@ -96,12 +95,13 @@ _GAMMA_X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     ],
 )
 def test_default_fitter_returns_canonical_fitresult_for_supported_families(family, X, y) -> None:
+    current_fitted_glm_type = importlib.import_module("glmax.fit").FittedGLM
     model = glmax.specify(family=family)
     data = GLMData(X=X, y=y)
 
     result = glmax.fit(model, data)
 
-    assert isinstance(result, FitResult)
+    assert isinstance(result, current_fitted_glm_type)
     assert result.params.beta.shape == (1,)
     assert result.eta.shape == y.shape
     assert result.mu.shape == y.shape
@@ -110,7 +110,7 @@ def test_default_fitter_returns_canonical_fitresult_for_supported_families(famil
 
 
 def test_fit_rejects_custom_fitter_result_with_malformed_contract() -> None:
-    malformed = unchecked_fit_result(_make_fit_result(), diagnostics=object())
+    malformed = unchecked_fit_result(_make_fit_result(), objective="bad")
 
     class BadFitter:
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
@@ -120,8 +120,30 @@ def test_fit_rejects_custom_fitter_result_with_malformed_contract() -> None:
     model = glmax.GLM()
     data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
 
-    with pytest.raises(TypeError, match="FitResult.diagnostics"):
+    with pytest.raises(TypeError, match="FitResult.objective must be numeric"):
         glmax.fit(model, data, fitter=BadFitter())
+
+
+def test_negative_binomial_fit_does_not_run_poisson_warm_start(monkeypatch) -> None:
+    fit_module = importlib.import_module("glmax.fit")
+    original_irls = fit_module.irls
+    seen_families: list[str] = []
+
+    def recording_irls(
+        X, y, family, solver, eta, max_iter=1000, tol=1e-3, step_size=1.0, offset_eta=0.0, disp_init=0.0
+    ):
+        seen_families.append(type(family).__name__)
+        return original_irls(X, y, family, solver, eta, max_iter, tol, step_size, offset_eta, disp_init)
+
+    monkeypatch.setattr(fit_module, "irls", recording_irls)
+
+    model = glmax.specify(family=NegativeBinomial())
+    data = GLMData(X=_DEFAULT_X, y=jnp.array([0.0, 1.0, 2.0, 4.0]))
+
+    result = glmax.fit(model, data)
+
+    assert isinstance(result, fit_module.FittedGLM)
+    assert seen_families == ["NegativeBinomial"]
 
 
 # ---------------------------------------------------------------------------
@@ -170,18 +192,30 @@ def test_fisher_info_error_jit_is_finite():
     family = Gaussian()
     model = glmax.specify(family=family)
     result = glmax.fit(model, GLMData(X=X, y=y))
-    eta, mu, weight, disp = result.eta, result.mu, result.glm_wt, result.params.disp
 
     estimator = FisherInfoError()
 
-    def _jit_fisher(X, y, eta, mu, weight, disp):
-        return estimator(family, X, y, eta, mu, weight, disp)
+    def _jit_fisher(result):
+        return estimator(result)
 
-    cov_jit = eqx.filter_jit(_jit_fisher)(X, y, eta, mu, weight, disp)
+    cov_jit = eqx.filter_jit(_jit_fisher)(result)
 
     assert bool(
         jnp.all(jnp.isfinite(cov_jit))
     ), f"JIT FisherInfoError covariance must be finite; got diag={jnp.diag(cov_jit)}"
+
+
+def test_huber_error_is_finite_and_symmetric() -> None:
+    from glmax.infer.stderr import HuberError
+
+    X, y = _make_gaussian_xy()
+    model = glmax.specify(family=Gaussian())
+    result = glmax.fit(model, GLMData(X=X, y=y))
+
+    cov = HuberError()(result)
+
+    assert bool(jnp.all(jnp.isfinite(cov))), f"HuberError covariance must be finite; got diag={jnp.diag(cov)}"
+    assert bool(jnp.allclose(cov, cov.T, atol=1e-6)), "HuberError covariance must be symmetric"
 
 
 @pytest.mark.parametrize("family", [Gaussian(), Poisson()])
@@ -216,17 +250,15 @@ def test_gaussian_se_equals_ols_formula() -> None:
 
     model = glmax.specify(family=Gaussian())
     result = glmax.fit(model, GLMData(X=X, y=y))
+    inference = glmax.infer(result)
 
-    # Reconstruct expected SE using the same formula as FisherInfoError:
-    #   phi * inv(X' W_pure X)  where W_pure = weight * phi
-    # For Gaussian: weight = 1/sigma^2 and phi = sigma^2, so W_pure = I.
-    # This reduces to: sigma^2 * inv(X'X)
     family = Gaussian()
-    _, _, w = family.calc_weight(result.eta, result.params.disp)
-    phi = family.scale(X, y, result.mu)
-    w_pure = w * phi
-    XtWpureX = (X * w_pure[:, jnp.newaxis]).T @ X
-    expected_cov = phi * jla.inv(XtWpureX)
+    phi = family.scale(result.X, result.y, result.mu)
+    w_pure = result.glm_wt * phi
+    information = (result.X * w_pure[:, jnp.newaxis]).T @ result.X
+    expected_cov = phi * jla.inv(information)
     expected_se = jnp.sqrt(jnp.diag(expected_cov))
 
-    assert jnp.allclose(result.se, expected_se, atol=1e-5), f"SE mismatch: got {result.se}, expected {expected_se}"
+    assert jnp.allclose(
+        inference.se, expected_se, atol=1e-5
+    ), f"SE mismatch: got {inference.se}, expected {expected_se}"

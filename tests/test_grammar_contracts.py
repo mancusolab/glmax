@@ -1,5 +1,7 @@
 # pattern: Imperative Shell
 
+import importlib
+
 from dataclasses import fields
 
 import pytest
@@ -8,7 +10,7 @@ import jax.numpy as jnp
 
 import glmax
 
-from glmax import Diagnostics, FitResult, GLMData, InferenceResult, Params
+from glmax import Diagnostics, FitResult, FittedGLM, GLMData, InferenceResult, Params
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 
 
@@ -22,6 +24,16 @@ def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
     return result
 
 
+def unchecked_fitted(base: FittedGLM, **overrides: object) -> FittedGLM:
+    values = {"model": base.model, "result": base.result}
+    values.update(overrides)
+
+    fitted = object.__new__(FittedGLM)
+    for name, value in values.items():
+        object.__setattr__(fitted, name, value)
+    return fitted
+
+
 @pytest.mark.parametrize(
     ("family", "y"),
     [
@@ -32,26 +44,27 @@ def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
     ],
 )
 def test_grammar_contract_matrix_across_all_verbs(family, y) -> None:
+    current_fitted_glm_type = importlib.import_module("glmax.fit").FittedGLM
     model = glmax.specify(family=family)
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), y=y)
 
-    fit_result = glmax.fit(model, data)
-    prediction = glmax.predict(model, fit_result.params, data)
-    inferred = glmax.infer(model, fit_result)
-    diagnostics = glmax.check(model, fit_result)
+    fitted = glmax.fit(model, data)
+    prediction = glmax.predict(model, fitted.params, data)
+    inferred = glmax.infer(fitted)
+    diagnostics = glmax.check(fitted)
 
-    assert isinstance(fit_result, FitResult)
+    assert isinstance(fitted, current_fitted_glm_type)
     assert prediction.shape == y.shape
     assert isinstance(inferred, InferenceResult)
-    assert inferred.se.shape == fit_result.se.shape
+    assert inferred.se.shape == fitted.params.beta.shape
     assert isinstance(diagnostics, Diagnostics)
-    assert bool(jnp.isfinite(diagnostics.objective))
+    assert diagnostics == Diagnostics()
 
 
 def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
     model = glmax.specify(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.2, 1.8, 3.1]))
-    fit_result = glmax.fit(model, data)
+    fitted = glmax.fit(model, data)
 
     with pytest.raises(TypeError, match="GLM"):
         glmax.fit(object(), data)
@@ -62,19 +75,23 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
     with pytest.raises(TypeError, match="Params"):
         glmax.predict(model, jnp.array([1.0]), data)
 
-    with pytest.raises(TypeError, match="FitResult"):
-        glmax.infer(model, object())
+    with pytest.raises(TypeError, match="FittedGLM"):
+        glmax.infer(object())
 
-    with pytest.raises(TypeError, match="FitResult"):
-        glmax.check(model, object())
+    with pytest.raises(TypeError, match="FittedGLM"):
+        glmax.check(object())
 
     with pytest.raises(ValueError, match="Params.beta"):
         glmax.predict(model, Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0)), data)
 
     with pytest.raises(ValueError, match="FitResult.params.beta"):
         glmax.infer(
-            model,
-            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0))),
+            unchecked_fitted(
+                fitted,
+                result=unchecked_fit_result(
+                    fitted.result, params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0))
+                ),
+            ),
         )
 
     with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
@@ -82,8 +99,13 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
 
     with pytest.raises(TypeError, match="FitResult.params.beta must have an inexact dtype"):
         glmax.infer(
-            model,
-            unchecked_fit_result(fit_result, params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0))),
+            unchecked_fitted(
+                fitted,
+                result=unchecked_fit_result(
+                    fitted.result,
+                    params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0)),
+                ),
+            ),
         )
 
 

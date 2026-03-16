@@ -5,10 +5,10 @@ This page summarizes the canonical noun/verb contracts for `glmax`.
 ## Verbs
 
 - `glmax.specify(*, family=None, solver=None) -> GLM`
-- `glmax.fit(model, data, init=None, *, fitter=...) -> FitResult`
+- `glmax.fit(model, data, init=None, *, fitter=...) -> FittedGLM`
 - `glmax.predict(model, params, data) -> Array`
-- `glmax.infer(model, fit_result) -> InferenceResult`
-- `glmax.check(model, fit_result) -> Diagnostics`
+- `glmax.infer(fitted, stderr=...) -> InferenceResult`
+- `glmax.check(fitted) -> Diagnostics`
 
 ## Nouns
 
@@ -20,13 +20,18 @@ This page summarizes the canonical noun/verb contracts for `glmax`.
   - `beta`: rank-1 parameter vector `(p,)`
   - `disp`: scalar canonical dispersion
 - `FitResult`
-  - `params`, `se`, `z`, `p`, `eta`, `mu`, `glm_wt`
-  - `diagnostics` (converged, iteration count, objective metadata)
-  - `curvature`, `score_residual`
+  - internal fitter output
+  - `params`, `eta`, `mu`, `glm_wt`
+  - `X`, `y`
+  - `converged`, `num_iters`, `objective`, `objective_delta`
+  - `score_residual`
+- `FittedGLM`
+  - `model`, `result`
+  - forwards common fit artifacts like `params`, `eta`, and `mu`
 - `InferenceResult`
   - `params`, `se`, `z`, `p`
 - `Diagnostics`
-  - `converged`, `num_iters`, `objective`, `objective_delta`
+  - placeholder model-fit diagnostics contract
 
 ## Usage Pattern
 
@@ -34,11 +39,11 @@ This page summarizes the canonical noun/verb contracts for `glmax`.
 import glmax
 
 model = glmax.specify(...)
-fit_result = glmax.fit(model, data)
-pred = glmax.predict(model, fit_result.params, data)
-infer_result = glmax.infer(model, fit_result)
-diagnostics = glmax.check(model, fit_result)
+fitted = glmax.fit(model, data)
+pred = glmax.predict(model, fitted.params, data)
+infer_result = glmax.infer(fitted)
+diagnostics = glmax.check(fitted)
 ```
 
-`glmax.GLM.fit(...)` remains available as an internal convenience method, but
-the public API contract is the top-level grammar workflow shown above.
+`glmax.GLM.fit(...)` is not part of the public API contract; use the top-level
+grammar workflow shown above.

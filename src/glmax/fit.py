@@ -11,15 +11,13 @@ from jax import Array
 
 from .data import GLMData
 from .infer.optimize import irls
-from .infer.stderr import FisherInfoError
 
 
 if TYPE_CHECKING:
     from .glm import GLM
-    from .infer.diagnostics import Diagnostics
 
 
-__all__ = ["Params", "FitResult", "Fitter", "validate_fit_result", "fit", "predict"]
+__all__ = ["Params", "FitResult", "FittedGLM", "Fitter", "validate_fit_result", "fit", "predict"]
 
 
 def _is_numeric_dtype(array: Array) -> bool:
@@ -57,17 +55,25 @@ def _matches_namedtuple_shape(value: object, *, type_name: str, fields: tuple[st
 def _matches_fit_result_shape(value: object) -> bool:
     required_fields = (
         "params",
-        "se",
-        "z",
-        "p",
+        "X",
+        "y",
         "eta",
         "mu",
         "glm_wt",
-        "diagnostics",
-        "curvature",
+        "converged",
+        "num_iters",
+        "objective",
+        "objective_delta",
         "score_residual",
     )
     return getattr(type(value), "__name__", None) == "FitResult" and all(
+        hasattr(value, name) for name in required_fields
+    )
+
+
+def _matches_fitted_glm_shape(value: object) -> bool:
+    required_fields = ("model", "result")
+    return getattr(type(value), "__name__", None) == "FittedGLM" and all(
         hasattr(value, name) for name in required_fields
     )
 
@@ -83,45 +89,24 @@ class FitResult(eqx.Module, strict=True):
     """Canonical fit contract shared by grammar verbs."""
 
     params: Params
-    se: Array
-    z: Array
-    p: Array
+    X: Array
+    y: Array
     eta: Array
     mu: Array
     glm_wt: Array
-    diagnostics: Diagnostics
-    curvature: Array
+    converged: Array
+    num_iters: Array
+    objective: Array
+    objective_delta: Array
     score_residual: Array
 
     @property
     def beta(self) -> Array:
         return self.params.beta
 
-    @property
-    def num_iters(self) -> Array:
-        return self.diagnostics.num_iters
-
-    @property
-    def converged(self) -> Array:
-        return self.diagnostics.converged
-
-    @property
-    def objective(self) -> Array:
-        return self.diagnostics.objective
-
-    @property
-    def objective_delta(self) -> Array:
-        return self.diagnostics.objective_delta
-
     def __check_init__(self) -> None:
         if not _matches_namedtuple_shape(self.params, type_name="Params", fields=("beta", "disp")):
             raise TypeError("FitResult.params must be a Params instance.")
-        if not _matches_namedtuple_shape(
-            self.diagnostics,
-            type_name="Diagnostics",
-            fields=("converged", "num_iters", "objective", "objective_delta"),
-        ):
-            raise TypeError("FitResult.diagnostics must be a Diagnostics instance.")
 
         beta = _as_contract_numeric_array("FitResult.params.beta", self.params.beta)
         if beta.ndim != 1:
@@ -137,34 +122,28 @@ class FitResult(eqx.Module, strict=True):
 
         expected_p = beta.shape[0]
 
-        se = _as_contract_numeric_array("FitResult.se", self.se)
-        if se.ndim != 1 or se.shape[0] != expected_p:
-            raise ValueError("FitResult.se must be a rank-1 vector aligned with FitResult.params.beta.")
-        _require_contract_finite("FitResult.se", se)
+        X = _as_contract_numeric_array("FitResult.X", self.X)
+        if X.ndim != 2:
+            raise ValueError("FitResult.X must be a rank-2 matrix.")
+        _require_contract_finite("FitResult.X", X)
+        if X.shape[1] != expected_p:
+            raise ValueError("FitResult.X shape must match FitResult.params.beta length.")
 
-        z = _as_contract_numeric_array("FitResult.z", self.z)
-        if z.ndim != 1 or z.shape[0] != expected_p:
-            raise ValueError("FitResult.z must be a rank-1 vector aligned with FitResult.params.beta.")
-        _require_contract_finite("FitResult.z", z)
-
-        p = _as_contract_numeric_array("FitResult.p", self.p)
-        if p.ndim != 1 or p.shape[0] != expected_p:
-            raise ValueError("FitResult.p must be a rank-1 vector aligned with FitResult.params.beta.")
-        _require_contract_finite("FitResult.p", p)
-
-        curvature = _as_contract_numeric_array("FitResult.curvature", self.curvature)
-        if curvature.ndim != 2 or curvature.shape[0] != curvature.shape[1]:
-            raise ValueError("FitResult.curvature must be a square rank-2 matrix.")
-        if curvature.shape[0] != expected_p:
-            raise ValueError("FitResult.curvature shape must match FitResult.params.beta length.")
-        _require_contract_finite("FitResult.curvature", curvature)
+        y = _as_contract_numeric_array("FitResult.y", self.y)
+        if y.ndim != 1:
+            raise ValueError("FitResult.y must be a rank-1 vector.")
+        _require_contract_finite("FitResult.y", y)
+        if y.shape[0] != X.shape[0]:
+            raise ValueError("FitResult.y must align with FitResult.X over samples.")
 
         eta = _as_contract_numeric_array("FitResult.eta", self.eta)
         if eta.ndim != 1:
             raise ValueError("FitResult.eta must be a rank-1 vector.")
         _require_contract_finite("FitResult.eta", eta)
 
-        expected_n = eta.shape[0]
+        expected_n = X.shape[0]
+        if eta.shape[0] != expected_n:
+            raise ValueError("FitResult.eta must align with FitResult.X over samples.")
 
         mu = _as_contract_numeric_array("FitResult.mu", self.mu)
         if mu.ndim != 1 or mu.shape[0] != expected_n:
@@ -181,29 +160,93 @@ class FitResult(eqx.Module, strict=True):
             raise ValueError("FitResult.score_residual must be a rank-1 vector aligned with FitResult.eta.")
         _require_contract_finite("FitResult.score_residual", score_residual)
 
-        converged = jnp.asarray(self.diagnostics.converged)
+        converged = jnp.asarray(self.converged)
         if not jnp.issubdtype(converged.dtype, jnp.bool_):
-            raise TypeError("FitResult.diagnostics.converged must be boolean.")
+            raise TypeError("FitResult.converged must be boolean.")
         if converged.ndim > 0 and converged.size != 1:
-            raise ValueError("FitResult.diagnostics.converged must be scalar.")
+            raise ValueError("FitResult.converged must be scalar.")
 
-        num_iters = _as_contract_numeric_array("FitResult.diagnostics.num_iters", self.diagnostics.num_iters)
+        num_iters = _as_contract_numeric_array("FitResult.num_iters", self.num_iters)
         if num_iters.ndim > 0 and num_iters.size != 1:
-            raise ValueError("FitResult.diagnostics.num_iters must be scalar.")
-        _require_contract_finite("FitResult.diagnostics.num_iters", num_iters)
+            raise ValueError("FitResult.num_iters must be scalar.")
+        _require_contract_finite("FitResult.num_iters", num_iters)
 
-        objective = _as_contract_numeric_array("FitResult.diagnostics.objective", self.diagnostics.objective)
+        objective = _as_contract_numeric_array("FitResult.objective", self.objective)
         if objective.ndim > 0 and objective.size != 1:
-            raise ValueError("FitResult.diagnostics.objective must be scalar.")
-        _require_contract_finite("FitResult.diagnostics.objective", objective)
+            raise ValueError("FitResult.objective must be scalar.")
+        _require_contract_finite("FitResult.objective", objective)
 
         objective_delta = _as_contract_numeric_array(
-            "FitResult.diagnostics.objective_delta",
-            self.diagnostics.objective_delta,
+            "FitResult.objective_delta",
+            self.objective_delta,
         )
         if objective_delta.ndim > 0 and objective_delta.size != 1:
-            raise ValueError("FitResult.diagnostics.objective_delta must be scalar.")
-        _require_contract_finite("FitResult.diagnostics.objective_delta", objective_delta)
+            raise ValueError("FitResult.objective_delta must be scalar.")
+        _require_contract_finite("FitResult.objective_delta", objective_delta)
+
+
+class FittedGLM(eqx.Module, strict=True):
+    """Canonical fitted-model noun used by downstream grammar verbs."""
+
+    model: "GLM"
+    result: FitResult
+
+    @property
+    def params(self) -> Params:
+        return self.result.params
+
+    @property
+    def X(self) -> Array:
+        return self.result.X
+
+    @property
+    def y(self) -> Array:
+        return self.result.y
+
+    @property
+    def beta(self) -> Array:
+        return self.result.beta
+
+    @property
+    def eta(self) -> Array:
+        return self.result.eta
+
+    @property
+    def mu(self) -> Array:
+        return self.result.mu
+
+    @property
+    def glm_wt(self) -> Array:
+        return self.result.glm_wt
+
+    @property
+    def converged(self) -> Array:
+        return self.result.converged
+
+    @property
+    def num_iters(self) -> Array:
+        return self.result.num_iters
+
+    @property
+    def objective(self) -> Array:
+        return self.result.objective
+
+    @property
+    def objective_delta(self) -> Array:
+        return self.result.objective_delta
+
+    @property
+    def score_residual(self) -> Array:
+        return self.result.score_residual
+
+    def __check_init__(self) -> None:
+        from .glm import GLM as _GLM
+
+        if not isinstance(self.model, _GLM):
+            raise TypeError("FittedGLM.model must be a GLM instance.")
+        if not _matches_fit_result_shape(self.result):
+            raise TypeError("FittedGLM.result must be a FitResult instance.")
+        validate_fit_result(self.result)
 
 
 @runtime_checkable
@@ -259,8 +302,7 @@ def _canonicalize_init(init: Params | None, n_features: int) -> tuple[jnp.ndarra
 class IRLSFitter:
     """IRLS fit strategy implementing the `Fitter` protocol.
 
-    Encapsulates initialization, IRLS, dispersion estimation, SE computation,
-    and Wald test. Replaces the ``_ModelFitter`` + ``_fit_model`` split.
+    Encapsulates initialization, IRLS, dispersion estimation.
     """
 
     def __call__(
@@ -272,9 +314,6 @@ class IRLSFitter:
         tol: float = 1e-3,
         step_size: float = 1.0,
     ) -> "FitResult":
-        from .infer.diagnostics import Diagnostics  # lazy: avoids circular import
-        from .infer.inference import wald_test  # lazy: avoids circular import
-
         # --- Validate data ---
         if not isinstance(data, GLMData):
             raise TypeError("fit(...) expects `data` to be a GLMData instance.")
@@ -301,37 +340,7 @@ class IRLSFitter:
             if not bool(jnp.all(jnp.isfinite(disp_init))):
                 raise ValueError("disp_init must be finite.")
         else:
-            from .family.dist import NegativeBinomial, Poisson  # lazy: avoids top-level cycle
-
-            if isinstance(model.family, NegativeBinomial):
-                # NB-specific initialization: run Poisson IRLS first to estimate alpha.
-                # This replicates the pre-Phase-5 calc_eta_and_dispersion logic.
-                pois_family = Poisson()
-                pois_init_eta = pois_family.init_eta(y)
-                pois_state = irls(
-                    X,
-                    y,
-                    pois_family,
-                    model.solver,
-                    pois_init_eta,
-                    max_iter,
-                    tol,
-                    step_size,
-                    offset,
-                    disp_init=pois_family.canonical_dispersion(0.0),
-                )
-                pois_beta = pois_state.beta
-                pois_eta = X @ pois_beta + offset
-                pois_mu = pois_family.glink.inverse(pois_eta)
-                n = y.shape[0]
-                alpha_mm = n / jnp.sum((y / pois_mu - 1) ** 2)  # method-of-moments alpha
-                # Run NB dispersion optimizer starting from method-of-moments alpha
-                disp_init = model.family.estimate_dispersion(X, y, pois_eta, 1.0 / alpha_mm)
-                disp_init = model.family.canonical_dispersion(jnp.nan_to_num(disp_init, nan=0.1))
-                # Override init_eta with Poisson-fitted eta for better NB convergence
-                init_eta = pois_eta - offset  # irls adds offset_eta internally
-            else:
-                disp_init = model.family.canonical_dispersion(1.0)
+            disp_init = model.family.canonical_dispersion(1.0)
 
         # --- IRLS ---
         state = irls(
@@ -360,31 +369,19 @@ class IRLSFitter:
         score_residual = (y - mu) * model.family.glink.deriv(mu)
         _, _, weight = model.family.calc_weight(eta, irls_disp)
 
-        # --- SE and Wald test ---
-        se_estimator = FisherInfoError()
-        curvature = se_estimator(model.family, X, y, eta, mu, weight, disp)
-        beta_se = jnp.sqrt(jnp.diag(curvature))
-
         beta = jnp.ravel(beta)
-        df = X.shape[0] - X.shape[1]
-        stat = beta / beta_se
-        pval = wald_test(stat, df, model.family)
 
         return FitResult(
             params=Params(beta=beta, disp=model.family.canonical_dispersion(disp)),
-            se=beta_se,
-            z=stat,
-            p=pval,
+            X=X,
+            y=y,
             eta=eta,
             mu=mu,
             glm_wt=weight,
-            diagnostics=Diagnostics(
-                converged=converged,
-                num_iters=n_iter,
-                objective=objective,
-                objective_delta=objective_delta,
-            ),
-            curvature=curvature,
+            converged=converged,
+            num_iters=n_iter,
+            objective=objective,
+            objective_delta=objective_delta,
             score_residual=score_residual,
         )
 
@@ -392,7 +389,7 @@ class IRLSFitter:
 DEFAULT_FITTER: Fitter = IRLSFitter()
 
 
-def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Fitter = DEFAULT_FITTER) -> FitResult:
+def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Fitter = DEFAULT_FITTER) -> FittedGLM:
     """Canonical public fit verb over grammar nouns."""
     from .glm import GLM as _GLM
 
@@ -408,7 +405,7 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Fitter
     if not _matches_fit_result_shape(result):
         raise TypeError("fit(...) expects `fitter` to return a FitResult instance.")
     validate_fit_result(result)
-    return result
+    return FittedGLM(model=model, result=result)
 
 
 def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:

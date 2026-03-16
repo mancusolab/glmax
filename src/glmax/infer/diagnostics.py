@@ -2,37 +2,23 @@
 
 from __future__ import annotations
 
-from typing import NamedTuple, TYPE_CHECKING
+from typing import NamedTuple
 
-from jax import Array
-
-from ..fit import FitResult, validate_fit_result
-
-
-if TYPE_CHECKING:
-    from ..glm import GLM
+from ..fit import _matches_fit_result_shape, _matches_fitted_glm_shape, FittedGLM, validate_fit_result
 
 
 __all__ = ["Diagnostics", "check"]
 
 
 class Diagnostics(NamedTuple):
-    """Common diagnostics emitted by fit/check verbs."""
-
-    converged: Array
-    num_iters: Array
-    objective: Array
-    objective_delta: Array
+    """Placeholder model-fit diagnostics contract returned by check()."""
 
 
-def check(model: GLM, fit_result: FitResult) -> Diagnostics:
-    """Diagnostics summaries from fit artifacts without refitting."""
-    from ..glm import GLM as _GLM
-
-    if not isinstance(model, _GLM):
-        raise TypeError("check(...) expects `model` to be a GLM instance.")
-    if not isinstance(fit_result, FitResult):
-        raise TypeError("check(...) expects `fit_result` to be a FitResult instance.")
-
-    validate_fit_result(fit_result)
-    return fit_result.diagnostics
+def check(fitted: FittedGLM) -> Diagnostics:
+    """Placeholder model-fit assessment seam over fit artifacts."""
+    if not _matches_fitted_glm_shape(fitted):
+        raise TypeError("check(...) expects `fitted` to be a FittedGLM instance.")
+    if not _matches_fit_result_shape(fitted.result):
+        raise TypeError("check(...) expects `fitted.result` to be a FitResult instance.")
+    validate_fit_result(fitted.result)
+    return Diagnostics()
