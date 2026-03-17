@@ -24,7 +24,7 @@ EXPECTED_INIT = WORKTREE_ROOT / "src" / "glmax" / "__init__.py"
 
 def _make_fit_result() -> FitResult:
     return FitResult(
-        params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
+        params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0.25)),
         X=jnp.array([[1.0]]),
         y=jnp.array([1.0]),
         eta=jnp.array([1.0]),
@@ -121,7 +121,7 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
 
     model = glmax.GLM()
     data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
-    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0))
+    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0), aux=jnp.array(0.4))
 
     result = glmax.fit(model, data, init=init, fitter=DummyFitter())
 
@@ -131,6 +131,7 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     assert isinstance(seen["model"], glmax.GLM)
     assert isinstance(seen["data"], GLMData)
     assert isinstance(seen["init"], Params)
+    assert seen["init"]._fields == ("beta", "disp", "aux")
 
 
 def test_fit_rejects_non_fitter_with_deterministic_error() -> None:
@@ -142,16 +143,17 @@ def test_fit_rejects_non_fitter_with_deterministic_error() -> None:
 
 
 def test_contract_dataclasses_are_pytrees() -> None:
-    params = Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.5))
+    params = Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.5), aux=jnp.array(0.25))
     leaves, tree = jtu.tree_flatten(params)
-    assert len(leaves) == 2
+    assert len(leaves) == 3
     rebuilt = jtu.tree_unflatten(tree, leaves)
     assert jnp.allclose(rebuilt.beta, params.beta)
     assert jnp.allclose(rebuilt.disp, params.disp)
+    assert jnp.allclose(rebuilt.aux, params.aux)
 
     result = _make_fit_result()
     fit_leaves, _ = jtu.tree_flatten(result)
-    assert len(fit_leaves) == 12
+    assert len(fit_leaves) == 13
     assert not hasattr(result, "information")
     assert not hasattr(result, "infor_inv")
     assert not hasattr(result, "resid")
@@ -204,19 +206,32 @@ def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
 
     with pytest.raises(ValueError, match="Params.beta"):
-        glmax.predict(model, Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0)), data)
+        glmax.predict(model, Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0), aux=None), data)
 
     with pytest.raises(TypeError, match="Params.beta must be numeric"):
-        glmax.predict(model, Params(beta=["bad"], disp=jnp.array(0.0)), data)
+        glmax.predict(model, Params(beta=["bad"], disp=jnp.array(0.0), aux=None), data)
 
     with pytest.raises(TypeError, match="Params.disp must be numeric"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad"), data)
+        glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad", aux=None), data)
 
     with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
-        glmax.predict(model, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0)), data)
+        glmax.predict(model, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0), aux=None), data)
 
     with pytest.raises(TypeError, match="Params.disp must have an inexact dtype"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32)), data)
+        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32), aux=None), data)
+
+    with pytest.raises(TypeError, match="Params.aux must be numeric"):
+        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux="bad"), data)
+
+    with pytest.raises(TypeError, match="Params.aux must have an inexact dtype"):
+        glmax.predict(
+            model,
+            Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0, dtype=jnp.int32)),
+            data,
+        )
+
+    with pytest.raises(ValueError, match="Params.aux must be a scalar"):
+        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), data)
 
 
 def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:
@@ -224,9 +239,16 @@ def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.0])
     data = GLMData(X=X, y=y)
+    seed = Params(beta=jnp.zeros(1), disp=jnp.array(1.0), aux=jnp.array(0.35))
 
-    first = glmax.fit(model, data)
+    first = glmax.fit(model, data, init=seed)
     assert first.beta.shape == (1,)
+    assert jnp.allclose(first.params.aux, seed.aux)
 
+    inferred = glmax.infer(first)
     second = glmax.fit(model, data, init=first.params)
     assert second.beta.shape == (1,)
+    assert jnp.allclose(inferred.params.disp, first.params.disp)
+    assert jnp.allclose(inferred.params.aux, first.params.aux)
+    assert jnp.allclose(second.params.disp, first.params.disp)
+    assert jnp.allclose(second.params.aux, first.params.aux)

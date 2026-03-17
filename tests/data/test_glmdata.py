@@ -77,17 +77,20 @@ def test_top_level_fit_rejects_raw_x_y_inputs() -> None:
 def test_glmax_fit_accepts_params_init_for_nb() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 1.0, 2.0]))
     model = GLM(family=NegativeBinomial())
+    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.4), aux=jnp.array(0.3))
 
-    fit_result = glmax.fit(model, data, init=Params(beta=jnp.zeros(1), disp=jnp.array(0.4)))
+    fit_result = glmax.fit(model, data, init=init)
 
     assert fit_result.params.beta.shape == (1,)
+    assert jnp.allclose(fit_result.params.aux, init.aux)
 
 
-def test_params_schema_is_beta_and_disp_only() -> None:
+def test_params_schema_is_beta_disp_and_aux() -> None:
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.0, 2.0, 2.9]))
     fit_result = glmax.fit(GLM(family=Gaussian()), data)
 
-    assert list(fit_result.params._fields) == ["beta", "disp"]
+    assert list(fit_result.params._fields) == ["beta", "disp", "aux"]
+    assert fit_result.params.aux is None
     assert not hasattr(fit_result, "alpha")
 
 

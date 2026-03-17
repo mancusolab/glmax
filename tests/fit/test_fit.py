@@ -19,7 +19,7 @@ from glmax.glm import specify
 
 def _make_fit_result() -> FitResult:
     return FitResult(
-        params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
+        params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0.25)),
         X=jnp.array([[1.0], [1.0]]),
         y=jnp.array([1.0, 1.0]),
         eta=jnp.array([1.0, 1.0]),
@@ -49,7 +49,7 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
 
     model = glmax.GLM()
     data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
-    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0))
+    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0), aux=jnp.array(0.4))
 
     result = glmax.fit(model, data, init=init, fitter=RecordingFitter())
 
@@ -58,6 +58,7 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     assert isinstance(seen["model"], glmax.GLM)
     assert isinstance(seen["data"], GLMData)
     assert isinstance(seen["init"], Params)
+    assert seen["init"]._fields == ("beta", "disp", "aux")
 
 
 def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
@@ -116,6 +117,75 @@ def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
         glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
 
 
+@pytest.mark.parametrize(
+    ("bad_init", "error_type", "match"),
+    [
+        (
+            Params(beta=["bad"], disp=jnp.array(0.0), aux=None),
+            TypeError,
+            "Params.beta must be numeric",
+        ),
+        (
+            Params(beta=jnp.array([1.0]), disp="bad", aux=None),
+            TypeError,
+            "Params.disp must be numeric",
+        ),
+        (
+            Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux="bad"),
+            TypeError,
+            "Params.aux must be numeric",
+        ),
+        (
+            Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32), aux=None),
+            TypeError,
+            "Params.disp must have an inexact dtype",
+        ),
+        (
+            Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0, dtype=jnp.int32)),
+            TypeError,
+            "Params.aux must have an inexact dtype",
+        ),
+        (
+            Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0), aux=None),
+            ValueError,
+            "Params.beta must be a one-dimensional vector with length equal to X.shape\\[1\\]",
+        ),
+        (
+            Params(beta=jnp.array([1.0]), disp=jnp.array([0.0, 1.0]), aux=None),
+            ValueError,
+            "Params.disp must be a scalar",
+        ),
+        (
+            Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.0, 1.0])),
+            ValueError,
+            "Params.aux must be a scalar",
+        ),
+    ],
+)
+def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
+    bad_init: Params,
+    error_type: type[Exception],
+    match: str,
+) -> None:
+    seen = {"called": False}
+
+    class RecordingFitter(AbstractFitter, strict=True):
+        solver: AbstractLinearSolver = CholeskySolver()
+
+        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
+            del model, data, init
+            seen["called"] = True
+            return _make_fit_result()
+
+    model = glmax.GLM()
+    data = GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3))
+
+    with pytest.raises(error_type, match=match):
+        glmax.fit(model, data, init=bad_init, fitter=RecordingFitter())
+
+    assert not seen["called"]
+
+
 def test_fitter_is_abstract_equinox_model() -> None:
     assert issubclass(AbstractFitter, eqx.Module)
 
@@ -143,7 +213,7 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     X = jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]])
     y = jnp.array([1.0, 0.0, 1.0])
     offset = jnp.array([0.2, 0.1, 0.3])
-    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
+    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7), aux=jnp.array(0.2))
 
     data = GLMData(X=X, y=y, offset=offset)
     result_1 = glmax.fit(model, data, init=init)
@@ -152,12 +222,14 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     assert isinstance(result_1, FittedGLM)
     assert jnp.allclose(result_1.beta, result_2.beta)
     assert jnp.allclose(result_1.params.disp, result_2.params.disp)
+    assert jnp.allclose(result_1.params.aux, init.aux)
+    assert jnp.allclose(result_2.params.aux, init.aux)
 
 
 def test_default_fitter_validates_init_beta_shape() -> None:
     X = jnp.ones((4, 2))
     y = jnp.ones(4)
-    bad_init = Params(beta=jnp.ones((2, 1)), disp=jnp.array(0.0))
+    bad_init = Params(beta=jnp.ones((2, 1)), disp=jnp.array(0.0), aux=None)
 
     with pytest.raises(ValueError, match="Params.beta"):
         glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
@@ -198,6 +270,8 @@ def test_single_feature_beta_shape_roundtrip() -> None:
 
     second = glmax.fit(model, data, init=first.params)
     assert second.beta.shape == (1,)
+    assert jnp.allclose(second.params.disp, first.params.disp)
+    assert second.params.aux is None
 
 
 def test_unsupported_weights_rejected() -> None:
