@@ -5,8 +5,6 @@ from typing import Tuple
 import numpy as np
 import statsmodels.api as sm
 
-from utils import assert_array_eq
-
 import jax.nn
 import jax.numpy as jnp
 import jax.random as rdm
@@ -15,6 +13,17 @@ import glmax
 
 from glmax import GLMData
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+
+
+# ---------------------------------------------------------------------------
+# Shared helper (replaces utils.py assert_array_eq)
+# ---------------------------------------------------------------------------
+
+
+def _assert_array_eq(estimate, truth, rtol=1e-7, atol=1e-8):
+    import numpy.testing as nptest
+
+    nptest.assert_allclose(estimate, truth, rtol=rtol, atol=atol)
 
 
 def simulate_glm_data(
@@ -95,9 +104,9 @@ def test_poisson(getkey):
     glm_state = glmax.fit(glmax_poi, GLMData(X=X, y=y))
     infer_state = glmax.infer(glm_state)
 
-    assert_array_eq(glm_state.params.beta, sm_state.params, atol=1e-3)
-    assert_array_eq(infer_state.se, sm_state.bse, atol=1e-3)
-    assert_array_eq(infer_state.p, sm_state.pvalues, atol=1e-3)
+    _assert_array_eq(glm_state.params.beta, sm_state.params, atol=1e-3)
+    _assert_array_eq(infer_state.se, sm_state.bse, atol=1e-3)
+    _assert_array_eq(infer_state.p, sm_state.pvalues, atol=1e-3)
 
 
 def test_normal(getkey):
@@ -117,9 +126,9 @@ def test_normal(getkey):
     glm_state = glmax.fit(glmax_normal, GLMData(X=X, y=y))
     infer_state = glmax.infer(glm_state)
 
-    assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
-    assert_array_eq(infer_state.se, sm_state.bse, rtol=1e-3)
-    assert_array_eq(infer_state.p, sm_state.pvalues, rtol=1e-3)
+    _assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
+    _assert_array_eq(infer_state.se, sm_state.bse, rtol=1e-3)
+    _assert_array_eq(infer_state.p, sm_state.pvalues, rtol=1e-3)
 
 
 def test_logit(getkey):
@@ -139,9 +148,9 @@ def test_logit(getkey):
     glm_state = glmax.fit(glmax_logit, GLMData(X=X, y=y))
     infer_state = glmax.infer(glm_state)
 
-    assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
-    assert_array_eq(infer_state.se, sm_state.bse, rtol=1e-3)
-    assert_array_eq(infer_state.p, sm_state.pvalues, rtol=1e-3)
+    _assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
+    _assert_array_eq(infer_state.se, sm_state.bse, rtol=1e-3)
+    _assert_array_eq(infer_state.p, sm_state.pvalues, rtol=1e-3)
 
 
 def test_NegativeBinomial(getkey):
@@ -163,6 +172,111 @@ def test_NegativeBinomial(getkey):
     sm_se = sm_state.bse
     sm_p = sm_state.pvalues
 
-    assert_array_eq(glm_state.params.beta, sm_beta, rtol=6e-3)
-    assert_array_eq(infer_state.se, sm_se, rtol=5e-3)
-    assert_array_eq(infer_state.p, sm_p, rtol=4e-2)
+    _assert_array_eq(glm_state.params.beta, sm_beta, rtol=6e-3)
+    _assert_array_eq(infer_state.se, sm_se, rtol=5e-3)
+    _assert_array_eq(infer_state.p, sm_p, rtol=4e-2)
+
+
+# ---------------------------------------------------------------------------
+# New GLM-method unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_glm_mean_delegates_to_family_link_inverse() -> None:
+    """GLM.mean(eta) equals IdentityLink inverse for Gaussian."""
+    from glmax.family.links import IdentityLink
+
+    model = glmax.GLM(family=Gaussian())
+    eta = jnp.array([0.0, 1.0])
+    result = model.mean(eta)
+    expected = IdentityLink().inverse(eta)
+    assert jnp.allclose(result, expected)
+
+
+def test_glm_log_prob_is_negative_negloglikelihood() -> None:
+    """GLM.log_prob = -negloglikelihood."""
+    model = glmax.GLM(family=Gaussian())
+    y = jnp.array([1.0, 2.0, 3.0])
+    eta = jnp.array([1.1, 1.9, 3.1])
+    disp = 0.5
+
+    log_prob = model.log_prob(y, eta, disp)
+    nll = model.family.negloglikelihood(y, eta, disp)
+
+    assert jnp.allclose(log_prob, -nll)
+
+
+def test_glm_working_weights_returns_triple() -> None:
+    """GLM.working_weights returns (mu, v, w) tuple of correct shapes."""
+    model = glmax.GLM(family=Gaussian())
+    eta = jnp.array([0.5, 1.0, 1.5, 2.0])
+    disp = 1.0
+
+    result = model.working_weights(eta, disp)
+
+    assert len(result) == 3
+    mu, v, w = result
+    assert mu.shape == eta.shape
+    assert v.shape == eta.shape
+    assert w.shape == eta.shape
+
+
+def test_glm_link_deriv_matches_family() -> None:
+    """GLM.link_deriv(mu) matches family.glink.deriv(mu)."""
+    model = glmax.GLM(family=Gaussian())
+    mu = jnp.array([0.5, 1.0, 2.0])
+
+    result = model.link_deriv(mu)
+    expected = model.family.glink.deriv(mu)
+
+    assert jnp.allclose(result, expected)
+
+
+def test_glm_scale_delegates() -> None:
+    """GLM.scale(X, y, mu) matches family.scale(X, y, mu)."""
+    model = glmax.GLM(family=Gaussian())
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+    y = jnp.array([1.0, 2.0, 3.0])
+    mu = jnp.array([1.1, 1.9, 3.1])
+
+    result = model.scale(X, y, mu)
+    expected = model.family.scale(X, y, mu)
+
+    assert jnp.allclose(result, expected)
+
+
+def test_glm_init_eta_matches_family() -> None:
+    """GLM.init_eta(y) matches family.init_eta(y)."""
+    model = glmax.GLM(family=Gaussian())
+    y = jnp.array([1.0, 2.0, 3.0, 4.0])
+
+    result = model.init_eta(y)
+    expected = model.family.init_eta(y)
+
+    assert jnp.allclose(result, expected)
+
+
+def test_glm_canonicalize_dispersion_matches_family() -> None:
+    """GLM.canonicalize_dispersion(disp) matches family.canonical_dispersion(disp)."""
+    model = glmax.GLM(family=Gaussian())
+    disp = 2.5
+
+    result = model.canonicalize_dispersion(disp)
+    expected = model.family.canonical_dispersion(disp)
+
+    assert jnp.allclose(result, expected)
+
+
+def test_glm_sample_delegates() -> None:
+    """GLM.sample(key, eta, disp) matches family.sample(key, eta, disp)."""
+    import jax.random as jr
+
+    model = glmax.GLM(family=Gaussian())
+    key = jr.PRNGKey(42)
+    eta = jnp.array([0.0, 1.0, 2.0])
+    disp = 1.0
+
+    result = model.sample(key, eta, disp)
+    expected = model.family.sample(key, eta, disp)
+
+    assert jnp.allclose(result, expected)

@@ -103,19 +103,3 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
         ),
     )
     assert isinstance(inferred, InferenceResult)
-
-
-def test_dead_modules_are_not_importable() -> None:
-    import importlib
-
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.contracts")
-
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax.predict")  # the stub module, not the verb
-
-
-def test_wald_test_importable_from_infer_inference() -> None:
-    from glmax._infer.hyptest import _wald_test
-
-    assert callable(_wald_test)

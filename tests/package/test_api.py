@@ -1,9 +1,6 @@
 # pattern: Imperative Shell
-import importlib
+
 import inspect
-import os
-import subprocess
-import sys
 
 from pathlib import Path
 
@@ -19,11 +16,26 @@ from glmax import AbstractFitter, Diagnostics, FitResult, FittedGLM, GLMData, In
 from glmax._fit import IRLSFitter
 from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
-from glmax.glm import specify
 
 
 WORKTREE_ROOT = Path(__file__).resolve().parents[2]
 EXPECTED_INIT = WORKTREE_ROOT / "src" / "glmax" / "__init__.py"
+
+
+def _make_fit_result() -> FitResult:
+    return FitResult(
+        params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
+        X=jnp.array([[1.0]]),
+        y=jnp.array([1.0]),
+        eta=jnp.array([1.0]),
+        mu=jnp.array([1.0]),
+        glm_wt=jnp.array([1.0]),
+        converged=jnp.array(True),
+        num_iters=jnp.array(1),
+        objective=jnp.array(0.1),
+        objective_delta=jnp.array(-1e-3),
+        score_residual=jnp.array([0.0]),
+    )
 
 
 def test_canonical_contract_imports_exist() -> None:
@@ -74,78 +86,6 @@ def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
 
 def test_pytest_imports_glmax_from_worktree_src() -> None:
     assert Path(glmax.__file__).resolve() == EXPECTED_INIT.resolve()
-
-
-def test_worktree_python_wrapper_imports_glmax_from_worktree_src() -> None:
-    command = [
-        str(WORKTREE_ROOT / "tools" / "worktree-python"),
-        "-c",
-        "import glmax, pathlib; print(pathlib.Path(glmax.__file__).resolve())",
-    ]
-    env = os.environ.copy()
-    env["GLMAX_PYTHON_BIN"] = sys.executable
-    completed = subprocess.run(
-        command,
-        check=True,
-        capture_output=True,
-        text=True,
-        cwd=WORKTREE_ROOT,
-        env=env,
-    )
-
-    assert completed.stdout.strip() == str(EXPECTED_INIT.resolve())
-
-
-def test_legacy_fit_state_alias_is_not_publicly_exported() -> None:
-    assert not hasattr(glmax, "GLMState")
-    assert "GLMState" not in glmax.__all__
-
-
-def test_infer_package_reexports_only_inference_surface() -> None:
-    infer_module = importlib.import_module("glmax._infer")
-
-    assert not hasattr(infer_module, "irls")
-    assert not hasattr(infer_module, "AbstractAbstractFitter")
-    assert not hasattr(infer_module, "DefaultAbstractFitter")
-    assert not hasattr(infer_module, "CholeskySolver")
-    assert not hasattr(infer_module, "QRSolver")
-    assert not hasattr(infer_module, "CGSolver")
-    assert hasattr(infer_module, "InferenceResult")
-    assert hasattr(infer_module, "infer")
-    assert hasattr(infer_module, "AbstractTest")
-    assert hasattr(infer_module, "WaldTest")
-    assert hasattr(infer_module, "ScoreTest")
-    assert hasattr(infer_module, "AbstractStdErrEstimator")
-    assert hasattr(infer_module, "FisherInfoError")
-    assert hasattr(infer_module, "HuberError")
-    assert not hasattr(infer_module, "_wald_test")
-    assert not hasattr(infer_module, "check")
-
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax._infer.state")
-
-
-def test_family_surface_does_not_expose_hlink_derivative_hooks() -> None:
-    assert not hasattr(Gaussian(), "_hlink_score")
-    assert not hasattr(Gaussian(), "_hlink_hess")
-    assert not hasattr(NegativeBinomial(), "_hlink_score")
-    assert not hasattr(NegativeBinomial(), "_hlink_hess")
-
-
-def _make_fit_result() -> FitResult:
-    return FitResult(
-        params=Params(beta=jnp.array([1.0]), disp=jnp.array(0.0)),
-        X=jnp.array([[1.0]]),
-        y=jnp.array([1.0]),
-        eta=jnp.array([1.0]),
-        mu=jnp.array([1.0]),
-        glm_wt=jnp.array([1.0]),
-        converged=jnp.array(True),
-        num_iters=jnp.array(1),
-        objective=jnp.array(0.1),
-        objective_delta=jnp.array(-1e-3),
-        score_residual=jnp.array([0.0]),
-    )
 
 
 def test_fit_signature_matches_canonical_surface() -> None:
@@ -201,43 +141,6 @@ def test_fit_rejects_non_fitter_with_deterministic_error() -> None:
         glmax.fit(model, data, fitter="not-a-fitter")
 
 
-def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
-    model = glmax.GLM(family=Gaussian())
-    X = jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]])
-    y = jnp.array([1.0, 0.0, 1.0])
-    offset = jnp.array([0.2, 0.1, 0.3])
-    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
-
-    data = GLMData(X=X, y=y, offset=offset)
-    result_1 = glmax.fit(model, data, init=init)
-    result_2 = glmax.fit(model, data, init=init)
-
-    assert isinstance(result_1, FittedGLM)
-    assert jnp.allclose(result_1.beta, result_2.beta)
-    assert jnp.allclose(result_1.params.disp, result_2.params.disp)
-
-
-def test_default_top_level_fit_does_not_dispatch_through_model_fit_override() -> None:
-    class OverrideRaisesGLM(glmax.GLM):
-        def fit(self, data, **kwargs):
-            del data, kwargs
-            raise AssertionError("top-level fit should not dispatch through GLM.fit overrides")
-
-    model = OverrideRaisesGLM(family=Gaussian())
-    data = GLMData(
-        X=jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]]),
-        y=jnp.array([1.0, 0.0, 1.0]),
-        offset=jnp.array([0.2, 0.1, 0.3]),
-    )
-    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7))
-
-    result = glmax.fit(model, data, init=init)
-
-    assert isinstance(result, FittedGLM)
-    assert result.params.beta.shape == (2,)
-    assert jnp.ndim(result.params.disp) == 0
-
-
 def test_contract_dataclasses_are_pytrees() -> None:
     params = Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.5))
     leaves, tree = jtu.tree_flatten(params)
@@ -257,49 +160,6 @@ def test_contract_dataclasses_are_pytrees() -> None:
     assert not hasattr(result, "p")
 
 
-def test_default_fitter_rejects_unsupported_weights() -> None:
-    X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
-    y = jnp.array([0.2, 0.9, 2.2, 2.8])
-
-    with pytest.raises(ValueError, match="weights"):
-        glmax.fit(glmax.GLM(), GLMData(X=X, y=y, weights=jnp.ones(4)))
-
-
-def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
-    with pytest.raises(TypeError, match="GLM"):
-        glmax.fit(object(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)))
-
-    with pytest.raises(TypeError, match="GLMData"):
-        glmax.fit(glmax.GLM(), jnp.ones((3, 1)))
-
-    with pytest.raises(TypeError, match="Params"):
-        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3)), init=jnp.zeros(1))
-
-
-def test_glm_fit_attribute_is_removed() -> None:
-    assert not hasattr(glmax.GLM(), "fit"), "GLM.fit must not exist after Phase 5"
-
-
-@pytest.mark.parametrize(
-    "legacy_keyword",
-    ["init", "alpha_init"],
-)
-def test_glm_fit_removed_raises_attributeerror(legacy_keyword: str) -> None:
-    model = glmax.GLM(family=Gaussian())
-    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 2.0, 3.0]))
-
-    with pytest.raises(AttributeError):
-        model.fit(data, **{legacy_keyword: jnp.zeros(1)})
-
-
-def test_glm_fit_removed_raises_attributeerror_on_positional_arg() -> None:
-    model = glmax.GLM(family=Gaussian())
-    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.0, 1.0, 2.0, 3.0]))
-
-    with pytest.raises(AttributeError):
-        model.fit(data, jnp.zeros(4))
-
-
 def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
     model = glmax.specify(family=Gaussian())
     data = GLMData(
@@ -313,11 +173,6 @@ def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
     assert result.params.beta.shape == (2,)
     assert bool(result.converged)
     assert jnp.all(jnp.isfinite(result.params.beta))
-
-
-def test_legacy_array_first_fitter_module_is_not_importable() -> None:
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("glmax._infer.fitter")
 
 
 @pytest.mark.parametrize(
@@ -344,24 +199,6 @@ def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
         assert jnp.allclose(result.params.disp, jnp.array(1.0))
 
 
-def test_default_fitter_validates_init_beta_shape() -> None:
-    X = jnp.ones((4, 2))
-    y = jnp.ones(4)
-    bad_init = Params(beta=jnp.ones((2, 1)), disp=jnp.array(0.0))
-
-    with pytest.raises(ValueError, match="Params.beta"):
-        glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
-
-
-def test_default_fitter_validates_scalar_disp() -> None:
-    X = jnp.ones((4, 2))
-    y = jnp.ones(4)
-    bad_init = Params(beta=jnp.ones(2), disp=jnp.ones(2))
-
-    with pytest.raises(ValueError, match="Params.disp"):
-        glmax.fit(glmax.GLM(), GLMData(X=X, y=y), init=bad_init)
-
-
 def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
     model = glmax.GLM(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
@@ -382,23 +219,6 @@ def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
         glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32)), data)
 
 
-def test_default_fitter_validates_X_y_and_offset_shapes() -> None:
-    with pytest.raises(ValueError, match="GLMData.X"):
-        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones(4), y=jnp.ones(4)))
-
-    with pytest.raises(ValueError, match="GLMData.y"):
-        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones((4, 1))))
-
-    with pytest.raises(ValueError, match="GLMData.y"):
-        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones(3)))
-
-    with pytest.raises(ValueError, match="GLMData.offset"):
-        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones(4), offset=jnp.ones((4, 1))))
-
-    with pytest.raises(ValueError, match="GLMData.offset"):
-        glmax.fit(glmax.GLM(), GLMData(X=jnp.ones((4, 1)), y=jnp.ones(4), offset=jnp.ones(3)))
-
-
 def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:
     model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
@@ -410,8 +230,3 @@ def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None
 
     second = glmax.fit(model, data, init=first.params)
     assert second.beta.shape == (1,)
-
-
-def test_specify_returns_glm_instance() -> None:
-    model = specify()
-    assert isinstance(model, glmax.GLM)

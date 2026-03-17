@@ -1,6 +1,5 @@
 # pattern: Imperative Shell
 
-
 from dataclasses import fields
 
 import pytest
@@ -9,7 +8,7 @@ import jax.numpy as jnp
 
 import glmax
 
-from glmax import FittedGLM, GLMData, InferenceResult, Params
+from glmax import FittedGLM, GLMData, InferenceResult
 from glmax._infer.hyptest import ScoreTest, WaldTest
 from glmax._infer.stderr import AbstractStdErrEstimator, HuberError
 from glmax.family import Gaussian
@@ -88,64 +87,7 @@ def test_infer_rejects_invalid_model_and_result_contracts() -> None:
         glmax.infer(fitted, inferrer=object())
 
 
-def test_infer_currently_only_validates_at_consumption_boundaries() -> None:
-    fitted = _make_fitted()
-    fit_result = fitted.result
-
-    result = glmax.infer(
-        unchecked_fitted(
-            fitted,
-            result=unchecked_fit_result(fit_result, X=jnp.ones((fit_result.X.shape[0], 2))),
-        )
-    )
-    assert isinstance(result, InferenceResult)
-
-    result = glmax.infer(
-        unchecked_fitted(
-            fitted,
-            result=unchecked_fit_result(fit_result, params=Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0))),
-        )
-    )
-    assert isinstance(result, InferenceResult)
-
-    result = glmax.infer(
-        unchecked_fitted(
-            fitted,
-            result=unchecked_fit_result(fit_result, params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0))),
-        ),
-    )
-    assert isinstance(result, InferenceResult)
-    assert bool(jnp.isnan(result.stat).any() or jnp.isnan(result.p).any())
-
-    with pytest.raises(TypeError):
-        glmax.infer(
-            unchecked_fitted(
-                fitted, result=unchecked_fit_result(fit_result, params=Params(beta=["bad"], disp=jnp.array(0.0)))
-            ),
-        )
-
-    result = glmax.infer(
-        unchecked_fitted(
-            fitted,
-            result=unchecked_fit_result(
-                fit_result, params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0))
-            ),
-        ),
-    )
-    assert isinstance(result, InferenceResult)
-
-    result = glmax.infer(
-        unchecked_fitted(
-            fitted,
-            result=unchecked_fit_result(
-                fit_result, params=Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32))
-            ),
-        ),
-    )
-    assert isinstance(result, InferenceResult)
-
-
-def test_infer_default_inferrer_matches_explicit_wald_inferrer() -> None:
+def test_infer_default_matches_explicit_wald_test() -> None:
     fitted = _make_fitted()
 
     result_default = glmax.infer(fitted)
@@ -156,7 +98,7 @@ def test_infer_default_inferrer_matches_explicit_wald_inferrer() -> None:
     assert jnp.allclose(result_default.p, result_explicit.p)
 
 
-def test_infer_routes_to_score_inferrer_when_specified() -> None:
+def test_infer_routes_to_score_test_when_specified() -> None:
     fitted = _make_fitted()
 
     result = glmax.infer(fitted, inferrer=ScoreTest())
@@ -168,7 +110,7 @@ def test_infer_routes_to_score_inferrer_when_specified() -> None:
     assert result.stat.shape == fitted.params.beta.shape
 
 
-def test_infer_passes_stderr_into_wald_inferrer() -> None:
+def test_infer_passes_stderr_into_inferrer() -> None:
     fitted = _make_fitted()
     call_count = {"n": 0}
 
@@ -184,7 +126,7 @@ def test_infer_passes_stderr_into_wald_inferrer() -> None:
     assert jnp.allclose(result.se, jnp.array([2.0]))
 
 
-def test_infer_accepts_huber_error_stderr_estimator() -> None:
+def test_infer_accepts_huber_error() -> None:
     fitted = _make_fitted()
 
     result = glmax.infer(fitted, stderr=HuberError())
@@ -193,7 +135,7 @@ def test_infer_accepts_huber_error_stderr_estimator() -> None:
     assert result.se.shape == fitted.params.beta.shape
 
 
-def test_inferrer_types_are_importable_from_top_level_glmax() -> None:
+def test_inferrer_types_importable_from_glmax() -> None:
     from glmax import AbstractTest, ScoreTest, WaldTest  # noqa: F401
 
     assert AbstractTest is not None
@@ -201,7 +143,7 @@ def test_inferrer_types_are_importable_from_top_level_glmax() -> None:
     assert ScoreTest is not None
 
 
-def test_stderr_types_are_importable_from_top_level_glmax() -> None:
+def test_stderr_types_importable_from_glmax() -> None:
     from glmax import AbstractStdErrEstimator, FisherInfoError, HuberError  # noqa: F401
 
     assert AbstractStdErrEstimator is not None

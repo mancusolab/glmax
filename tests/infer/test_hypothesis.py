@@ -10,7 +10,7 @@ from jax.scipy.stats import norm
 import glmax
 
 from glmax import GLMData, InferenceResult
-from glmax._infer.hyptest import AbstractTest, ScoreTest, WaldTest
+from glmax._infer.hyptest import _wald_test, AbstractTest, ScoreTest, WaldTest
 from glmax._infer.infer import infer as legacy_infer
 from glmax._infer.stderr import AbstractStdErrEstimator, FisherInfoError
 from glmax.family import Binomial, Gaussian, Poisson
@@ -67,13 +67,13 @@ def _expected_score_stat(fitted):
     return numerator / jnp.sqrt(phi * fisher_diag)
 
 
-def test_inferrer_types_are_strategy_objects() -> None:
+def test_hypothesis_tests_are_strategy_objects() -> None:
     assert isinstance(WaldTest(), AbstractTest)
     assert isinstance(ScoreTest(), AbstractTest)
     assert isinstance(WaldTest(), eqx.Module)
 
 
-def test_wald_inferrer_matches_legacy_infer() -> None:
+def test_wald_test_matches_legacy_infer() -> None:
     fitted = _make_fitted()
 
     legacy = legacy_infer(fitted)
@@ -85,7 +85,7 @@ def test_wald_inferrer_matches_legacy_infer() -> None:
     assert jnp.allclose(inferred.p, legacy.p, atol=1e-12)
 
 
-def test_wald_inferrer_uses_injected_stderr() -> None:
+def test_wald_test_uses_injected_stderr() -> None:
     fitted = _make_fitted()
 
     class ConstantCovStdErr(AbstractStdErrEstimator):
@@ -98,12 +98,12 @@ def test_wald_inferrer_uses_injected_stderr() -> None:
     assert jnp.allclose(inferred.se, jnp.array([2.0, 2.0]))
 
 
-def test_wald_inferrer_rejects_non_fitted_glm() -> None:
+def test_wald_test_rejects_non_fitted_glm() -> None:
     with pytest.raises(TypeError, match="FittedGLM"):
         WaldTest()(object(), FisherInfoError())
 
 
-def test_score_inferrer_returns_valid_result() -> None:
+def test_score_test_returns_valid_result() -> None:
     fitted = _make_fitted()
 
     result = ScoreTest()(fitted, FisherInfoError())
@@ -114,7 +114,7 @@ def test_score_inferrer_returns_valid_result() -> None:
     assert bool(jnp.all(jnp.isnan(result.se)))
 
 
-def test_score_inferrer_does_not_call_stderr() -> None:
+def test_score_test_does_not_call_stderr() -> None:
     fitted = _make_fitted()
 
     class RaisingStdErr(AbstractStdErrEstimator):
@@ -134,7 +134,7 @@ def test_score_inferrer_does_not_call_stderr() -> None:
         pytest.param(_make_poisson_fitted, id="poisson"),
     ],
 )
-def test_score_inferrer_matches_task_5_formula(make_fitted) -> None:
+def test_score_test_matches_task_formula(make_fitted) -> None:
     fitted = make_fitted()
 
     result = ScoreTest()(fitted, FisherInfoError())
@@ -154,7 +154,7 @@ def test_score_inferrer_matches_task_5_formula(make_fitted) -> None:
         pytest.param(_make_binomial_fitted, id="binomial"),
     ],
 )
-def test_score_inferrer_stat_shape_matches_beta(make_fitted) -> None:
+def test_score_test_stat_shape_matches_beta(make_fitted) -> None:
     fitted = make_fitted()
 
     result = ScoreTest()(fitted, FisherInfoError())
@@ -162,7 +162,7 @@ def test_score_inferrer_stat_shape_matches_beta(make_fitted) -> None:
     assert result.stat.shape == fitted.params.beta.shape
 
 
-def test_score_inferrer_gaussian_p_values_are_valid() -> None:
+def test_score_test_gaussian_p_values_valid() -> None:
     fitted = _make_fitted(Gaussian())
 
     score_result = ScoreTest()(fitted, FisherInfoError())
@@ -175,14 +175,14 @@ def test_score_inferrer_gaussian_p_values_are_valid() -> None:
     assert jnp.allclose(score_result.p, expected_p, atol=1e-12)
 
 
-def test_score_inferrer_rejects_degenerate_gaussian_scale() -> None:
+def test_score_test_rejects_degenerate_scale() -> None:
     fitted = _make_perfect_fit_gaussian_fitted()
 
     with pytest.raises(ValueError, match="family.scale"):
         ScoreTest()(fitted, FisherInfoError())
 
 
-def test_score_inferrer_rejects_degenerate_fisher_information_diagonal() -> None:
+def test_score_test_rejects_degenerate_fisher_diag() -> None:
     fitted = _make_fitted()
     degenerate_X = fitted.X.at[:, 1].set(0.0)
     degenerate_fitted = eqx.tree_at(lambda tree: tree.result.X, fitted, degenerate_X)
@@ -205,3 +205,39 @@ def test_score_inferrer_rejects_degenerate_fisher_information_diagonal() -> None
 
     with pytest.raises(ValueError, match="Fisher information diagonal"):
         ScoreTest()(degenerate_fitted, FisherInfoError())
+
+
+def test_wald_test_uses_t_distribution_for_gaussian() -> None:
+    statistic = jnp.array([2.0, -1.5, 0.0])
+    p = _wald_test(statistic, df=50, model=glmax.GLM(family=Gaussian()))
+
+    assert p.shape == (3,)
+    assert bool(jnp.all(p > 0))
+    assert bool(jnp.all(p <= 1.0))
+    # z=0 → p=1
+    assert bool(jnp.isclose(p[2], 1.0, atol=1e-5))
+
+
+def test_wald_test_uses_normal_for_non_gaussian() -> None:
+    statistic = jnp.array([1.96])
+    p_poisson = _wald_test(statistic, df=100, model=glmax.GLM(family=Poisson()))
+    # 2 * norm.sf(1.96) ≈ 0.05
+    assert bool(jnp.abs(p_poisson[0] - 0.05) < 0.005)
+
+
+@pytest.mark.parametrize("family", [Gaussian(), Poisson()])
+def test_wald_test_jit_safe(family):
+    """_wald_test is JIT-safe for Gaussian and Poisson."""
+    model = glmax.GLM(family=family)
+    stat = jnp.array([2.0, -1.5, 0.5])
+
+    import equinox as eqx
+
+    def _jit_wald(stat):
+        return _wald_test(stat, 50, model)
+
+    p_jit = eqx.filter_jit(_jit_wald)(stat)
+
+    assert bool(
+        jnp.all(jnp.isfinite(p_jit))
+    ), f"JIT wald_test p-values must be finite for {type(family).__name__}; got {p_jit}"
