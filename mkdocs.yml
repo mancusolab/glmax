@@ -38,10 +38,8 @@ edit_uri: ""  # No edit button, as some of our pages are in /docs and some in /e
 strict: true  # Don't allow warnings during the build process
 
 extra_javascript:
-    # The below three make MathJax work, see https://squidfunk.github.io/mkdocs-material/reference/mathjax/
     - _static/mathjax.js
-    - https://polyfill.io/v3/polyfill.min.js?features=es6
-    - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+    - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 extra_css:
     - _static/custom_css.css
@@ -64,49 +62,38 @@ plugins:
     - include_exclude_files:
         exclude:
             - "_overrides"
+    - hippogriffe:
+        show_bases: true
+        extra_public_objects:
+          - jax.Array
     - mkdocstrings:
-        default_handler: python
-        enable_inventory: true
         custom_templates: docs/_templates
         handlers:
             python:
                 paths: [src]
-                import:
-                - https://docs.kidger.site/equinox/objects.inv
-                - https://docs.kidger.site/jaxtyping/objects.inv
-                setup_commands:
-                    - import jaxtyping
-                    - jaxtyping.set_array_name_format("array")
-                    - import typing
-                    - typing.Any.__module__ = "builtins"
                 load_external_modules: true
                 options:
-                    preload_modules:
-                    - equinox
-                    extensions:
-                    - pydantic: {schema: true}
-                    - docs/_scripts/extension.py:DynamicDocstrings:
-                        paths: [glmax.families]
-                    # general options
-                    allow_inspection: true
-                    show_bases: true
-                    show_source: false
-                    # heading options
-                    heading_level: 4
-                    show_root_heading: true
-                    show_root_full_path: true
-                    # members options
-                    inherited_members: true
-                    members_order: source
-                    filters:
-                        - "!^_"
-                        - "^__init__$"
-                    # docstring options
-                    show_if_no_docstring: true
-                    # signature/type annotation options
-                    separate_signature: false
-                    annotations_path: brief
-                    show_signature_annotations: true
+                  # general
+                  force_inspection: true
+                  show_source: false
+                  # headings
+                  heading_level: 4
+                  show_root_heading: true
+                  show_symbol_type_heading: true
+                  show_symbol_type_toc: true
+                  # members
+                  filters: [ "!^_", "^__init__$" ]
+                  inherited_members: true
+                  members_order: source
+                  # docstrings
+                  docstring_style: google
+                  show_if_no_docstring: true
+                  # signatures
+                  line_length: 80
+                  modernize_annotations: true
+                  show_overloads: false
+                  show_signature_annotations: true
+                  separate_signature: false
 
 nav:
     - Home: 'index.md'

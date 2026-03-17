@@ -7,7 +7,7 @@
 - **Exposes**:
   - Package-root API from `src/glmax/__init__.py`: `GLMData`, `Params`, `GLM`, `AbstractFitter`, `FitResult`, `FittedGLM`, `InferenceResult`, `Diagnostics`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `specify`, `predict`, `fit`, `infer`, `check`.
   - Family and link implementations from `src/glmax/family/__init__.py`.
-  - User-facing grammar docs in `README.md`, `docs/index.md`, and `docs/api/glm.md`.
+  - User-facing grammar docs in `README.md`, `docs/index.md`, `docs/api/verbs.md`, `docs/api/nouns.md`, `docs/api/fitters.md`, `docs/api/inference.md`, and `docs/api/family.md`.
 - **Guarantees**:
   - Canonical user workflow is `specify -> fit -> predict -> infer -> check`.
   - `glmax.fit(model, data, init=None, *, fitter=IRLSFitter())` is the curated public fit contract, is `@eqx.filter_jit`-wrapped, and returns `FittedGLM`.
@@ -34,7 +34,7 @@
   - `src/glmax/glm.py` owns `GLM` (pure spec noun, `family` only) and `specify` — no fit logic, no solver. Also owns the full GLM method interface (see Guarantees); `family` is the implementation detail behind those methods.
   - `src/glmax/_fit/types.py` owns `Params`, `FitResult`, `FittedGLM`, and `AbstractFitter` (abstract base with `solver: AbstractVar`).
   - `src/glmax/_fit/fit.py` owns the public `fit` and `predict` verbs (`@eqx.filter_jit`-wrapped).
-  - `src/glmax/_fit/irls.py` owns `IRLSFitter` (the default fitter) and the `_irls` kernel. `_irls` takes `model: GLM` and calls only `model.xxx` methods — never `model.family.xxx`. `IRLSFitter.__call__` is NOT JIT-safe due to Python branching on family type; `fit` is safe because `IRLSFitter` is static under JIT.
+  - `src/glmax/_fit/irls.py` owns `IRLSFitter` (the default fitter) and the `_irls` kernel. `_irls` takes `model: GLM` and calls only `model.xxx` methods rather than reaching into `model.family.xxx` directly. Keep user-facing fitting routed through `glmax.fit(...)`; `_irls` is an internal kernel seam.
   - `src/glmax/_fit/solve.py` is the canonical home for linear solver contracts (`AbstractLinearSolver`, `CholeskySolver`, `QRSolver`, `CGSolver`).
   - `src/glmax/_fit/__init__.py` re-exports all fit internals.
   - `src/glmax/diagnostics.py` owns `Diagnostics` and `check`.
@@ -48,12 +48,12 @@
 ## Invariants
 - Contract carrier split is deliberate: `GLMData`, `FitResult`, and `FittedGLM` are `equinox.Module` types with constructor-time validation; `Params`, `Diagnostics`, and `InferenceResult` are `NamedTuple` pytrees.
 - Public exports stay centralized in `src/glmax/__init__.py`; if a user-facing noun or verb changes, update docs and contract tests in the same patch.
-- Keep examples and documentation on the grammar nouns and top-level verbs, not stale internal import paths.
+- Keep workflow examples on the grammar nouns and top-level verbs. Reserve `_fit` imports for fitter/solver docs and tests; do not present `_fit` or `_infer` module paths as the primary user workflow.
 - `site/` is generated documentation output. Edit `docs/` and `mkdocs.yml`, not `site/`.
 
 ## Verification
 - Do not run bare `pytest`.
 - Use `pytest -p no:capture tests` for all pytest invocations.
-- Keep `README.md`, `docs/index.md`, and `docs/api/glm.md` aligned with the package-root exports.
+- Keep `README.md`, `docs/index.md`, `docs/api/verbs.md`, `docs/api/nouns.md`, `docs/api/fitters.md`, `docs/api/inference.md`, and `docs/api/family.md` aligned with the package-root exports and advanced strategy surface.
 - Contract changes should update the owning tests, especially `tests/package/test_api.py`, `tests/package/test_grammar.py`, and the relevant verb-specific suites under `tests/fit/`, `tests/infer/`, `tests/data/`, `tests/glm/`.
 - Public numerics and solver docstrings use raw markdown section labels: `**Arguments:**`, `**Returns:**`, and `**Raises:**` or `**Failure Modes:**`.

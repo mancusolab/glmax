@@ -1,6 +1,7 @@
 # pattern: Functional Core
 from .dist import (
     Binomial as Binomial,
+    ExponentialDispersionFamily as ExponentialDispersionFamily,
     Gamma as Gamma,
     Gaussian as Gaussian,
     NegativeBinomial as NegativeBinomial,

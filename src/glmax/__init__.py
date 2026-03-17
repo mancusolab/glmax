@@ -24,6 +24,21 @@ from ._infer import (
 )
 from .data import GLMData as GLMData
 from .diagnostics import check as check, Diagnostics as Diagnostics
+from .family import (
+    AbstractLink as AbstractLink,
+    Binomial as Binomial,
+    ExponentialDispersionFamily as ExponentialDispersionFamily,
+    Gamma as Gamma,
+    Gaussian as Gaussian,
+    IdentityLink as IdentityLink,
+    InverseLink as InverseLink,
+    LogitLink as LogitLink,
+    LogLink as LogLink,
+    NBLink as NBLink,
+    NegativeBinomial as NegativeBinomial,
+    Poisson as Poisson,
+    PowerLink as PowerLink,
+)
 from .glm import GLM as GLM, specify as specify
 
 
