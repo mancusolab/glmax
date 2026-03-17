@@ -65,7 +65,6 @@ class FitResult(eqx.Module, strict=True):
         score_residual: Array,
     ) -> None:
         r"""**Arguments:**
-
         - `params`: `Params` holding $\hat\beta$ and $\hat\phi$.
         - `X`: covariate matrix, shape `(n, p)`.
         - `y`: observed response, shape `(n,)`.
@@ -178,7 +177,6 @@ class FittedGLM(eqx.Module, strict=True):
 
     def __init__(self, model: GLM, result: FitResult) -> None:
         r"""**Arguments:**
-
         - `model`: the `GLM` specification used during fitting.
         - `result`: the `FitResult` produced by the fitter strategy.
         """

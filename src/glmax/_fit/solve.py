@@ -65,7 +65,6 @@ class QRSolver(AbstractLinearSolver, strict=True):
 
     def __init__(self, solver: lx.AbstractLinearSolver = lx.QR()) -> None:
         r"""**Arguments:**
-
         - `solver`: `lineax` solver instance (default: `lx.QR()`).
         """
         self.solver = solver
@@ -108,7 +107,6 @@ class CholeskySolver(AbstractLinearSolver):
 
     def __init__(self, solver: lx.AbstractLinearSolver = lx.Cholesky()) -> None:
         r"""**Arguments:**
-
         - `solver`: `lineax` solver instance (default: `lx.Cholesky()`).
         """
         self.solver = solver
@@ -132,7 +130,6 @@ class CGSolver(AbstractLinearSolver):
 
     def __init__(self, solver: lx.AbstractLinearSolver = lx.Normal(lx.CG(atol=1e-5, rtol=1e-5))) -> None:
         r"""**Arguments:**
-
         - `solver`: `lineax` solver instance (default: `lx.Normal(lx.CG(atol=1e-5, rtol=1e-5))`).
         """
         self.solver = solver

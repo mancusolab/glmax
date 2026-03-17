@@ -79,7 +79,6 @@ class PowerLink(AbstractLink):
 
     def __init__(self, power: float = 1.0) -> None:
         r"""**Arguments:**
-
         - `power`: exponent $p$. Default `1.0` (identity link).
         """
         self.power = jnp.asarray(power)
@@ -382,7 +381,6 @@ class NBLink(AbstractLink):
 
     def __init__(self, alpha: float = 1.0) -> None:
         r"""**Arguments:**
-
         - `alpha`: overdispersion parameter $\alpha > 0$. Default `1.0`.
         """
         self.alpha = jnp.asarray(alpha)

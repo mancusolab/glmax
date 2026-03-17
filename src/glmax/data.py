@@ -64,7 +64,6 @@ class GLMData(eqx.Module, strict=True):
         weights: ArrayLike | None = None,
     ) -> None:
         r"""**Arguments:**
-
         - `X`: covariate matrix, shape `(n, p)`. Must be rank-2, finite, numeric.
         - `y`: response vector, shape `(n,)`. Must be rank-1, finite, numeric.
         - `offset`: optional additive offset in $\eta = X\beta + \text{offset}$,

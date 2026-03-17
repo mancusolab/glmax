@@ -9,7 +9,7 @@ import equinox as eqx
 from jax import Array
 from jaxtyping import ArrayLike, ScalarLike
 
-from .family.dist import ExponentialFamily, Gaussian
+from .family.dist import ExponentialDispersionFamily, Gaussian
 
 
 class GLM(eqx.Module):
@@ -20,11 +20,10 @@ class GLM(eqx.Module):
     The linear solver is part of the `AbstractFitter` strategy, not the model.
     """
 
-    family: ExponentialFamily
+    family: ExponentialDispersionFamily
 
-    def __init__(self, family: ExponentialFamily = Gaussian()) -> None:
+    def __init__(self, family: ExponentialDispersionFamily = Gaussian()) -> None:
         r"""**Arguments:**
-
         - `family`: `ExponentialFamily` instance (default: `Gaussian()`).
         """
         self.family = family
@@ -201,7 +200,7 @@ class GLM(eqx.Module):
 
 
 def specify(
-    family: ExponentialFamily = Gaussian(),
+    family: ExponentialDispersionFamily = Gaussian(),
 ) -> GLM:
     r"""Construct a GLM specification.
 

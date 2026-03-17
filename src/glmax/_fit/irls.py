@@ -87,7 +87,6 @@ class IRLSFitter(AbstractFitter, strict=True):
 
     def __init__(self, solver: AbstractLinearSolver = CholeskySolver()) -> None:
         r"""**Arguments:**
-
         - `solver`: `AbstractLinearSolver` for each IRLS weighted least-squares
           step (default: `CholeskySolver()`).
         """

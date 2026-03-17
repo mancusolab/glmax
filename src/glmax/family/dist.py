@@ -1,6 +1,6 @@
 # pattern: Functional Core
 from abc import abstractmethod
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
 import equinox as eqx
 import jax
@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import jax.random as rdm
 import jax.scipy.stats as jaxstats
 
+from equinox import AbstractVar
 from jax import lax
 from jax.scipy.special import gammaln
 from jaxtyping import Array, ArrayLike, ScalarLike
@@ -15,8 +16,14 @@ from jaxtyping import Array, ArrayLike, ScalarLike
 from .links import AbstractLink, IdentityLink, InverseLink, LogitLink, LogLink, NBLink, PowerLink
 
 
-class ExponentialFamily(eqx.Module):
-    r"""Abstract base for one-parameter exponential family distributions.
+if TYPE_CHECKING:
+    from typing import ClassVar as AbstractClassVar
+else:
+    from equinox import AbstractClassVar
+
+
+class ExponentialDispersionFamily(eqx.Module):
+    r"""Abstract base for one-parameter exponential dispersion family distributions.
 
     A GLM models the conditional mean $\mu = \mathrm{E}(Y \mid X)$ via a link
     function $g$ such that $g(\mu) = \eta = X\beta$.  Subclasses implement the
@@ -25,17 +32,9 @@ class ExponentialFamily(eqx.Module):
     Concrete families: `Gaussian`, `Poisson`, `Binomial`, `NegativeBinomial`, `Gamma`.
     """
 
-    glink: AbstractLink
-    _links: ClassVar[list[type[AbstractLink]]]
-    _bounds: ClassVar[tuple[float, float]]
-
-    def __init__(self, glink: AbstractLink) -> None:
-        r"""
-        **Arguments:**
-
-        - `glink`: link function $g$ connecting $\mu$ to $\eta = g(\mu)$.
-        """
-        self.glink = glink
+    glink: AbstractVar[AbstractLink]
+    _links: AbstractClassVar[list[type[AbstractLink]]]
+    _bounds: AbstractClassVar[tuple[float, float]]
 
     def __check_init__(self):
         if not any([isinstance(self.glink, link) for link in self._links]):
@@ -170,7 +169,7 @@ class ExponentialFamily(eqx.Module):
         return jnp.asarray(0.0)
 
 
-class Gaussian(ExponentialFamily):
+class Gaussian(ExponentialDispersionFamily):
     r"""Gaussian (normal) exponential family.
 
     Models a continuous response $y \in \mathbb{R}$ with
@@ -185,9 +184,7 @@ class Gaussian(ExponentialFamily):
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
 
     def __init__(self, glink: AbstractLink = IdentityLink()) -> None:
-        r"""
-        **Arguments:**
-
+        r"""**Arguments:**
         - `glink`: link function (default: `IdentityLink()`).
         """
         self.glink = glink
@@ -332,7 +329,7 @@ class Gaussian(ExponentialFamily):
         return jnp.asarray(disp)
 
 
-class Binomial(ExponentialFamily):
+class Binomial(ExponentialDispersionFamily):
     r"""Binomial exponential family for binary responses.
 
     Models a binary response $y \in \{0, 1\}$ with
@@ -351,9 +348,7 @@ class Binomial(ExponentialFamily):
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, 1.0 - jnp.finfo(float).eps)
 
     def __init__(self, glink: AbstractLink = LogitLink()) -> None:
-        r"""
-        **Arguments:**
-
+        r"""**Arguments:**
         - `glink`: link function (default: `LogitLink()`).
         """
         self.glink = glink
@@ -411,7 +406,7 @@ class Binomial(ExponentialFamily):
         return jnp.asarray(1.0)
 
 
-class Poisson(ExponentialFamily):
+class Poisson(ExponentialDispersionFamily):
     r"""Poisson exponential family for count responses.
 
     Models a non-negative integer response $y \in \{0, 1, 2, \ldots\}$ with
@@ -426,9 +421,7 @@ class Poisson(ExponentialFamily):
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
     def __init__(self, glink: AbstractLink = LogLink()) -> None:
-        r"""
-        **Arguments:**
-
+        r"""**Arguments:**
         - `glink`: link function (default: `LogLink()`).
         """
         self.glink = glink
@@ -483,7 +476,7 @@ class Poisson(ExponentialFamily):
         return jnp.asarray(1.0)
 
 
-class NegativeBinomial(ExponentialFamily):
+class NegativeBinomial(ExponentialDispersionFamily):
     r"""Negative-binomial (NB-2) exponential family for overdispersed count data.
 
     Models a non-negative integer response via the NB-2 parameterisation
@@ -499,9 +492,7 @@ class NegativeBinomial(ExponentialFamily):
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
     def __init__(self, glink: AbstractLink = LogLink()) -> None:
-        r"""
-        **Arguments:**
-
+        r"""**Arguments:**
         - `glink`: link function (default: `LogLink()`).
         """
         self.glink = glink
@@ -687,7 +678,7 @@ class NegativeBinomial(ExponentialFamily):
         return jnp.asarray(disp)
 
 
-class Gamma(ExponentialFamily):
+class Gamma(ExponentialDispersionFamily):
     r"""Gamma exponential family with density
 
     $$f(y \mid \mu, \phi) = \frac{y^{1/\phi - 1} \exp(-y / (\mu\phi))}
@@ -705,9 +696,7 @@ class Gamma(ExponentialFamily):
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
     def __init__(self, glink: AbstractLink = InverseLink()) -> None:
-        r"""
-        **Arguments:**
-
+        r"""**Arguments:**
         - `glink`: link function (default: `InverseLink()`).
         """
         self.glink = glink
