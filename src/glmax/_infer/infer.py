@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from .._fit import (
-    FittedGLM,
-)
+from .._fit import FittedGLM
 from .hyptest import AbstractTest, WaldTest
 from .stderr import AbstractStdErrEstimator, FisherInfoError
 from .types import InferenceResult

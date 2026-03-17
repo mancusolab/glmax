@@ -8,17 +8,23 @@ Groups:
 - Transform safety (JIT/VMAP/AD for all families)
 - Sampling (shapes, types, finiteness)
 - Canonical dispersion values
+- Gamma numerics (bounds, link, variance, dispersion, fit)
 """
 
 import pytest
 
 import jax
 import jax.numpy as jnp
+import jax.random as jr
 
-from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+import glmax
+
+from glmax import GLMData
+from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
 
 _ALL_FAMILIES = [Gaussian, Poisson, Binomial, NegativeBinomial]
+_ALL_FAMILIES_INCLUDING_GAMMA = [*_ALL_FAMILIES, Gamma]
 _KEY = jax.random.PRNGKey(0)
 
 
@@ -28,12 +34,12 @@ _KEY = jax.random.PRNGKey(0)
 
 
 class TestBounds:
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
+    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES_INCLUDING_GAMMA)
     def test_bounds_is_two_tuple(self, FamilyCls):
         f = FamilyCls()
         assert len(f._bounds) == 2, f"{FamilyCls.__name__}._bounds must be a two-tuple"
 
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
+    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES_INCLUDING_GAMMA)
     def test_bounds_lower_less_than_upper(self, FamilyCls):
         f = FamilyCls()
         lo, hi = f._bounds
@@ -505,3 +511,64 @@ class TestCanonicalDispersionUnitFamilies:
         b = Binomial()
         result = b.canonical_dispersion(0.0)
         assert isinstance(result, jax.Array)
+
+
+# ---------------------------------------------------------------------------
+# Gamma numerics
+# ---------------------------------------------------------------------------
+
+
+class TestGamma:
+    def test_bounds_lower_is_positive(self):
+        """Gamma lower bound must be strictly positive (not zero)."""
+        g = Gamma()
+        assert g._bounds[0] > 0
+
+    def test_default_link_is_inverse(self):
+        from glmax.family import InverseLink
+
+        assert isinstance(Gamma().glink, InverseLink)
+
+    def test_variance(self):
+        """Gamma.variance(mu, disp) == disp * mu**2."""
+        g = Gamma()
+        mu = jnp.array([1.0, 2.0, 3.0])
+        v = g.variance(mu, 0.5)
+        assert jnp.allclose(v, 0.5 * mu**2)
+
+    def test_negloglikelihood_finite(self):
+        g = Gamma()
+        y = jnp.ones(20) * 2.0
+        eta = jnp.ones(20) * 0.5  # InverseLink: mu = 1/eta = 2
+        assert jnp.isfinite(g.negloglikelihood(y, eta, 1.0))
+
+    def test_sample_shape_and_positivity(self):
+        g = Gamma()
+        key = jr.PRNGKey(0)
+        eta = jnp.ones(20)  # InverseLink: mu = 1.0
+        s = g.sample(key, eta, 1.0)
+        assert s.shape == (20,)
+        assert jnp.all(s > 0), "Gamma samples must be positive"
+
+    def test_canonical_dispersion_passthrough(self):
+        assert float(Gamma().canonical_dispersion(2.5)) == 2.5
+
+    def test_update_dispersion_passthrough(self):
+        g = Gamma()
+        result = g.update_dispersion(jnp.zeros((5, 3)), jnp.ones(5), jnp.ones(5) * 0.5, disp=1.0)
+        assert float(result) == 1.0
+
+    def test_estimate_dispersion_passthrough(self):
+        g = Gamma()
+        result = g.estimate_dispersion(jnp.zeros((5, 3)), jnp.ones(5), jnp.ones(5) * 0.5, disp=1.0)
+        assert float(result) == 1.0
+
+    def test_fits_positive_response_dataset(self):
+        key = jr.PRNGKey(42)
+        key_X, key_y = jr.split(key)
+        n, p = 50, 3
+        X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key_X, (n, p - 1))], axis=1)
+        y = jr.gamma(key_y, 2.0, shape=(n,))
+        result = glmax.fit(glmax.specify(family=Gamma()), GLMData(X=X, y=y))
+        assert jnp.all(jnp.isfinite(result.params.beta))
+        assert jnp.isfinite(result.params.disp)
