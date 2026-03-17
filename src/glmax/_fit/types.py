@@ -1,3 +1,5 @@
+# pattern: Functional Core
+
 from __future__ import annotations
 
 from abc import abstractmethod
@@ -15,19 +17,22 @@ from .solve import AbstractLinearSolver
 class Params(NamedTuple):
     r"""Canonical model parameter carrier.
 
-    A lightweight immutable container for the fitted coefficient vector and
-    dispersion estimate. Used as the `init` argument to `fit(...)` for
-    warm-starting and forwarded inside `FitResult` and `InferenceResult`.
+    A lightweight immutable container for the fitted coefficient vector,
+    dispersion estimate, and optional family-specific auxiliary scalar. Used as
+    the `init` argument to `fit(...)` for warm-starting and forwarded inside
+    `FitResult` and `InferenceResult`.
 
     **Arguments:**
 
     - `beta`: coefficient vector, inexact rank-1 array of shape `(p,)`.
     - `disp`: dispersion scalar; `1.0` for fixed-dispersion families
       (Poisson, Binomial); estimated for Gaussian and NegativeBinomial.
+    - `aux`: optional family-specific auxiliary scalar.
     """
 
     beta: Array
     disp: Array
+    aux: Array | None
 
 
 class FitResult(eqx.Module, strict=True):
@@ -65,7 +70,8 @@ class FitResult(eqx.Module, strict=True):
         score_residual: Array,
     ) -> None:
         r"""**Arguments:**
-        - `params`: `Params` holding $\hat\beta$ and $\hat\phi$.
+        - `params`: `Params` holding $\hat\beta$, $\hat\phi$, and optional
+          family-specific auxiliary state.
         - `X`: covariate matrix, shape `(n, p)`.
         - `y`: observed response, shape `(n,)`.
         - `eta`: converged linear predictor $\hat\eta = X\hat\beta$, shape `(n,)`.
@@ -108,6 +114,13 @@ class FitResult(eqx.Module, strict=True):
             raise TypeError("FitResult.params.disp must have an inexact dtype.")
         if disp.ndim > 0 and disp.size != 1:
             raise ValueError("FitResult.params.disp must be a scalar.")
+
+        if self.params.aux is not None:
+            aux = jnp.asarray(self.params.aux)
+            if not jnp.issubdtype(aux.dtype, jnp.inexact):
+                raise TypeError("FitResult.params.aux must have an inexact dtype.")
+            if aux.ndim > 0 and aux.size != 1:
+                raise ValueError("FitResult.params.aux must be a scalar.")
 
         expected_p = beta.shape[0]
 
@@ -263,9 +276,9 @@ class AbstractFitter(eqx.Module, strict=True):
         """
 
 
-def _canonicalize_init(init: Params | None, n_features: int) -> tuple[Array | None, Array | None]:
+def _canonicalize_init(init: Params | None, n_features: int) -> tuple[Array | None, Array | None, Array | None]:
     if init is None:
-        return None, None
+        return None, None, None
 
     try:
         beta = jnp.asarray(init.beta)
@@ -285,4 +298,16 @@ def _canonicalize_init(init: Params | None, n_features: int) -> tuple[Array | No
     if disp.ndim > 0 and disp.size != 1:
         raise ValueError("Params.disp must be a scalar.")
 
-    return beta, disp
+    if init.aux is None:
+        aux = None
+    else:
+        try:
+            aux = jnp.asarray(init.aux)
+        except TypeError as exc:
+            raise TypeError("Params.aux must be numeric.") from exc
+        if not jnp.issubdtype(aux.dtype, jnp.inexact):
+            raise TypeError("Params.aux must have an inexact dtype.")
+        if aux.ndim > 0 and aux.size != 1:
+            raise ValueError("Params.aux must be a scalar.")
+
+    return beta, disp, aux

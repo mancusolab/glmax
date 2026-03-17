@@ -53,6 +53,8 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Abstra
         raise TypeError("fit(...) expects `init` to be a Params instance or None.")
     if not isinstance(fitter, AbstractFitter):
         raise TypeError("fit(...) expects `fitter` to be an AbstractFitter instance.")
+    if init is not None:
+        _canonicalize_init(init, data.X.shape[1])
 
     result = fitter(model, data, init)
 
@@ -94,8 +96,9 @@ def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:
         raise ValueError("GLMData.weights is not supported in predict yet.")
 
     X_array, _, offset_array, _ = data.canonical_arrays()
-    beta, disp = _canonicalize_init(params, X_array.shape[1])
+    beta, disp, aux = _canonicalize_init(params, X_array.shape[1])
     assert beta is not None and disp is not None
+    del disp, aux
 
     eta = X_array @ beta + offset_array
     return model.mean(eta)
