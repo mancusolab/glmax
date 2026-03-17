@@ -11,7 +11,7 @@ class InferenceResult(NamedTuple):
     A lightweight immutable container carrying the inferential summaries
     produced by an `AbstractTest` strategy.
 
-    **Fields:**
+    **Arguments:**
 
     - `params`: `Params` from the fitted model ($\hat\beta$, $\hat\phi$).
     - `se`: standard error vector, shape `(p,)`. May be `NaN` for strategies

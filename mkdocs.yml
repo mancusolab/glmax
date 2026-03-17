@@ -111,7 +111,11 @@ plugins:
 nav:
     - Home: 'index.md'
     - API:
-          - 'GLM Grammar': 'api/glm.md'
+          - 'Verbs': 'api/verbs.md'
+          - 'Nouns': 'api/nouns.md'
+          - 'Fitting Strategies': 'api/fitters.md'
+          - 'Inference Strategies': 'api/inference.md'
+          - 'Families & Links': 'api/family.md'
     - Release Notes: 'release-notes.md'
     - Misc:
         - 'authors.md'

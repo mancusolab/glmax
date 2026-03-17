@@ -73,16 +73,16 @@ class AbstractLink(eqx.Module):
 
 
 class PowerLink(AbstractLink):
-    r"""Power link $g(\mu) = \mu^p$.
+    r"""Power link $g(\mu) = \mu^p$."""
 
-    **Arguments:**
+    power: Scalar
 
-    - `power`: exponent $p$. Default `1.0` (identity link).
-    """
+    def __init__(self, power: float = 1.0) -> None:
+        r"""**Arguments:**
 
-    # eqx.field(converter=...) replaces an explicit __init__(self, power) —
-    # equivalent but more idiomatic Equinox; converter ensures array dtype.
-    power: Scalar = eqx.field(converter=jnp.asarray, default=1.0)
+        - `power`: exponent $p$. Default `1.0` (identity link).
+        """
+        self.power = jnp.asarray(power)
 
     def __check_init__(self):
         if self.power == 0:
@@ -376,16 +376,16 @@ class LogLink(AbstractLink):
 
 
 class NBLink(AbstractLink):
-    r"""Negative-binomial link $g(\mu) = \log(\alpha\mu / (1 + \alpha\mu))$.
+    r"""Negative-binomial link $g(\mu) = \log(\alpha\mu / (1 + \alpha\mu))$."""
 
-    **Arguments:**
+    alpha: Scalar
 
-    - `alpha`: overdispersion parameter $\alpha > 0$. Default `1.0`.
-    """
+    def __init__(self, alpha: float = 1.0) -> None:
+        r"""**Arguments:**
 
-    # eqx.field(converter=...) replaces an explicit __init__(self, alpha) —
-    # equivalent but more idiomatic Equinox; converter ensures array dtype.
-    alpha: Scalar = eqx.field(converter=jnp.asarray, default=1.0)
+        - `alpha`: overdispersion parameter $\alpha > 0$. Default `1.0`.
+        """
+        self.alpha = jnp.asarray(alpha)
 
     def __call__(self, mu: ArrayLike) -> Array:
         r"""Compute $g(\mu) = \log(\alpha\mu / (1 + \alpha\mu))$.

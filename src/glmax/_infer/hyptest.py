@@ -85,7 +85,7 @@ class WaldTest(AbstractTest, strict=True):
 
 
 class ScoreTest(AbstractTest, strict=True):
-    """Per-coefficient MLE-point score-style statistic built from fit artifacts.
+    r"""Per-coefficient MLE-point score-style statistic built from fit artifacts.
 
     Computes the per-coefficient score statistic directly from `score_residual`,
     `glm_wt`, and the Fisher-information diagonal without calling `stderr`.

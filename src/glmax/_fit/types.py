@@ -19,7 +19,7 @@ class Params(NamedTuple):
     dispersion estimate. Used as the `init` argument to `fit(...)` for
     warm-starting and forwarded inside `FitResult` and `InferenceResult`.
 
-    **Fields:**
+    **Arguments:**
 
     - `beta`: coefficient vector, inexact rank-1 array of shape `(p,)`.
     - `disp`: dispersion scalar; `1.0` for fixed-dispersion families
@@ -36,20 +36,6 @@ class FitResult(eqx.Module, strict=True):
     Produced by every `AbstractFitter` strategy and consumed by `FittedGLM`,
     `infer(...)`, and `check(...)`. All fields are validated at construction
     time via `__check_init__`.
-
-    **Fields:**
-
-    - `params`: `Params` holding $\hat\beta$ and $\hat\phi$.
-    - `X`: covariate matrix, shape `(n, p)`.
-    - `y`: observed response, shape `(n,)`.
-    - `eta`: converged linear predictor $\hat\eta = X\hat\beta$, shape `(n,)`.
-    - `mu`: fitted means $\hat\mu = g^{-1}(\hat\eta)$, shape `(n,)`.
-    - `glm_wt`: GLM working weights at convergence, shape `(n,)`.
-    - `converged`: boolean scalar; `True` if IRLS converged within tolerance.
-    - `num_iters`: integer scalar; number of IRLS iterations taken.
-    - `objective`: final negative log-likelihood scalar.
-    - `objective_delta`: change in objective on the last iteration.
-    - `score_residual`: working residual $(y - \hat\mu) g'(\hat\mu)$, shape `(n,)`.
     """
 
     params: Params
@@ -63,6 +49,46 @@ class FitResult(eqx.Module, strict=True):
     objective: Array
     objective_delta: Array
     score_residual: Array
+
+    def __init__(
+        self,
+        params: Params,
+        X: Array,
+        y: Array,
+        eta: Array,
+        mu: Array,
+        glm_wt: Array,
+        converged: Array,
+        num_iters: Array,
+        objective: Array,
+        objective_delta: Array,
+        score_residual: Array,
+    ) -> None:
+        r"""**Arguments:**
+
+        - `params`: `Params` holding $\hat\beta$ and $\hat\phi$.
+        - `X`: covariate matrix, shape `(n, p)`.
+        - `y`: observed response, shape `(n,)`.
+        - `eta`: converged linear predictor $\hat\eta = X\hat\beta$, shape `(n,)`.
+        - `mu`: fitted means $\hat\mu = g^{-1}(\hat\eta)$, shape `(n,)`.
+        - `glm_wt`: GLM working weights at convergence, shape `(n,)`.
+        - `converged`: boolean scalar; `True` if IRLS converged within tolerance.
+        - `num_iters`: integer scalar; number of IRLS iterations taken.
+        - `objective`: final negative log-likelihood scalar.
+        - `objective_delta`: change in objective on the last iteration.
+        - `score_residual`: working residual $(y - \hat\mu) g'(\hat\mu)$, shape `(n,)`.
+        """
+        self.params = params
+        self.X = X
+        self.y = y
+        self.eta = eta
+        self.mu = mu
+        self.glm_wt = glm_wt
+        self.converged = converged
+        self.num_iters = num_iters
+        self.objective = objective
+        self.objective_delta = objective_delta
+        self.score_residual = score_residual
 
     @property
     def beta(self) -> Array:
@@ -142,11 +168,6 @@ class FittedGLM(eqx.Module, strict=True):
     commonly accessed fit artifacts as properties. Pass `FittedGLM` directly
     to `infer(...)` and `check(...)`.
 
-    **Fields:**
-
-    - `model`: the `GLM` specification used during fitting.
-    - `result`: the `FitResult` produced by the fitter strategy.
-
     Common artifacts are available as forwarding properties: `params`, `beta`,
     `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`,
     `objective_delta`, `score_residual`.
@@ -154,6 +175,15 @@ class FittedGLM(eqx.Module, strict=True):
 
     model: GLM
     result: FitResult
+
+    def __init__(self, model: GLM, result: FitResult) -> None:
+        r"""**Arguments:**
+
+        - `model`: the `GLM` specification used during fitting.
+        - `result`: the `FitResult` produced by the fitter strategy.
+        """
+        self.model = model
+        self.result = result
 
     @property
     def params(self) -> Params:
@@ -213,12 +243,8 @@ class FittedGLM(eqx.Module, strict=True):
 class AbstractFitter(eqx.Module, strict=True):
     r"""Abstract base for fit strategies used by `fit(model, data, fitter=...)`.
 
-    Subclasses must declare a `solver: AbstractLinearSolver` field and implement
-    `__call__`. The default concrete strategy is `IRLSFitter`.
-
-    **Fields:**
-
-    - `solver`: `AbstractLinearSolver` instance (required by subclasses).
+    Subclasses must declare a concrete `solver: AbstractLinearSolver` field and
+    implement `__call__`. The default concrete strategy is `IRLSFitter`.
     """
 
     solver: eqx.AbstractVar[AbstractLinearSolver]

@@ -18,13 +18,16 @@ class GLM(eqx.Module):
     A `GLM` holds the family that characterises a model. It carries no state
     (no fitted parameters, no data) and is constructed once via `specify`.
     The linear solver is part of the `AbstractFitter` strategy, not the model.
-
-    **Arguments:**
-
-    - `family`: `ExponentialFamily` instance (default: `Gaussian()`).
     """
 
-    family: ExponentialFamily = Gaussian()
+    family: ExponentialFamily
+
+    def __init__(self, family: ExponentialFamily = Gaussian()) -> None:
+        r"""**Arguments:**
+
+        - `family`: `ExponentialFamily` instance (default: `Gaussian()`).
+        """
+        self.family = family
 
     # ------------------------------------------------------------------
     # User-facing computations

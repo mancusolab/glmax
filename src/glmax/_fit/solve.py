@@ -18,20 +18,10 @@ SolverState: TypeAlias = tuple[lx.AbstractLinearOperator, ArrayLike]
 class AbstractLinearSolver(eqx.Module, strict=True):
     r"""Abstract contract for weighted least-squares linear solvers.
 
-    **Arguments:**
-
-    - Implementations define a concrete `solver` strategy and `init(...)` mapping
-      from weighted regression inputs to a linear operator/right-hand side pair.
-
-    **Returns:**
-
-    - Concrete implementations return coefficient estimates compatible with
-      GLM fitter update loops.
-
-    **Failure Modes:**
-
-    - Implementations may raise backend-specific linear-algebra errors if the
-      weighted system is ill-posed for the configured solver strategy.
+    Subclasses must provide a concrete `solver: lx.AbstractLinearSolver` field
+    and implement `init(...)` to map weighted regression inputs to a linear
+    operator / right-hand-side pair. Concrete implementations may raise
+    backend-specific linear-algebra errors for ill-posed systems.
     """
 
     solver: eqx.AbstractVar[lx.AbstractLinearSolver]
@@ -67,21 +57,18 @@ class AbstractLinearSolver(eqx.Module, strict=True):
 class QRSolver(AbstractLinearSolver, strict=True):
     r"""QR-based weighted least-squares solver.
 
-    **Arguments:**
-
-    - Uses `lineax.QR` to solve full-rank weighted systems and supports
-      non-square operators.
-
-    **Returns:**
-
-    - Weighted least-squares coefficient updates for each IRLS iteration.
-
-    **Failure Modes:**
-
-    - May fail for rank-deficient systems where QR assumptions are violated.
+    Uses `lineax.QR` to solve full-rank weighted systems; supports non-square
+    operators. May fail for rank-deficient systems.
     """
 
-    solver: lx.AbstractLinearSolver = lx.QR()
+    solver: lx.AbstractLinearSolver
+
+    def __init__(self, solver: lx.AbstractLinearSolver = lx.QR()) -> None:
+        r"""**Arguments:**
+
+        - `solver`: `lineax` solver instance (default: `lx.QR()`).
+        """
+        self.solver = solver
 
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         r"""Build weighted QR operator inputs.
@@ -113,20 +100,18 @@ class QRSolver(AbstractLinearSolver, strict=True):
 class CholeskySolver(AbstractLinearSolver):
     r"""Cholesky-based weighted least-squares solver.
 
-    **Arguments:**
-
-    - Uses `lineax.Cholesky` on normal-equation operators.
-
-    **Returns:**
-
-    - Weighted least-squares coefficient updates for each IRLS iteration.
-
-    **Failure Modes:**
-
-    - Requires numerically stable normal equations; near-singular systems may fail.
+    Uses `lineax.Cholesky` on normal-equation operators. Requires numerically
+    stable normal equations; near-singular systems may fail.
     """
 
-    solver: lx.AbstractLinearSolver = lx.Cholesky()
+    solver: lx.AbstractLinearSolver
+
+    def __init__(self, solver: lx.AbstractLinearSolver = lx.Cholesky()) -> None:
+        r"""**Arguments:**
+
+        - `solver`: `lineax` solver instance (default: `lx.Cholesky()`).
+        """
+        self.solver = solver
 
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         Xw = X * weights[:, jnp.newaxis]
@@ -139,20 +124,18 @@ class CholeskySolver(AbstractLinearSolver):
 class CGSolver(AbstractLinearSolver):
     r"""Conjugate-gradient weighted least-squares solver.
 
-    **Arguments:**
-
-    - Uses `lineax.NormalCG` for iterative weighted least-squares solves.
-
-    **Returns:**
-
-    - Weighted least-squares coefficient updates for each IRLS iteration.
-
-    **Failure Modes:**
-
-    - Convergence may degrade on poorly conditioned systems depending on tolerance settings.
+    Uses `lineax.NormalCG` for iterative weighted least-squares solves.
+    Convergence may degrade on poorly conditioned systems.
     """
 
-    solver: lx.AbstractLinearSolver = lx.Normal(lx.CG(atol=1e-5, rtol=1e-5))
+    solver: lx.AbstractLinearSolver
+
+    def __init__(self, solver: lx.AbstractLinearSolver = lx.Normal(lx.CG(atol=1e-5, rtol=1e-5))) -> None:
+        r"""**Arguments:**
+
+        - `solver`: `lineax` solver instance (default: `lx.Normal(lx.CG(atol=1e-5, rtol=1e-5))`).
+        """
+        self.solver = solver
 
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         w_half = jnp.sqrt(weights)

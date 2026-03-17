@@ -81,14 +81,17 @@ class IRLSFitter(AbstractFitter, strict=True):
 
     The default `AbstractFitter` used by `glmax.fit(...)`. Runs a
     `lax.while_loop`-based IRLS algorithm and returns a `FitResult`.
-
-    **Fields:**
-
-    - `solver`: `AbstractLinearSolver` for each IRLS weighted least-squares step
-      (default: `CholeskySolver()`).
     """
 
-    solver: AbstractLinearSolver = CholeskySolver()
+    solver: AbstractLinearSolver
+
+    def __init__(self, solver: AbstractLinearSolver = CholeskySolver()) -> None:
+        r"""**Arguments:**
+
+        - `solver`: `AbstractLinearSolver` for each IRLS weighted least-squares
+          step (default: `CholeskySolver()`).
+        """
+        self.solver = solver
 
     def __call__(
         self,

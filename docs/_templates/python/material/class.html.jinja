@@ -4,7 +4,7 @@
   <code>{{ class_name }}(
     {%- for expression in class.bases -%}
       {% if loop.last %}
-        {% include "expression.html" with context %})</code>
+        {% include "expression.html.jinja" with context %})</code>
       {% else %}
         {% include "expression.html" with context %},
       {% endif %}

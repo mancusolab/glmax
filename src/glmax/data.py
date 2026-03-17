@@ -49,19 +49,6 @@ class GLMData(eqx.Module, strict=True):
 
     Wraps the design matrix, response vector, and optional nuisance arrays.
     All inputs are validated and canonicalized at construction time.
-
-    **Fields:**
-
-    - `X`: covariate matrix, shape `(n, p)`. Must be rank-2, finite, numeric.
-    - `y`: response vector, shape `(n,)`. Must be rank-1, finite, numeric.
-    - `offset`: optional additive offset in $\eta = X\beta + \text{offset}$, shape `(n,)`.
-    - `weights`: optional per-sample weights (reserved; not yet supported by `fit`).
-
-    **Raises:**
-
-    - `TypeError`: if `X` or `y` are non-numeric.
-    - `ValueError`: if `X` is not rank-2, `y` is not rank-1, sample dimensions
-      mismatch, or any finite-value check fails.
     """
 
     X: Array
@@ -76,6 +63,20 @@ class GLMData(eqx.Module, strict=True):
         offset: ArrayLike | None = None,
         weights: ArrayLike | None = None,
     ) -> None:
+        r"""**Arguments:**
+
+        - `X`: covariate matrix, shape `(n, p)`. Must be rank-2, finite, numeric.
+        - `y`: response vector, shape `(n,)`. Must be rank-1, finite, numeric.
+        - `offset`: optional additive offset in $\eta = X\beta + \text{offset}$,
+          shape `(n,)` or broadcastable scalar.
+        - `weights`: optional per-sample weights (reserved; not yet supported by `fit`).
+
+        **Raises:**
+
+        - `TypeError`: if `X` or `y` are non-numeric.
+        - `ValueError`: if `X` is not rank-2, `y` is not rank-1, sample dimensions
+          mismatch, or any finite-value check fails.
+        """
         X = _as_numeric_array("X", X)
         y = _as_numeric_array("y", y)
 

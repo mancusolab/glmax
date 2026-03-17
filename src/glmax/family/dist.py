@@ -16,21 +16,26 @@ from .links import AbstractLink, IdentityLink, InverseLink, LogitLink, LogLink, 
 
 
 class ExponentialFamily(eqx.Module):
-    """
-    Define parent class for exponential family distribution (One parameter EF for now).
-    Provide all required link function relevant to generalized linear model (GLM).
-    GLM: g(mu) = X @ b, where mu = E(Y|X)
-    : hlink : h(X @ b) = b'-1 (g^-1(X @ b)) = theta, default is canonical link which returns identity function.
-    : hlink_der : derivative of hlink function
-    : glink : g(mu) = X @ b, canonical link is g = b'-1, allows user to provide other link function.
-    : glink_inv : inverse of glink, where g^-1(X @ b) = mu
-    : glink_der : derivative of glink
-    : log_prob : log joint density of all observations
+    r"""Abstract base for one-parameter exponential family distributions.
+
+    A GLM models the conditional mean $\mu = \mathrm{E}(Y \mid X)$ via a link
+    function $g$ such that $g(\mu) = \eta = X\beta$.  Subclasses implement the
+    family-specific density, variance function, and dispersion handling.
+
+    Concrete families: `Gaussian`, `Poisson`, `Binomial`, `NegativeBinomial`, `Gamma`.
     """
 
     glink: AbstractLink
     _links: ClassVar[list[type[AbstractLink]]]
     _bounds: ClassVar[tuple[float, float]]
+
+    def __init__(self, glink: AbstractLink) -> None:
+        r"""
+        **Arguments:**
+
+        - `glink`: link function $g$ connecting $\mu$ to $\eta = g(\mu)$.
+        """
+        self.glink = glink
 
     def __check_init__(self):
         if not any([isinstance(self.glink, link) for link in self._links]):
@@ -96,8 +101,17 @@ class ExponentialFamily(eqx.Module):
         """
 
     def score(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
-        """
-        For canonical link, this is X^t (y - mu)/phi, phi is the self.scale
+        r"""Score vector $\nabla_\beta \ell = X^\top (y - \mu) / \phi$.
+
+        **Arguments:**
+
+        - `X`: design matrix, shape `(n, p)`.
+        - `y`: observed responses, shape `(n,)`.
+        - `mu`: fitted means, shape `(n,)`.
+
+        **Returns:**
+
+        Score vector, shape `(p,)`.
         """
         return -X.T @ (y - mu) / self.scale(X, y, mu)
 
@@ -157,14 +171,26 @@ class ExponentialFamily(eqx.Module):
 
 
 class Gaussian(ExponentialFamily):
-    """
-    By explicitly write phi (here is sigma^2),
-    we can treat normal distribution as one-parameter EF
+    r"""Gaussian (normal) exponential family.
+
+    Models a continuous response $y \in \mathbb{R}$ with
+    $y \mid \mu \sim \mathcal{N}(\mu, \sigma^2)$.
+
+    The variance function is $V(\mu) = \sigma^2$ and the canonical link
+    is the identity $g(\mu) = \mu$.
     """
 
     glink: AbstractLink = IdentityLink()
     _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink, PowerLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+
+    def __init__(self, glink: AbstractLink = IdentityLink()) -> None:
+        r"""
+        **Arguments:**
+
+        - `glink`: link function (default: `IdentityLink()`).
+        """
+        self.glink = glink
 
     def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
         resid = jnp.sum(jnp.square(mu - y))
@@ -307,11 +333,13 @@ class Gaussian(ExponentialFamily):
 
 
 class Binomial(ExponentialFamily):
-    """
-    default setting:
-    glink = log(p/(1-p))
-    glink_inv = 1/(1 + e^-x) # use log1p to calculate this
-    glink_der = 1/(p*(1-p)) # use log trick to calculate this
+    r"""Binomial exponential family for binary responses.
+
+    Models a binary response $y \in \{0, 1\}$ with
+    $y \mid \mu \sim \mathrm{Bernoulli}(\mu)$, $\mu \in (0, 1)$.
+
+    The variance function is $V(\mu) = \mu(1 - \mu)$ and the canonical link
+    is the logit $g(\mu) = \log(\mu / (1 - \mu))$.
     """
 
     glink: AbstractLink = LogitLink()
@@ -321,6 +349,14 @@ class Binomial(ExponentialFamily):
         IdentityLink,
     ]  # Probit, Cauchy, LogC, CLogLog, LogLog
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, 1.0 - jnp.finfo(float).eps)
+
+    def __init__(self, glink: AbstractLink = LogitLink()) -> None:
+        r"""
+        **Arguments:**
+
+        - `glink`: link function (default: `LogitLink()`).
+        """
+        self.glink = glink
 
     def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
         return jnp.asarray(1.0)
@@ -376,9 +412,26 @@ class Binomial(ExponentialFamily):
 
 
 class Poisson(ExponentialFamily):
+    r"""Poisson exponential family for count responses.
+
+    Models a non-negative integer response $y \in \{0, 1, 2, \ldots\}$ with
+    $y \mid \mu \sim \mathrm{Poisson}(\mu)$, $\mu > 0$.
+
+    The variance function is $V(\mu) = \mu$ and the canonical link
+    is the log $g(\mu) = \log(\mu)$.
+    """
+
     glink: AbstractLink = LogLink()
     _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink]  # Sqrt
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
+
+    def __init__(self, glink: AbstractLink = LogLink()) -> None:
+        r"""
+        **Arguments:**
+
+        - `glink`: link function (default: `LogLink()`).
+        """
+        self.glink = glink
 
     def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
         return jnp.asarray(1.0)
@@ -431,15 +484,27 @@ class Poisson(ExponentialFamily):
 
 
 class NegativeBinomial(ExponentialFamily):
-    """
-    NB-2 method
-    Notation: alpha = 1/r = 1.
-    Now only use Log link (not the canonical link of NB)
+    r"""Negative-binomial (NB-2) exponential family for overdispersed count data.
+
+    Models a non-negative integer response via the NB-2 parameterisation
+    $\mathrm{Var}(y \mid \mu) = \mu + \alpha \mu^2$, where $\alpha > 0$ is the
+    overdispersion parameter.  Uses a log link by default.
+
+    The dispersion $\alpha$ is estimated jointly with $\beta$ during fitting
+    using Newton steps on $\log \alpha$.
     """
 
     glink: AbstractLink = LogLink()
     _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink, NBLink, PowerLink]  # CLogLog
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
+
+    def __init__(self, glink: AbstractLink = LogLink()) -> None:
+        r"""
+        **Arguments:**
+
+        - `glink`: link function (default: `LogLink()`).
+        """
+        self.glink = glink
 
     def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
         return jnp.asarray(1.0)
@@ -514,8 +579,18 @@ class NegativeBinomial(ExponentialFamily):
     def alpha_score_and_hessian(
         self, X: ArrayLike, y: ArrayLike, eta: ArrayLike, alpha: ScalarLike
     ) -> tuple[Array, Array]:
-        """
-        internally take exponential such as to take derivative wrt 1/alpha
+        r"""Gradient and Hessian of the negative log-likelihood w.r.t. $\alpha$.
+
+        **Arguments:**
+
+        - `X`: design matrix (unused, kept for API symmetry).
+        - `y`: observed counts, shape `(n,)`.
+        - `eta`: linear predictor, shape `(n,)`.
+        - `alpha`: overdispersion $\alpha > 0$, scalar.
+
+        **Returns:**
+
+        Tuple `(score, hessian)` — scalar gradient and scalar second derivative.
         """
 
         def _ll(alpha):
@@ -528,8 +603,20 @@ class NegativeBinomial(ExponentialFamily):
     def log_alpha_score_and_hessian(
         self, X: ArrayLike, y: ArrayLike, eta: ArrayLike, log_alpha: ScalarLike
     ) -> tuple[Array, Array]:
-        """
-        internally take exponential such as to take derivative wrt 1/alpha
+        r"""Gradient and Hessian of the negative log-likelihood w.r.t. $\log\alpha$.
+
+        Differentiates in log-space to ensure $\alpha > 0$ throughout Newton steps.
+
+        **Arguments:**
+
+        - `X`: design matrix (unused, kept for API symmetry).
+        - `y`: observed counts, shape `(n,)`.
+        - `eta`: linear predictor, shape `(n,)`.
+        - `log_alpha`: $\log\alpha$, scalar.
+
+        **Returns:**
+
+        Tuple `(score, hessian)` — scalar gradient and scalar second derivative.
         """
 
         def _ll(log_alpha_):
@@ -616,6 +703,14 @@ class Gamma(ExponentialFamily):
     glink: AbstractLink = InverseLink()
     _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, InverseLink, LogLink]
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
+
+    def __init__(self, glink: AbstractLink = InverseLink()) -> None:
+        r"""
+        **Arguments:**
+
+        - `glink`: link function (default: `InverseLink()`).
+        """
+        self.glink = glink
 
     def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
         r"""Return scale $\phi = 1$ (Gamma uses identity scale).
