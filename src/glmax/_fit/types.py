@@ -13,14 +13,44 @@ from .solve import AbstractLinearSolver
 
 
 class Params(NamedTuple):
-    """Canonical model parameters."""
+    r"""Canonical model parameter carrier.
+
+    A lightweight immutable container for the fitted coefficient vector and
+    dispersion estimate. Used as the `init` argument to `fit(...)` for
+    warm-starting and forwarded inside `FitResult` and `InferenceResult`.
+
+    **Fields:**
+
+    - `beta`: coefficient vector, inexact rank-1 array of shape `(p,)`.
+    - `disp`: dispersion scalar; `1.0` for fixed-dispersion families
+      (Poisson, Binomial); estimated for Gaussian and NegativeBinomial.
+    """
 
     beta: Array
     disp: Array
 
 
 class FitResult(eqx.Module, strict=True):
-    """Canonical fit contract shared by grammar verbs."""
+    r"""Canonical fitter output contract.
+
+    Produced by every `AbstractFitter` strategy and consumed by `FittedGLM`,
+    `infer(...)`, and `check(...)`. All fields are validated at construction
+    time via `__check_init__`.
+
+    **Fields:**
+
+    - `params`: `Params` holding $\hat\beta$ and $\hat\phi$.
+    - `X`: covariate matrix, shape `(n, p)`.
+    - `y`: observed response, shape `(n,)`.
+    - `eta`: converged linear predictor $\hat\eta = X\hat\beta$, shape `(n,)`.
+    - `mu`: fitted means $\hat\mu = g^{-1}(\hat\eta)$, shape `(n,)`.
+    - `glm_wt`: GLM working weights at convergence, shape `(n,)`.
+    - `converged`: boolean scalar; `True` if IRLS converged within tolerance.
+    - `num_iters`: integer scalar; number of IRLS iterations taken.
+    - `objective`: final negative log-likelihood scalar.
+    - `objective_delta`: change in objective on the last iteration.
+    - `score_residual`: working residual $(y - \hat\mu) g'(\hat\mu)$, shape `(n,)`.
+    """
 
     params: Params
     X: Array
@@ -106,7 +136,21 @@ class FitResult(eqx.Module, strict=True):
 
 
 class FittedGLM(eqx.Module, strict=True):
-    """Canonical fitted-model noun used by downstream grammar verbs."""
+    r"""Canonical fitted-model noun produced by `fit(...)`.
+
+    Binds a `GLM` specification with its `FitResult` and forwards the most
+    commonly accessed fit artifacts as properties. Pass `FittedGLM` directly
+    to `infer(...)` and `check(...)`.
+
+    **Fields:**
+
+    - `model`: the `GLM` specification used during fitting.
+    - `result`: the `FitResult` produced by the fitter strategy.
+
+    Common artifacts are available as forwarding properties: `params`, `beta`,
+    `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`,
+    `objective_delta`, `score_residual`.
+    """
 
     model: GLM
     result: FitResult
@@ -167,13 +211,32 @@ class FittedGLM(eqx.Module, strict=True):
 
 
 class AbstractFitter(eqx.Module, strict=True):
-    """Abstract fit strategy over grammar nouns."""
+    r"""Abstract base for fit strategies used by `fit(model, data, fitter=...)`.
+
+    Subclasses must declare a `solver: AbstractLinearSolver` field and implement
+    `__call__`. The default concrete strategy is `IRLSFitter`.
+
+    **Fields:**
+
+    - `solver`: `AbstractLinearSolver` instance (required by subclasses).
+    """
 
     solver: eqx.AbstractVar[AbstractLinearSolver]
 
     @abstractmethod
     def __call__(self, model: GLM, data: GLMData, init: Params | None = None) -> FitResult:
-        """Fit `model` against `data` with optional parameter initialisation."""
+        r"""Fit `model` against `data` and return a `FitResult`.
+
+        **Arguments:**
+
+        - `model`: `GLM` specification noun.
+        - `data`: `GLMData` noun.
+        - `init`: optional `Params` for warm-starting; `None` uses the family default.
+
+        **Returns:**
+
+        `FitResult` carrying all fit artifacts.
+        """
 
 
 def _canonicalize_init(init: Params | None, n_features: int) -> tuple[Array | None, Array | None]:

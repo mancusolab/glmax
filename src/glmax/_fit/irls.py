@@ -77,7 +77,16 @@ def _irls(
 
 
 class IRLSFitter(AbstractFitter, strict=True):
-    """IRLS fit strategy implementing the `AbstractFitter` contract."""
+    r"""Iteratively Reweighted Least Squares (IRLS) fit strategy.
+
+    The default `AbstractFitter` used by `glmax.fit(...)`. Runs a
+    `lax.while_loop`-based IRLS algorithm and returns a `FitResult`.
+
+    **Fields:**
+
+    - `solver`: `AbstractLinearSolver` for each IRLS weighted least-squares step
+      (default: `CholeskySolver()`).
+    """
 
     solver: AbstractLinearSolver = CholeskySolver()
 
@@ -90,6 +99,26 @@ class IRLSFitter(AbstractFitter, strict=True):
         tol: float = 1e-3,
         step_size: float = 1.0,
     ) -> FitResult:
+        r"""Run IRLS to convergence and return a `FitResult`.
+
+        **Arguments:**
+
+        - `model`: `GLM` specification noun.
+        - `data`: `GLMData` noun (weights not yet supported).
+        - `init`: optional `Params` for warm-starting; `None` uses the family default.
+        - `max_iter`: maximum number of IRLS iterations (default `1000`).
+        - `tol`: convergence tolerance on the objective change (default `1e-3`).
+        - `step_size`: IRLS update step-size multiplier (default `1.0`).
+
+        **Returns:**
+
+        `FitResult` with converged parameters, fit artifacts, and convergence metadata.
+
+        **Raises:**
+
+        - `TypeError`: if `data` is not a `GLMData` instance.
+        - `ValueError`: if `data.weights` is set (not yet supported).
+        """
         if not isinstance(data, GLMData):
             raise TypeError("fit(...) expects `data` to be a GLMData instance.")
         if data.weights is not None:

@@ -17,26 +17,40 @@ if TYPE_CHECKING:
 
 
 class AbstractStdErrEstimator(eqx.Module, strict=True):
-    """
-    Base protocol for covariance estimators used by `_infer(fitted, stderr=...)`.
+    r"""Abstract base for covariance estimators used by `infer(fitted, stderr=...)`.
+
+    Subclasses implement `__call__` to return a `(p, p)` covariance matrix for
+    $\hat\beta$. The matrix is consumed by `AbstractTest` strategies to compute
+    standard errors and test statistics.
     """
 
     @abstractmethod
     def __call__(self, fitted: "FittedGLM") -> Array:
-        """Return a covariance matrix for `fitted.result.params.beta`."""
-
-
-class FisherInfoError(AbstractStdErrEstimator, strict=True):
-    """
-    Covariance estimator based on Fisher information reconstructed from fit artifacts.
-    """
-
-    def __call__(self, fitted: "FittedGLM") -> Array:
-        r"""Compute $\hat{\mathrm{Cov}}(\hat\beta) = \phi \cdot \mathcal{I}(\hat\beta)^{-1}$.
+        r"""Estimate the covariance matrix for `fitted.result.params.beta`.
 
         **Arguments:**
 
-        - `fitted`: validated `FittedGLM` containing the model and fit artifacts.
+        - `fitted`: `FittedGLM` from `fit(...)`.
+
+        **Returns:**
+
+        Covariance matrix $\hat{\mathrm{Cov}}(\hat\beta)$, shape `(p, p)`.
+        """
+
+
+class FisherInfoError(AbstractStdErrEstimator, strict=True):
+    r"""Fisher-information covariance estimator.
+
+    Reconstructs the expected Fisher information from fit artifacts and inverts it.
+    Default estimator used by `WaldTest`.
+    """
+
+    def __call__(self, fitted: "FittedGLM") -> Array:
+        r"""Compute $\hat{\mathrm{Cov}}(\hat\beta) = \hat\phi \cdot \mathcal{I}(\hat\beta)^{-1}$.
+
+        **Arguments:**
+
+        - `fitted`: `FittedGLM` from `fit(...)`.
 
         **Returns:**
 
@@ -51,11 +65,25 @@ class FisherInfoError(AbstractStdErrEstimator, strict=True):
 
 
 class HuberError(AbstractStdErrEstimator, strict=True):
-    """
-    Sandwich covariance estimator over fit artifacts.
+    r"""Huber-White sandwich covariance estimator.
+
+    Computes the heteroskedasticity-robust "meat-bread" sandwich estimator
+    $\hat{\mathrm{Cov}}(\hat\beta) = B \, M \, B$ where $B = \hat\phi \, \mathcal{I}^{-1}$
+    and $M = X^\top \mathrm{diag}(\hat{s}_i^2) X$ with per-observation score contributions
+    $\hat{s}_i = w_i r_i / \hat\phi$.
     """
 
     def __call__(self, fitted: "FittedGLM") -> Array:
+        r"""Compute the sandwich covariance matrix.
+
+        **Arguments:**
+
+        - `fitted`: `FittedGLM` from `fit(...)`.
+
+        **Returns:**
+
+        Sandwich covariance matrix, shape `(p, p)`.
+        """
         model = fitted.model
         fit_result = fitted.result
         X = fit_result.X

@@ -18,24 +18,26 @@ def infer(
     inferrer: AbstractTest = WaldTest(),
     stderr: AbstractStdErrEstimator = FisherInfoError(),
 ) -> InferenceResult:
-    """Inferential summaries from fit artifacts without refitting.
+    r"""Compute inferential summaries from a fitted GLM without refitting.
+
+    The canonical `infer` grammar verb. Delegates to the chosen `AbstractTest`
+    strategy, which calls the `AbstractStdErrEstimator` as needed.
 
     **Arguments:**
 
-    - `fitted`: validated fitted-model carrier produced by `glmax.fit(...)`.
-    - `inferrer`: optional inference strategy. `None` resolves lazily to
-      `DEFAULT_INFERRER` at call time.
-    - `stderr`: standard-error estimator forwarded to the selected inferrer.
+    - `fitted`: `FittedGLM` noun produced by `fit(...)`.
+    - `inferrer`: inference strategy (default: `WaldTest()`).
+    - `stderr`: standard-error estimator forwarded to the inferrer
+      (default: `FisherInfoError()`).
 
     **Returns:**
 
-    - `InferenceResult` carrying `(params, se, stat, p)`.
+    `InferenceResult` carrying `(params, se, stat, p)`.
 
     **Raises:**
 
-    - `TypeError`: if `fitted` is not a `FittedGLM`, `fitted.result` is not a
-      `FitResult`, `inferrer` is not an `AbstractTest`, or `stderr` is not
-      an `AbstractStdErrEstimator`.
+    - `TypeError`: if `fitted` is not a `FittedGLM`, `inferrer` is not an
+      `AbstractTest`, or `stderr` is not an `AbstractStdErrEstimator`.
     """
 
     if not isinstance(fitted, FittedGLM):

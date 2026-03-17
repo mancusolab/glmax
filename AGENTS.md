@@ -14,6 +14,7 @@
   - `glmax.predict(model, params, data)` is also `@eqx.filter_jit`-wrapped.
   - `infer(fitted, inferrer=WaldTest(), stderr=FisherInfoError())` and `check(fitted)` operate on the fitted noun without refitting.
   - `GLM` is a pure specification noun (`family` field only). It has no `.fit` method and no `solver` field. Use `glmax.fit(model, data)`. The solver lives on the fitter strategy.
+  - `GLM` exposes a method interface that the fitting and inference kernels program against. User-facing: `mean(eta)`, `log_prob(y, eta, disp)`, `sample(key, eta, disp)`. Kernel-facing: `init_eta(y)`, `working_weights(eta, disp)`, `link_deriv(mu)`, `update_dispersion(...)`, `estimate_dispersion(...)`, `canonicalize_dispersion(disp)`, `scale(X, y, mu)`. All delegate to `self.family`. Do not call `model.family.xxx` from kernels — use `model.xxx`.
   - `Gamma` is a supported family (exported from `glmax.family`). Dispersion estimation for Gamma is deferred.
 - **Expects**:
   - `GLMData.X` is rank-2 with shape `(n, p)` and `GLMData.y` is rank-1 with shape `(n,)`.
@@ -30,10 +31,10 @@
 - **Uses**: `jax`, `jaxlib`, `equinox`, `jaxtyping`, `lineax`, `optimistix`.
 - **Boundary**:
   - `src/glmax/data.py` owns the `GLMData` noun contract and input canonicalization for `offset` and `weights`.
-  - `src/glmax/glm.py` owns `GLM` (pure spec noun, `family` only) and `specify` — no fit logic, no solver.
+  - `src/glmax/glm.py` owns `GLM` (pure spec noun, `family` only) and `specify` — no fit logic, no solver. Also owns the full GLM method interface (see Guarantees); `family` is the implementation detail behind those methods.
   - `src/glmax/_fit/types.py` owns `Params`, `FitResult`, `FittedGLM`, and `AbstractFitter` (abstract base with `solver: AbstractVar`).
   - `src/glmax/_fit/fit.py` owns the public `fit` and `predict` verbs (`@eqx.filter_jit`-wrapped).
-  - `src/glmax/_fit/irls.py` owns `IRLSFitter` (the default fitter) and the `irls` kernel. `IRLSFitter.__call__` is NOT JIT-safe due to Python branching on family type; `fit` is safe because `IRLSFitter` is static under JIT.
+  - `src/glmax/_fit/irls.py` owns `IRLSFitter` (the default fitter) and the `_irls` kernel. `_irls` takes `model: GLM` and calls only `model.xxx` methods — never `model.family.xxx`. `IRLSFitter.__call__` is NOT JIT-safe due to Python branching on family type; `fit` is safe because `IRLSFitter` is static under JIT.
   - `src/glmax/_fit/solve.py` is the canonical home for linear solver contracts (`AbstractLinearSolver`, `CholeskySolver`, `QRSolver`, `CGSolver`).
   - `src/glmax/_fit/__init__.py` re-exports all fit internals.
   - `src/glmax/diagnostics.py` owns `Diagnostics` and `check`.
@@ -54,5 +55,5 @@
 - Do not run bare `pytest`.
 - Use `pytest -p no:capture tests` for all pytest invocations.
 - Keep `README.md`, `docs/index.md`, and `docs/api/glm.md` aligned with the package-root exports.
-- Contract changes should update the owning tests, especially `tests/package/test_fit_api.py`, `tests/package/test_grammar_contracts.py`, and the relevant verb-specific suites.
+- Contract changes should update the owning tests, especially `tests/package/test_api.py`, `tests/package/test_grammar.py`, and the relevant verb-specific suites under `tests/fit/`, `tests/infer/`, `tests/data/`, `tests/glm/`.
 - Public numerics and solver docstrings use raw markdown section labels: `**Arguments:**`, `**Returns:**`, and `**Raises:**` or `**Failure Modes:**`.

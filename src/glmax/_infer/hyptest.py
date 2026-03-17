@@ -25,7 +25,13 @@ __all__ = ["AbstractTest", "WaldTest", "ScoreTest"]
 
 
 class AbstractTest(eqx.Module, strict=True):
-    """Base class for inference strategies used by `_infer(fitted, inferrer=...)`."""
+    r"""Abstract base for inference strategies used by `infer(fitted, inferrer=...)`.
+
+    Subclasses implement `__call__` to compute test statistics and p-values
+    from a `FittedGLM`. The `stderr` estimator is passed in so strategies can
+    choose whether to use it (e.g. `WaldTest` always calls it; `ScoreTest`
+    ignores it and sets `se` to NaN).
+    """
 
     @abstractmethod
     def __call__(
@@ -33,21 +39,28 @@ class AbstractTest(eqx.Module, strict=True):
         fitted: "FittedGLM",
         stderr: AbstractStdErrEstimator,
     ) -> InferenceResult:
-        """Compute inferential summaries from a fitted GLM.
+        r"""Compute inferential summaries from a fitted GLM.
 
         **Arguments:**
 
-        - `fitted`: validated `FittedGLM` from `fit()`.
-        - `stderr`: standard-error estimator; concrete inferrers call it only if needed.
+        - `fitted`: `FittedGLM` from `fit(...)`.
+        - `stderr`: standard-error estimator; concrete strategies call it only if needed.
 
         **Returns:**
 
-        `InferenceResult` with `(params, se, stat, p)`.
+        `InferenceResult` with fields `(params, se, stat, p)`.
         """
 
 
 class WaldTest(AbstractTest, strict=True):
-    """Wald (z/t) hypothesis test."""
+    r"""Wald (z/t) coefficient hypothesis test.
+
+    Computes per-coefficient test statistics $z_j = \hat\beta_j / \mathrm{SE}(\hat\beta_j)$
+    and two-sided p-values. Uses a $t_{n-p}$ reference distribution for Gaussian
+    models and $\mathcal{N}(0,1)$ for all others.
+
+    Standard errors are obtained from the injected `AbstractStdErrEstimator`.
+    """
 
     def __call__(
         self,

@@ -22,7 +22,28 @@ __all__ = ["fit", "predict"]
 
 @eqx.filter_jit
 def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: AbstractFitter = IRLSFitter()) -> FittedGLM:
-    """Canonical public fit verb over grammar nouns."""
+    r"""Fit a GLM to observed data and return a fitted noun.
+
+    This is the canonical `fit` grammar verb. It is `@eqx.filter_jit`-wrapped;
+    the fitter strategy is treated as static structure under JIT.
+
+    **Arguments:**
+
+    - `model`: `GLM` specification noun produced by `specify(...)`.
+    - `data`: `GLMData` noun carrying `X` and `y` (and optional `offset`).
+    - `init`: optional `Params` for warm-starting; `None` uses the family default.
+    - `fitter`: `AbstractFitter` strategy (default: `IRLSFitter()`).
+
+    **Returns:**
+
+    `FittedGLM` noun binding the model and the `FitResult` contract.
+
+    **Raises:**
+
+    - `TypeError`: if `model`, `data`, `init`, or `fitter` have wrong types,
+      or if the fitter does not return a `FitResult`.
+    - `ValueError`: if `data.weights` is set (not yet supported).
+    """
 
     if not isinstance(model, GLM):
         raise TypeError("fit(...) expects `model` to be a GLM instance.")
@@ -43,7 +64,25 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Abstra
 
 @eqx.filter_jit
 def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:
-    """Pure prediction verb over grammar nouns."""
+    r"""Apply a fitted model to new data and return predicted means.
+
+    This is the canonical `predict` grammar verb. It is `@eqx.filter_jit`-wrapped.
+
+    **Arguments:**
+
+    - `model`: `GLM` specification noun.
+    - `params`: fitted `Params` (e.g. `fitted.params` from `fit(...)`).
+    - `data`: `GLMData` noun carrying covariates `X` (and optional `offset`).
+
+    **Returns:**
+
+    Predicted mean response $\hat\mu = g^{-1}(X\hat\beta + \text{offset})$, shape `(n,)`.
+
+    **Raises:**
+
+    - `TypeError`: if `model`, `params`, or `data` have wrong types.
+    - `ValueError`: if `data.weights` is set (not yet supported).
+    """
 
     if not isinstance(model, GLM):
         raise TypeError("predict(...) expects `model` to be a GLM instance.")
