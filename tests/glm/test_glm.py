@@ -1,8 +1,9 @@
 # pattern: Imperative Shell
 
-from typing import Tuple
+from typing import ClassVar, Tuple
 
 import numpy as np
+import pytest
 import statsmodels.api as sm
 
 import jax.nn
@@ -13,6 +14,8 @@ import glmax
 
 from glmax import GLMData
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+from glmax.family.dist import ExponentialDispersionFamily
+from glmax.family.links import IdentityLink
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +89,36 @@ def simulate_glm_data(
         raise ValueError("Unsupported family. Choose from: 'poisson', 'normal', 'binomial', 'negative_binomial'.")
 
     return X, y, beta_true
+
+
+class _AuxiliaryWarmStartFamily(ExponentialDispersionFamily):
+    glink: IdentityLink = IdentityLink()
+    _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
+    _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+
+    def scale(self, X, y, mu):
+        del X, y, mu
+        return jnp.asarray(1.0)
+
+    def negloglikelihood(self, y, eta, disp=0.0):
+        del disp
+        return jnp.sum(jnp.square(jnp.asarray(y) - jnp.asarray(eta)))
+
+    def variance(self, mu, disp=0.0):
+        del disp
+        return jnp.ones_like(jnp.asarray(mu))
+
+    def sample(self, key, eta, disp=0.0):
+        del key, disp
+        return jnp.asarray(eta)
+
+    def canonical_dispersion(self, disp=0.0):
+        return jnp.asarray(disp) + 1.0
+
+    def canonical_auxiliary(self, aux=None):
+        if aux is None:
+            return jnp.asarray(0.25)
+        return jnp.asarray(aux) + 0.5
 
 
 def test_poisson(getkey):
@@ -280,3 +313,19 @@ def test_glm_sample_delegates() -> None:
     expected = model.family.sample(key, eta, disp)
 
     assert jnp.allclose(result, expected)
+
+
+def test_glm_canonicalize_auxiliary_rejects_aux_for_families_without_aux_state() -> None:
+    model = glmax.GLM(family=Gaussian())
+
+    with pytest.raises(ValueError, match="Gaussian does not support auxiliary parameters"):
+        model.canonicalize_auxiliary(jnp.array(0.2))
+
+
+def test_glm_canonicalize_params_delegates_warm_start_values_through_model_boundary() -> None:
+    model = glmax.GLM(family=_AuxiliaryWarmStartFamily())
+
+    canonical_disp, canonical_aux = model.canonicalize_params(jnp.array(0.5), None)
+
+    assert jnp.allclose(canonical_disp, jnp.array(1.5))
+    assert jnp.allclose(canonical_aux, jnp.array(0.25))

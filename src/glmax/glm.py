@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import equinox as eqx
+import jax.numpy as jnp
 
 from jax import Array
 from jaxtyping import ArrayLike, ScalarLike
@@ -182,6 +183,59 @@ class GLM(eqx.Module):
         Canonical dispersion scalar.
         """
         return self.family.canonical_dispersion(disp)
+
+    def canonicalize_auxiliary(self, aux: ScalarLike | None) -> Array | None:
+        r"""Map a raw auxiliary value to its canonical stored form.
+
+        Families without auxiliary state accept only `None` and fail
+        deterministically on any provided value. Families that do support an
+        auxiliary scalar may expose `canonical_auxiliary(...)`; when present,
+        the model delegates to that family hook.
+
+        **Arguments:**
+
+        - `aux`: optional raw family-specific auxiliary value.
+
+        **Returns:**
+
+        Canonical auxiliary scalar, or `None` when the active family does not
+        use auxiliary state.
+
+        **Raises:**
+
+        - `ValueError`: if the active family does not support auxiliary state
+          and a non-`None` value is provided.
+        """
+        family_canonicalize = getattr(self.family, "canonical_auxiliary", None)
+        if family_canonicalize is None:
+            if aux is not None:
+                family_name = type(self.family).__name__
+                raise ValueError(f"{family_name} does not support auxiliary parameters.")
+            return None
+
+        canonical_aux = family_canonicalize(aux)
+        if canonical_aux is None:
+            return None
+        return jnp.asarray(canonical_aux)
+
+    def canonicalize_params(self, disp: ScalarLike, aux: ScalarLike | None) -> tuple[Array, Array | None]:
+        r"""Canonicalize `(disp, aux)` through the model boundary.
+
+        This keeps warm-start normalization and family-compatibility checks on
+        the `GLM` seam instead of duplicating them in fitting or inference
+        kernels.
+
+        **Arguments:**
+
+        - `disp`: raw dispersion value.
+        - `aux`: optional raw family-specific auxiliary value.
+
+        **Returns:**
+
+        Tuple `(canonical_disp, canonical_aux)` with family-aware canonical
+        storage values.
+        """
+        return self.canonicalize_dispersion(disp), self.canonicalize_auxiliary(aux)
 
     def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
         r"""Compute the dispersion scale factor $\phi$ for inference estimators.
