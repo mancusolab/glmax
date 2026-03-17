@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import equinox as eqx
+
 from .._fit import FittedGLM
 from .hyptest import AbstractTest, WaldTest
 from .stderr import AbstractStdErrEstimator, FisherInfoError
@@ -11,6 +13,7 @@ from .types import InferenceResult
 __all__ = ["infer"]
 
 
+@eqx.filter_jit
 def infer(
     fitted: FittedGLM,
     inferrer: AbstractTest = WaldTest(),

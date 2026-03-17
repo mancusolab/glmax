@@ -117,13 +117,17 @@ class ScoreTest(AbstractTest, strict=True):
         score_residual = fit_result.score_residual
         beta = jnp.asarray(fit_result.params.beta)
         phi = jnp.asarray(fitted.model.scale(X, y, mu))
-        if not bool(jnp.isfinite(phi)) or float(phi) <= 0.0:
-            raise ValueError("ScoreTest requires family.scale(X, y, mu) to be finite and > 0.")
+        phi = eqx.error_if(
+            phi, ~jnp.isfinite(phi) | (phi <= 0.0), "ScoreTest requires family.scale(X, y, mu) to be finite and > 0."
+        )
 
         numerator = X.T @ (glm_wt * score_residual)
         fisher_diag = jnp.sum(X * (glm_wt[:, jnp.newaxis] * X), axis=0)
-        if not bool(jnp.all(jnp.isfinite(fisher_diag))) or not bool(jnp.all(fisher_diag > 0.0)):
-            raise ValueError("ScoreTest requires the Fisher information diagonal to be finite and > 0.")
+        fisher_diag = eqx.error_if(
+            fisher_diag,
+            ~jnp.all(jnp.isfinite(fisher_diag)) | ~jnp.all(fisher_diag > 0.0),
+            "ScoreTest requires the Fisher information diagonal to be finite and > 0.",
+        )
 
         stat = numerator / jnp.sqrt(phi * fisher_diag)
         p = 2.0 * norm.sf(jnp.abs(stat))
