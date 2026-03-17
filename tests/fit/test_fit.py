@@ -76,6 +76,47 @@ class _CanonicalWarmStartFamily(ExponentialDispersionFamily):
         return jnp.maximum(jnp.asarray(aux), jnp.asarray(0.25))
 
 
+class _NonIdempotentCanonicalWarmStartFamily(ExponentialDispersionFamily):
+    glink: IdentityLink = IdentityLink()
+    _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
+    _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+
+    def scale(self, X, y, mu):
+        del X, y, mu
+        return jnp.asarray(1.0)
+
+    def negloglikelihood(self, y, eta, disp=1.0):
+        resid = jnp.asarray(y) - jnp.asarray(eta)
+        safe_disp = jnp.asarray(disp)
+        return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
+
+    def variance(self, mu, disp=1.0):
+        safe_disp = jnp.asarray(disp)
+        return jnp.ones_like(jnp.asarray(mu)) * safe_disp
+
+    def sample(self, key, eta, disp=1.0):
+        del key, disp
+        return jnp.asarray(eta)
+
+    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0):
+        del X, y, eta, step_size
+        return jnp.asarray(disp)
+
+    def estimate_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, tol=1e-3, max_iter=1000, offset_eta=0.0):
+        del X, y, eta, step_size, tol, max_iter, offset_eta
+        return jnp.asarray(disp)
+
+    def canonical_dispersion(self, disp=0.0):
+        disp_array = jnp.asarray(disp)
+        return jnp.where(disp_array < 1.0, jnp.asarray(1.0), jnp.asarray(2.0))
+
+    def canonical_auxiliary(self, aux=None):
+        if aux is None:
+            return jnp.asarray(2.0)
+        aux_array = jnp.asarray(aux)
+        return jnp.where(aux_array < 1.0, jnp.asarray(1.0), jnp.asarray(2.0))
+
+
 def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     seen: dict[str, object] = {}
     expected = _make_fit_result()
@@ -302,6 +343,26 @@ def test_irls_fitter_canonicalizes_supported_warm_start_params() -> None:
     assert jnp.allclose(raw_result.params.disp, canonical_result.params.disp)
     assert jnp.allclose(raw_result.params.aux, canonical_result.params.aux)
     assert jnp.allclose(raw_result.objective, canonical_result.objective)
+
+
+def test_public_fit_matches_single_canonicalization_reference_for_non_idempotent_warm_starts() -> None:
+    model = glmax.GLM(family=_NonIdempotentCanonicalWarmStartFamily())
+    data = GLMData(X=jnp.array([[1.0], [2.0], [3.0], [4.0]]), y=jnp.array([1.2, 1.9, 3.1, 4.0]))
+    seed = Params(beta=jnp.array([0.1]), disp=jnp.array(0.7), aux=jnp.array(2.0))
+
+    expected = IRLSFitter()(model, data, init=seed)
+    first = glmax.fit(model, data, init=seed)
+    inferred = glmax.infer(first)
+    second = glmax.fit(model, data, init=first.params)
+
+    assert jnp.allclose(first.glm_wt, expected.glm_wt)
+    assert jnp.allclose(first.objective, expected.objective)
+    assert jnp.allclose(first.params.disp, expected.params.disp)
+    assert jnp.allclose(first.params.aux, expected.params.aux)
+    assert jnp.allclose(second.params.disp, first.params.disp)
+    assert jnp.allclose(second.params.aux, first.params.aux)
+    assert jnp.allclose(inferred.params.disp, first.params.disp)
+    assert jnp.allclose(inferred.params.aux, first.params.aux)
 
 
 def test_default_fitter_validates_init_beta_shape() -> None:
