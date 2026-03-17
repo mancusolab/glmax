@@ -128,8 +128,12 @@ class IRLSFitter(AbstractFitter, strict=True):
         X, y, offset, _ = data.canonical_arrays()
 
         init_beta, init_disp, init_aux = _canonicalize_init(init, X.shape[1])
+        canonical_init_disp = None
+        canonical_init_aux = None
+        if init_disp is not None:
+            canonical_init_disp, canonical_init_aux = model.canonicalize_params(init_disp, init_aux)
         init_eta = X @ init_beta + 0.0 if init_beta is not None else model.init_eta(y)
-        disp_init = init_disp if init_disp is not None else model.canonicalize_dispersion(1.0)
+        disp_init = canonical_init_disp if canonical_init_disp is not None else model.canonicalize_dispersion(1.0)
 
         state = _irls(
             X,
@@ -154,7 +158,7 @@ class IRLSFitter(AbstractFitter, strict=True):
         beta = jnp.ravel(beta)
 
         return FitResult(
-            params=Params(beta=beta, disp=model.canonicalize_dispersion(disp), aux=init_aux),
+            params=Params(beta=beta, disp=model.canonicalize_dispersion(disp), aux=canonical_init_aux),
             X=X,
             y=y,
             eta=eta,

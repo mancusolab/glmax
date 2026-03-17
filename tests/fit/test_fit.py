@@ -2,6 +2,8 @@
 
 import importlib
 
+from typing import ClassVar
+
 import pytest
 
 import equinox as eqx
@@ -14,6 +16,8 @@ from glmax import AbstractFitter, FitResult, FittedGLM, GLMData, Params
 from glmax._fit import IRLSFitter
 from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
+from glmax.family.dist import ExponentialDispersionFamily
+from glmax.family.links import IdentityLink
 from glmax.glm import specify
 
 
@@ -33,6 +37,45 @@ def _make_fit_result() -> FitResult:
     )
 
 
+class _CanonicalWarmStartFamily(ExponentialDispersionFamily):
+    glink: IdentityLink = IdentityLink()
+    _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
+    _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+
+    def scale(self, X, y, mu):
+        del X, y, mu
+        return jnp.asarray(1.0)
+
+    def negloglikelihood(self, y, eta, disp=1.0):
+        resid = jnp.asarray(y) - jnp.asarray(eta)
+        safe_disp = self.canonical_dispersion(disp)
+        return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
+
+    def variance(self, mu, disp=1.0):
+        safe_disp = self.canonical_dispersion(disp)
+        return jnp.ones_like(jnp.asarray(mu)) * safe_disp
+
+    def sample(self, key, eta, disp=1.0):
+        del key, disp
+        return jnp.asarray(eta)
+
+    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0):
+        del X, y, eta, step_size
+        return jnp.asarray(disp)
+
+    def estimate_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, tol=1e-3, max_iter=1000, offset_eta=0.0):
+        del X, y, eta, step_size, tol, max_iter, offset_eta
+        return jnp.asarray(disp)
+
+    def canonical_dispersion(self, disp=0.0):
+        return jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
+
+    def canonical_auxiliary(self, aux=None):
+        if aux is None:
+            return jnp.asarray(0.25)
+        return jnp.maximum(jnp.asarray(aux), jnp.asarray(0.25))
+
+
 def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     seen: dict[str, object] = {}
     expected = _make_fit_result()
@@ -49,7 +92,7 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
 
     model = glmax.GLM()
     data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
-    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0), aux=jnp.array(0.4))
+    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0), aux=None)
 
     result = glmax.fit(model, data, init=init, fitter=RecordingFitter())
 
@@ -186,6 +229,27 @@ def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
     assert not seen["called"]
 
 
+def test_fit_rejects_aux_for_families_without_aux_state_before_custom_fitter() -> None:
+    seen = {"called": False}
+
+    class RecordingFitter(AbstractFitter, strict=True):
+        solver: AbstractLinearSolver = CholeskySolver()
+
+        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
+            del model, data, init
+            seen["called"] = True
+            return _make_fit_result()
+
+    model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3))
+    bad_init = Params(beta=jnp.zeros(1), disp=jnp.array(1.0), aux=jnp.array(0.2))
+
+    with pytest.raises(ValueError, match="Gaussian does not support auxiliary parameters"):
+        glmax.fit(model, data, init=bad_init, fitter=RecordingFitter())
+
+    assert not seen["called"]
+
+
 def test_fitter_is_abstract_equinox_model() -> None:
     assert issubclass(AbstractFitter, eqx.Module)
 
@@ -213,7 +277,7 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     X = jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]])
     y = jnp.array([1.0, 0.0, 1.0])
     offset = jnp.array([0.2, 0.1, 0.3])
-    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7), aux=jnp.array(0.2))
+    init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7), aux=None)
 
     data = GLMData(X=X, y=y, offset=offset)
     result_1 = glmax.fit(model, data, init=init)
@@ -222,8 +286,22 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
     assert isinstance(result_1, FittedGLM)
     assert jnp.allclose(result_1.beta, result_2.beta)
     assert jnp.allclose(result_1.params.disp, result_2.params.disp)
-    assert jnp.allclose(result_1.params.aux, init.aux)
-    assert jnp.allclose(result_2.params.aux, init.aux)
+    assert result_1.params.aux is None
+    assert result_2.params.aux is None
+
+
+def test_irls_fitter_canonicalizes_supported_warm_start_params() -> None:
+    model = glmax.GLM(family=_CanonicalWarmStartFamily())
+    data = GLMData(X=jnp.array([[1.0], [2.0], [3.0], [4.0]]), y=jnp.array([1.2, 1.9, 3.1, 4.0]))
+    raw_init = Params(beta=jnp.array([0.1]), disp=jnp.array(0.7), aux=jnp.array(0.1))
+    canonical_init = Params(beta=jnp.array([0.1]), disp=jnp.array(1.0), aux=jnp.array(0.25))
+
+    raw_result = IRLSFitter()(model, data, init=raw_init)
+    canonical_result = IRLSFitter()(model, data, init=canonical_init)
+
+    assert jnp.allclose(raw_result.params.disp, canonical_result.params.disp)
+    assert jnp.allclose(raw_result.params.aux, canonical_result.params.aux)
+    assert jnp.allclose(raw_result.objective, canonical_result.objective)
 
 
 def test_default_fitter_validates_init_beta_shape() -> None:

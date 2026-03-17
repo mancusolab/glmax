@@ -24,22 +24,29 @@ def test_predict_generates_stable_shape_for_supported_families(family, y) -> Non
     model = glmax.specify(family=family)
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), y=y)
     fit_result = glmax.fit(model, data)
-    params_with_aux = Params(beta=fit_result.params.beta, disp=fit_result.params.disp, aux=jnp.array(0.25))
 
     pred1 = glmax.predict(model, fit_result.params, data)
     pred2 = glmax.predict(model, fit_result.params, data)
-    pred3 = glmax.predict(model, params_with_aux, data)
 
     assert pred1.shape == y.shape
     assert jnp.all(jnp.isfinite(pred1))
     assert jnp.allclose(pred1, pred2)
-    assert jnp.allclose(pred1, pred3)
 
     if isinstance(family, Binomial):
         assert jnp.all(pred1 >= 0.0)
         assert jnp.all(pred1 <= 1.0)
     elif isinstance(family, (Poisson, NegativeBinomial)):
         assert jnp.all(pred1 > 0.0)
+
+
+def test_predict_rejects_aux_for_families_without_aux_state() -> None:
+    model = glmax.specify(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0]]), y=jnp.array([0.1, 1.0, 2.2, 2.9]))
+    fit_result = glmax.fit(model, data)
+    bad_params = Params(beta=fit_result.params.beta, disp=fit_result.params.disp, aux=jnp.array(0.25))
+
+    with pytest.raises(ValueError, match="Gaussian does not support auxiliary parameters"):
+        glmax.predict(model, bad_params, data)
 
 
 def test_predict_boundary_rejects_invalid_nouns() -> None:

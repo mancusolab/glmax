@@ -121,7 +121,7 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
 
     model = glmax.GLM()
     data = GLMData(X=jnp.ones((2, 1)), y=jnp.ones(2))
-    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0), aux=jnp.array(0.4))
+    init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0), aux=None)
 
     result = glmax.fit(model, data, init=init, fitter=DummyFitter())
 
@@ -234,16 +234,69 @@ def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
         glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), data)
 
 
-def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:
+def test_predict_rejects_aux_for_families_without_aux_state() -> None:
     model = glmax.GLM(family=Gaussian())
+    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
+    params = Params(beta=jnp.array([1.0]), disp=jnp.array(1.0), aux=jnp.array(0.25))
+
+    with pytest.raises(ValueError, match="Gaussian does not support auxiliary parameters"):
+        glmax.predict(model, params, data)
+
+
+def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:
+    from typing import ClassVar
+
+    from glmax.family.dist import ExponentialDispersionFamily
+    from glmax.family.links import IdentityLink
+
+    class _CanonicalWarmStartFamily(ExponentialDispersionFamily):
+        glink: IdentityLink = IdentityLink()
+        _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
+        _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+
+        def scale(self, X, y, mu):
+            del X, y, mu
+            return jnp.asarray(1.0)
+
+        def negloglikelihood(self, y, eta, disp=1.0):
+            resid = jnp.asarray(y) - jnp.asarray(eta)
+            safe_disp = self.canonical_dispersion(disp)
+            return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
+
+        def variance(self, mu, disp=1.0):
+            safe_disp = self.canonical_dispersion(disp)
+            return jnp.ones_like(jnp.asarray(mu)) * safe_disp
+
+        def sample(self, key, eta, disp=1.0):
+            del key, disp
+            return jnp.asarray(eta)
+
+        def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0):
+            del X, y, eta, step_size
+            return jnp.asarray(disp)
+
+        def estimate_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, tol=1e-3, max_iter=1000, offset_eta=0.0):
+            del X, y, eta, step_size, tol, max_iter, offset_eta
+            return jnp.asarray(disp)
+
+        def canonical_dispersion(self, disp=0.0):
+            return jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
+
+        def canonical_auxiliary(self, aux=None):
+            if aux is None:
+                return jnp.asarray(0.25)
+            return jnp.maximum(jnp.asarray(aux), jnp.asarray(0.25))
+
+    model = glmax.GLM(family=_CanonicalWarmStartFamily())
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.0])
     data = GLMData(X=X, y=y)
-    seed = Params(beta=jnp.zeros(1), disp=jnp.array(1.0), aux=jnp.array(0.35))
+    seed = Params(beta=jnp.zeros(1), disp=jnp.array(0.7), aux=jnp.array(0.1))
 
     first = glmax.fit(model, data, init=seed)
     assert first.beta.shape == (1,)
-    assert jnp.allclose(first.params.aux, seed.aux)
+    assert jnp.allclose(first.params.disp, jnp.array(1.0))
+    assert jnp.allclose(first.params.aux, jnp.array(0.25))
 
     inferred = glmax.infer(first)
     second = glmax.fit(model, data, init=first.params)

@@ -20,6 +20,13 @@ from .types import (
 __all__ = ["fit", "predict"]
 
 
+def _canonicalize_model_params(model: GLM, params: Params, n_features: int) -> Params:
+    beta, disp, aux = _canonicalize_init(params, n_features)
+    assert beta is not None and disp is not None
+    canonical_disp, canonical_aux = model.canonicalize_params(disp, aux)
+    return Params(beta=beta, disp=canonical_disp, aux=canonical_aux)
+
+
 @eqx.filter_jit
 def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: AbstractFitter = IRLSFitter()) -> FittedGLM:
     r"""Fit a GLM to observed data and return a fitted noun.
@@ -54,7 +61,7 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Abstra
     if not isinstance(fitter, AbstractFitter):
         raise TypeError("fit(...) expects `fitter` to be an AbstractFitter instance.")
     if init is not None:
-        _canonicalize_init(init, data.X.shape[1])
+        init = _canonicalize_model_params(model, init, data.X.shape[1])
 
     result = fitter(model, data, init)
 
@@ -96,9 +103,7 @@ def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:
         raise ValueError("GLMData.weights is not supported in predict yet.")
 
     X_array, _, offset_array, _ = data.canonical_arrays()
-    beta, disp, aux = _canonicalize_init(params, X_array.shape[1])
-    assert beta is not None and disp is not None
-    del disp, aux
+    params = _canonicalize_model_params(model, params, X_array.shape[1])
 
-    eta = X_array @ beta + offset_array
+    eta = X_array @ params.beta + offset_array
     return model.mean(eta)
