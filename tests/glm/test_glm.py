@@ -197,9 +197,11 @@ def test_NegativeBinomial(getkey):
     jaxqtl_nb = glmax.specify(family=NegativeBinomial())
     glm_state = glmax.fit(jaxqtl_nb, GLMData(X=X, y=y))
     infer_state = glmax.infer(glm_state)
+    assert jnp.allclose(glm_state.params.disp, jnp.array(1.0))
+    assert glm_state.params.aux is not None
 
     # solve using statsmodel method (ground truth)
-    sm_negbin = sm.GLM(np.array(y), np.array(X), family=sm.families.NegativeBinomial(alpha=glm_state.params.disp))
+    sm_negbin = sm.GLM(np.array(y), np.array(X), family=sm.families.NegativeBinomial(alpha=glm_state.params.aux))
     sm_state = sm_negbin.fit()
     sm_beta = sm_state.params
     sm_se = sm_state.bse
@@ -315,11 +317,28 @@ def test_glm_sample_delegates() -> None:
     assert jnp.allclose(result, expected)
 
 
-def test_glm_canonicalize_auxiliary_rejects_aux_for_families_without_aux_state() -> None:
+def test_glm_canonicalize_auxiliary_ignores_aux_for_gaussian() -> None:
     model = glmax.GLM(family=Gaussian())
 
-    with pytest.raises(ValueError, match="Gaussian does not support auxiliary parameters"):
+    assert model.canonicalize_auxiliary(jnp.array(0.2)) is None
+
+
+@pytest.mark.parametrize("family", [Poisson(), Binomial()])
+def test_glm_canonicalize_auxiliary_rejects_aux_for_fixed_dispersion_families(family) -> None:
+    model = glmax.GLM(family=family)
+
+    with pytest.raises(ValueError, match="aux"):
         model.canonicalize_auxiliary(jnp.array(0.2))
+
+
+def test_glm_canonicalize_params_routes_negative_binomial_alpha_to_aux() -> None:
+    model = glmax.GLM(family=NegativeBinomial())
+
+    canonical_disp, canonical_aux = model.canonicalize_params(jnp.array(3.5), jnp.array(0.2))
+
+    assert jnp.allclose(canonical_disp, jnp.array(1.0))
+    assert canonical_aux is not None
+    assert jnp.allclose(canonical_aux, jnp.array(0.2))
 
 
 def test_glm_canonicalize_params_delegates_warm_start_values_through_model_boundary() -> None:

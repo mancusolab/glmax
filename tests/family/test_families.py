@@ -4,6 +4,7 @@
 Groups:
 - ExponentialFamily interface (bounds, calc_weight/working_weights signature, sample)
 - Gaussian numerics (variance sentinel, dispersion, saturated design)
+- Dispersion/auxiliary split semantics
 - NegativeBinomial numerics (stability, large eta overflow, gradient)
 - Transform safety (JIT/VMAP/AD for all families)
 - Sampling (shapes, types, finiteness)
@@ -25,6 +26,12 @@ from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
 _ALL_FAMILIES = [Gaussian, Poisson, Binomial, NegativeBinomial]
 _ALL_FAMILIES_INCLUDING_GAMMA = [*_ALL_FAMILIES, Gamma]
+_SPLIT_FAMILY_CASES = [
+    (Gaussian, 0.5, 0.2),
+    (Poisson, 7.0, None),
+    (Binomial, 7.0, None),
+    (NegativeBinomial, 1.0, 0.5),
+]
 _KEY = jax.random.PRNGKey(0)
 
 
@@ -66,11 +73,11 @@ class TestCalcWeight:
         assert variance.shape == (5,)
         assert weight.shape == (5,)
 
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
-    def test_all_families_calc_weight_two_args(self, FamilyCls):
+    @pytest.mark.parametrize(("FamilyCls", "disp", "aux"), _SPLIT_FAMILY_CASES)
+    def test_all_families_calc_weight_split_disp_aux(self, FamilyCls, disp, aux):
         f = FamilyCls()
         eta = jnp.zeros(5)
-        mu, variance, weight = f.calc_weight(eta, 0.1)
+        mu, variance, weight = f.calc_weight(eta, disp=disp, aux=aux)
         assert mu.shape == (5,)
         assert variance.shape == (5,)
         assert weight.shape == (5,)
@@ -98,13 +105,13 @@ class TestCalcWeight:
         with pytest.raises(TypeError):
             f.calc_weight(X, y, eta, 1.0)
 
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
-    def test_all_families_negloglikelihood_new_signature(self, FamilyCls):
-        """negloglikelihood(y, eta, disp) accepted by all families."""
+    @pytest.mark.parametrize(("FamilyCls", "disp", "aux"), _SPLIT_FAMILY_CASES)
+    def test_all_families_negloglikelihood_split_disp_aux_signature(self, FamilyCls, disp, aux):
+        """negloglikelihood(y, eta, disp, aux) accepted by all families."""
         f = FamilyCls()
         y = jnp.array([1.0, 0.0, 1.0])
         eta = jnp.array([0.5, -0.5, 0.5])
-        nll = f.negloglikelihood(y, eta, 0.5)
+        nll = f.negloglikelihood(y, eta, disp=disp, aux=aux)
         assert jnp.isfinite(nll)
 
 
@@ -157,6 +164,10 @@ class TestGaussianDispersion:
         g = Gaussian()
         cd = g.canonical_dispersion(3.0)
         assert float(cd) == pytest.approx(3.0), f"canonical_dispersion expected 3.0, got {cd}"
+
+    def test_canonical_auxiliary_ignores_value(self):
+        g = Gaussian()
+        assert g.canonical_auxiliary(jnp.array(0.3)) is None
 
     def test_estimate_dispersion_rss_over_df(self):
         """estimate_dispersion(X, y, eta) must return RSS / (n - p)."""
@@ -272,16 +283,35 @@ class TestNBNegloglikelihoodStability:
         nb = NegativeBinomial()
         y = jnp.array([1000.0])
         eta = jnp.log(y)
-        nll = nb.negloglikelihood(y, eta, 0.1)
+        nll = nb.negloglikelihood(y, eta, disp=1.0, aux=0.1)
         assert jnp.isfinite(nll), f"NB nll must be finite for large y, got {nll}"
 
-    def test_nb_nll_new_signature_two_arg(self):
-        """negloglikelihood(y, eta, disp) — no X."""
+    def test_nb_nll_split_disp_aux_signature(self):
+        """negloglikelihood(y, eta, disp, aux) uses aux as alpha."""
         nb = NegativeBinomial()
         y = jnp.array([2.0, 3.0, 1.0])
         eta = jnp.array([0.7, 1.1, 0.3])
-        nll = nb.negloglikelihood(y, eta, 0.5)
+        nll = nb.negloglikelihood(y, eta, disp=1.0, aux=0.5)
         assert jnp.isfinite(nll)
+
+    def test_nb_nll_ignores_disp_and_uses_aux(self):
+        nb = NegativeBinomial()
+        y = jnp.array([2.0, 3.0, 1.0])
+        eta = jnp.array([0.7, 1.1, 0.3])
+
+        baseline = nb.negloglikelihood(y, eta, disp=1.0, aux=0.5)
+        ignored_disp = nb.negloglikelihood(y, eta, disp=9.0, aux=0.5)
+        changed_aux = nb.negloglikelihood(y, eta, disp=1.0, aux=0.2)
+
+        assert jnp.allclose(ignored_disp, baseline)
+        assert not jnp.allclose(changed_aux, baseline)
+
+    @pytest.mark.parametrize("bad_aux", [0.0, -1.0, jnp.nan, jnp.inf, -jnp.inf])
+    def test_nb_invalid_aux_is_rejected(self, bad_aux):
+        nb = NegativeBinomial()
+
+        with pytest.raises(ValueError, match="alpha"):
+            nb.canonical_auxiliary(bad_aux)
 
 
 class TestNBLargeEtaOverflow:
@@ -290,7 +320,7 @@ class TestNBLargeEtaOverflow:
         nb = NegativeBinomial()
         y = jnp.array([1000.0])
         eta = jnp.array([800.0])
-        nll = nb.negloglikelihood(y, eta, 0.1)
+        nll = nb.negloglikelihood(y, eta, disp=1.0, aux=0.1)
         assert jnp.isfinite(nll), f"NB NLL for eta=800 must be finite, got {nll}"
 
     def test_nb_nll_finite_for_eta_710(self):
@@ -298,41 +328,46 @@ class TestNBLargeEtaOverflow:
         nb = NegativeBinomial()
         y = jnp.array([500.0])
         eta = jnp.array([710.0])
-        nll = nb.negloglikelihood(y, eta, 0.5)
+        nll = nb.negloglikelihood(y, eta, disp=1.0, aux=0.5)
         assert jnp.isfinite(nll), f"NB NLL for eta=710 must be finite, got {nll}"
 
 
 class TestNBNegloglikelihoodGradient:
     """Finite-difference verification for NegativeBinomial.negloglikelihood gradients."""
 
-    def test_fd_grad_wrt_disp(self):
-        """AD gradient w.r.t. disp must match central finite-difference to rtol=1e-3."""
+    def test_fd_grad_wrt_aux(self):
+        """AD gradient w.r.t. aux must match central finite-difference to rtol=1e-3."""
         nb = NegativeBinomial()
         y = jnp.array([3.0])
         eta = jnp.array([1.0])
-        disp = jnp.asarray(0.1)
+        aux = jnp.asarray(0.1)
 
-        grad_disp = jax.grad(lambda d: nb.negloglikelihood(y, eta, d))(disp)
+        grad_aux = jax.grad(lambda a: nb.negloglikelihood(y, eta, disp=1.0, aux=a))(aux)
 
         eps = 1e-5
-        fd_grad = (nb.negloglikelihood(y, eta, disp + eps) - nb.negloglikelihood(y, eta, disp - eps)) / (2 * eps)
+        fd_grad = (
+            nb.negloglikelihood(y, eta, disp=1.0, aux=aux + eps) - nb.negloglikelihood(y, eta, disp=1.0, aux=aux - eps)
+        ) / (2 * eps)
 
         assert jnp.allclose(
-            grad_disp, fd_grad, rtol=1e-3
-        ), f"AD grad w.r.t. disp {float(grad_disp):.6g} differs from FD {float(fd_grad):.6g}"
+            grad_aux, fd_grad, rtol=1e-3
+        ), f"AD grad w.r.t. aux {float(grad_aux):.6g} differs from FD {float(fd_grad):.6g}"
 
     def test_fd_grad_wrt_eta(self):
         """AD gradient w.r.t. eta (scalar) must match central finite-difference to rtol=1e-3."""
         nb = NegativeBinomial()
         y = jnp.array([3.0])
-        disp = 0.1
+        aux = 0.1
         eta0 = jnp.array([1.0])
 
         # grad w.r.t. eta (scalar sum, argnums=1)
-        grad_eta = jax.grad(lambda e: nb.negloglikelihood(y, e, disp))(eta0)
+        grad_eta = jax.grad(lambda e: nb.negloglikelihood(y, e, disp=1.0, aux=aux))(eta0)
 
         eps = 1e-5
-        fd_grad = (nb.negloglikelihood(y, eta0 + eps, disp) - nb.negloglikelihood(y, eta0 - eps, disp)) / (2 * eps)
+        fd_grad = (
+            nb.negloglikelihood(y, eta0 + eps, disp=1.0, aux=aux)
+            - nb.negloglikelihood(y, eta0 - eps, disp=1.0, aux=aux)
+        ) / (2 * eps)
 
         assert jnp.allclose(
             grad_eta, fd_grad, rtol=1e-3
@@ -347,13 +382,12 @@ class TestNBNegloglikelihoodGradient:
 class TestTransformSafety:
     """All 4 families must be JIT-traceable on the key numerics surfaces."""
 
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
-    def test_jit_calc_weight(self, FamilyCls):
-        """jax.jit(family.calc_weight)(eta, disp) must trace without error."""
+    @pytest.mark.parametrize(("FamilyCls", "disp", "aux"), _SPLIT_FAMILY_CASES)
+    def test_jit_calc_weight(self, FamilyCls, disp, aux):
+        """jax.jit(family.calc_weight)(eta, disp, aux) must trace without error."""
         f = FamilyCls()
         eta = jnp.zeros(5)
-        disp = 0.1
-        mu, v, w = jax.jit(f.calc_weight)(eta, disp)
+        mu, v, w = jax.jit(lambda eta_: f.calc_weight(eta_, disp=disp, aux=aux))(eta)
         assert mu.shape == (5,)
         assert v.shape == (5,)
         assert w.shape == (5,)
@@ -378,39 +412,39 @@ class TestTransformSafety:
         nb = NegativeBinomial()
         y = jnp.array([3.0, 5.0, 1.0])
         eta = jnp.array([1.0, 1.5, 0.5])
-        nll = jax.jit(nb.negloglikelihood)(y, eta, 0.1)
+        nll = jax.jit(lambda y_, eta_, aux_: nb.negloglikelihood(y_, eta_, disp=1.0, aux=aux_))(y, eta, 0.1)
         assert jnp.isfinite(nll), f"JIT NB NLL must be finite, got {nll}"
 
-    def test_ad_nb_negloglikelihood_wrt_disp(self):
-        """jax.grad of NB NLL w.r.t. disp (argnums=2) must not raise."""
+    def test_ad_nb_negloglikelihood_wrt_aux(self):
+        """jax.grad of NB NLL w.r.t. aux must not raise."""
         nb = NegativeBinomial()
         y = jnp.array([3.0, 5.0, 1.0])
         eta = jnp.array([1.0, 1.5, 0.5])
-        disp = jnp.asarray(0.1)
-        grad_fn = jax.grad(nb.negloglikelihood, argnums=2)
-        g = grad_fn(y, eta, disp)
-        assert jnp.isfinite(g), f"AD through NB NLL w.r.t. disp must be finite, got {g}"
+        aux = jnp.asarray(0.1)
+        grad_fn = jax.grad(lambda aux_: nb.negloglikelihood(y, eta, disp=1.0, aux=aux_))
+        g = grad_fn(aux)
+        assert jnp.isfinite(g), f"AD through NB NLL w.r.t. aux must be finite, got {g}"
 
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
-    def test_vmap_negloglikelihood(self, FamilyCls):
+    @pytest.mark.parametrize(("FamilyCls", "disp", "aux"), _SPLIT_FAMILY_CASES)
+    def test_vmap_negloglikelihood(self, FamilyCls, disp, aux):
         """jax.vmap over a batch of scalar etas must produce finite outputs for all families."""
         f = FamilyCls()
         eta_scalar_batch = jnp.linspace(-2.0, 2.0, 8)
-        disp = 0.1
-        result = jax.vmap(lambda e: f.negloglikelihood(jnp.array([1.0]), jnp.array([e]), disp))(eta_scalar_batch)
+        result = jax.vmap(lambda e: f.negloglikelihood(jnp.array([1.0]), jnp.array([e]), disp=disp, aux=aux))(
+            eta_scalar_batch
+        )
         assert result.shape == (8,), f"{FamilyCls.__name__}: expected shape (8,), got {result.shape}"
         assert jnp.all(
             jnp.isfinite(result)
         ), f"{FamilyCls.__name__}: vmap negloglikelihood produced non-finite values: {result}"
 
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
-    def test_vmap_sample(self, FamilyCls):
+    @pytest.mark.parametrize(("FamilyCls", "disp", "aux"), _SPLIT_FAMILY_CASES)
+    def test_vmap_sample(self, FamilyCls, disp, aux):
         """jax.vmap over a batch of scalar etas must produce finite samples for all families."""
         f = FamilyCls()
         eta_scalar_batch = jnp.linspace(-2.0, 2.0, 8)
-        disp = 0.1
         keys = jax.random.split(_KEY, 8)
-        result = jax.vmap(lambda key, e: f.sample(key, jnp.array([e]), disp))(keys, eta_scalar_batch)
+        result = jax.vmap(lambda key, e: f.sample(key, jnp.array([e]), disp=disp, aux=aux))(keys, eta_scalar_batch)
         assert result.shape == (8, 1), f"{FamilyCls.__name__}: expected shape (8, 1), got {result.shape}"
         assert jnp.all(jnp.isfinite(result)), f"{FamilyCls.__name__}: vmap sample produced non-finite values: {result}"
 
@@ -421,28 +455,28 @@ class TestTransformSafety:
 
 
 class TestSample:
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
-    def test_sample_returns_correct_shape(self, FamilyCls):
-        """AC2.3: sample(key, eta, disp) returns array with shape == eta.shape."""
+    @pytest.mark.parametrize(("FamilyCls", "disp", "aux"), _SPLIT_FAMILY_CASES)
+    def test_sample_returns_correct_shape(self, FamilyCls, disp, aux):
+        """sample(key, eta, disp, aux) returns array with shape == eta.shape."""
         f = FamilyCls()
         eta = jnp.zeros(10)
-        s = f.sample(_KEY, eta, 1.0)
+        s = f.sample(_KEY, eta, disp=disp, aux=aux)
         assert s.shape == (10,), f"{FamilyCls.__name__}.sample shape {s.shape} != (10,)"
 
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
-    def test_sample_returns_jax_array(self, FamilyCls):
+    @pytest.mark.parametrize(("FamilyCls", "disp", "aux"), _SPLIT_FAMILY_CASES)
+    def test_sample_returns_jax_array(self, FamilyCls, disp, aux):
         """sample must return a JAX array (not numpy)."""
         f = FamilyCls()
         eta = jnp.zeros(5)
-        s = f.sample(_KEY, eta, 1.0)
+        s = f.sample(_KEY, eta, disp=disp, aux=aux)
         assert isinstance(s, jax.Array), f"{FamilyCls.__name__}.sample must return a JAX array"
 
-    @pytest.mark.parametrize("FamilyCls", _ALL_FAMILIES)
-    def test_sample_is_finite(self, FamilyCls):
+    @pytest.mark.parametrize(("FamilyCls", "disp", "aux"), _SPLIT_FAMILY_CASES)
+    def test_sample_is_finite(self, FamilyCls, disp, aux):
         """Samples must be finite (no NaN/Inf)."""
         f = FamilyCls()
         eta = jnp.zeros(20)
-        s = f.sample(_KEY, eta, 0.5)
+        s = f.sample(_KEY, eta, disp=disp, aux=aux)
         assert jnp.all(jnp.isfinite(s)), f"{FamilyCls.__name__}.sample produced non-finite values"
 
     def test_gaussian_sample_shape_matches_eta(self):
@@ -456,9 +490,20 @@ class TestSample:
         """NB sample uses Gamma-Poisson mixture, must be non-negative integers."""
         nb = NegativeBinomial()
         eta = jnp.full(100, jnp.log(5.0))
-        s = nb.sample(_KEY, eta, 0.5)
+        s = nb.sample(_KEY, eta, disp=1.0, aux=0.5)
         assert s.shape == (100,)
         assert jnp.all(s >= 0), "NB samples must be non-negative"
+
+    def test_nb_sample_ignores_disp_and_uses_aux(self):
+        nb = NegativeBinomial()
+        eta = jnp.full(100, jnp.log(5.0))
+
+        baseline = nb.sample(_KEY, eta, disp=1.0, aux=0.5)
+        ignored_disp = nb.sample(_KEY, eta, disp=9.0, aux=0.5)
+        changed_aux = nb.sample(_KEY, eta, disp=1.0, aux=0.2)
+
+        assert jnp.array_equal(ignored_disp, baseline)
+        assert not jnp.array_equal(changed_aux, baseline)
 
     def test_no_random_gen_method_on_families(self):
         """random_gen must be removed; sample replaces it."""
@@ -512,6 +557,22 @@ class TestCanonicalDispersionUnitFamilies:
         result = b.canonical_dispersion(0.0)
         assert isinstance(result, jax.Array)
 
+    @pytest.mark.parametrize("FamilyCls", [Poisson, Binomial])
+    def test_fixed_dispersion_families_reject_auxiliary(self, FamilyCls):
+        family = FamilyCls()
+
+        with pytest.raises(ValueError, match="aux"):
+            family.canonical_auxiliary(jnp.array(0.2))
+
+
+class TestFamilyDocstrings:
+    def test_docstrings_describe_disp_aux_split(self):
+        assert "uses `disp` as EDM dispersion and ignores `aux`" in Gaussian.__doc__
+        assert "fixes `disp = 1.0` and requires `aux is None`" in Poisson.__doc__
+        assert "fixes `disp = 1.0` and requires `aux is None`" in Binomial.__doc__
+        assert "fixes `disp = 1.0` and uses `aux` as `alpha`" in NegativeBinomial.__doc__
+        assert "uses `disp` as EDM dispersion and ignores `aux`" in Gamma.__doc__
+
 
 # ---------------------------------------------------------------------------
 # Gamma numerics
@@ -530,28 +591,31 @@ class TestGamma:
         assert isinstance(Gamma().glink, InverseLink)
 
     def test_variance(self):
-        """Gamma.variance(mu, disp) == disp * mu**2."""
+        """Gamma.variance(mu, disp, aux) == disp * mu**2 and ignores aux."""
         g = Gamma()
         mu = jnp.array([1.0, 2.0, 3.0])
-        v = g.variance(mu, 0.5)
+        v = g.variance(mu, disp=0.5, aux=0.3)
         assert jnp.allclose(v, 0.5 * mu**2)
 
     def test_negloglikelihood_finite(self):
         g = Gamma()
         y = jnp.ones(20) * 2.0
         eta = jnp.ones(20) * 0.5  # InverseLink: mu = 1/eta = 2
-        assert jnp.isfinite(g.negloglikelihood(y, eta, 1.0))
+        assert jnp.isfinite(g.negloglikelihood(y, eta, disp=1.0, aux=0.3))
 
     def test_sample_shape_and_positivity(self):
         g = Gamma()
         key = jr.PRNGKey(0)
         eta = jnp.ones(20)  # InverseLink: mu = 1.0
-        s = g.sample(key, eta, 1.0)
+        s = g.sample(key, eta, disp=1.0, aux=0.3)
         assert s.shape == (20,)
         assert jnp.all(s > 0), "Gamma samples must be positive"
 
     def test_canonical_dispersion_passthrough(self):
         assert float(Gamma().canonical_dispersion(2.5)) == 2.5
+
+    def test_canonical_auxiliary_ignores_value(self):
+        assert Gamma().canonical_auxiliary(jnp.array(0.3)) is None
 
     def test_update_dispersion_passthrough(self):
         g = Gamma()
