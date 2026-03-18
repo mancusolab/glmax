@@ -26,6 +26,7 @@ class _IRLSState(NamedTuple):
     num_iters: int
     converged: Array
     disp: Array
+    aux: Array
     objective: Array
     objective_delta: Array
 
@@ -41,40 +42,49 @@ def _irls(
     step_size: float = 1.0,
     offset_eta: ArrayLike = 0.0,
     disp_init: ScalarLike = 0.0,
+    aux_init: ScalarLike = 0.0,
+    has_aux: bool = False,
+    updates_aux: bool = False,
 ) -> _IRLSState:
     """IRLS to solve GLM."""
     _, p = X.shape
 
     def body_fun(val: Tuple):
-        likelihood_o, diff, num_iter, _beta_o, eta_o, disp_o = val
+        likelihood_o, diff, num_iter, _beta_o, eta_o, disp_o, aux_o = val
+        aux_arg = aux_o if has_aux else None
 
-        mu_k, _v, weight = model.working_weights(eta_o, disp_o)
+        mu_k, _v, weight = model.working_weights(eta_o, disp_o, aux_arg)
         g_deriv_k = model.link_deriv(mu_k)
         r = eta_o + g_deriv_k * (y - mu_k) * step_size - offset_eta
 
         beta = solver(X, r, weight)
         eta_n = X @ beta + offset_eta
 
-        disp_n = model.update_dispersion(X, y, eta_n, disp_o, step_size)
-        likelihood_n = -model.log_prob(y, eta_n, disp_n)
+        if updates_aux:
+            disp_n = disp_o
+            aux_n = model.update_dispersion(X, y, eta_n, disp_o, step_size, aux_arg)
+        else:
+            disp_n = model.update_dispersion(X, y, eta_n, disp_o, step_size, aux_arg)
+            aux_n = aux_o
+        likelihood_n = -model.log_prob(y, eta_n, disp_n, aux_n if has_aux else None)
         diff = likelihood_n - likelihood_o
 
-        return likelihood_n, diff, num_iter + 1, beta, eta_n, disp_n
+        return likelihood_n, diff, num_iter + 1, beta, eta_n, disp_n, aux_n
 
     def cond_fun(val: Tuple):
-        likelihood_o, diff, num_iter, beta, eta, disp = val
-        del likelihood_o, beta, eta, disp
+        likelihood_o, diff, num_iter, beta, eta, disp, aux = val
+        del likelihood_o, beta, eta, disp, aux
         return jnp.logical_and(jnp.fabs(diff) > tol, num_iter <= max_iter)
 
     init_beta = jnp.zeros((p,))
     init_eta = eta + offset_eta
-    init_likelihood = -model.log_prob(y, init_eta, disp_init)
-    init_tuple = (init_likelihood, jnp.inf, 0, init_beta, init_eta, disp_init)
+    init_likelihood = -model.log_prob(y, init_eta, disp_init, aux_init if has_aux else None)
+    init_tuple = (init_likelihood, jnp.inf, 0, init_beta, init_eta, disp_init, aux_init)
 
-    objective, objective_delta, num_iters, beta, eta, disp = lax.while_loop(cond_fun, body_fun, init_tuple)
+    objective, objective_delta, num_iters, beta, eta, disp, aux = lax.while_loop(cond_fun, body_fun, init_tuple)
     converged = jnp.logical_and(jnp.fabs(objective_delta) < tol, num_iters <= max_iter)
 
-    return _IRLSState(beta, num_iters, converged, disp, objective, objective_delta)
+    return _IRLSState(beta, num_iters, converged, disp, aux, objective, objective_delta)
 
 
 class IRLSFitter(AbstractFitter, strict=True):
@@ -129,14 +139,12 @@ class IRLSFitter(AbstractFitter, strict=True):
         X, y, offset, _ = data.canonical_arrays()
 
         init_beta, init_disp, init_aux = _canonicalize_init(init, X.shape[1])
-        canonical_init_disp = None
-        canonical_init_aux = None
-        if init_disp is not None:
-            canonical_init_disp, canonical_init_aux = model.canonicalize_params(init_disp, init_aux)
+        raw_init_disp = init_disp if init_disp is not None else 1.0
+        canonical_init_disp, canonical_init_aux = model.canonicalize_params(raw_init_disp, init_aux)
         init_eta = X @ init_beta + 0.0 if init_beta is not None else model.init_eta(y)
-        disp_init = canonical_init_disp if canonical_init_disp is not None else model.canonicalize_dispersion(1.0)
-        if isinstance(model.family, NegativeBinomial):
-            disp_init = canonical_init_aux if canonical_init_aux is not None else model.canonicalize_auxiliary(None)
+        has_aux = canonical_init_aux is not None
+        aux_init = canonical_init_aux if canonical_init_aux is not None else jnp.asarray(0.0)
+        updates_aux = isinstance(model.family, NegativeBinomial)
 
         state = _irls(
             X,
@@ -148,23 +156,30 @@ class IRLSFitter(AbstractFitter, strict=True):
             tol,
             step_size,
             offset,
-            disp_init=disp_init,
+            disp_init=canonical_init_disp,
+            aux_init=aux_init,
+            has_aux=has_aux,
+            updates_aux=updates_aux,
         )
-        beta, n_iter, converged, irls_disp, objective, objective_delta = state
+        beta, n_iter, converged, irls_disp, irls_aux, objective, objective_delta = state
 
         eta = X @ beta + offset
-        disp = model.estimate_dispersion(X, y, eta, irls_disp)
+        aux_arg = irls_aux if has_aux else None
+        if updates_aux:
+            disp = irls_disp
+            aux = model.estimate_dispersion(X, y, eta, irls_disp, aux=aux_arg)
+        else:
+            disp = model.estimate_dispersion(X, y, eta, irls_disp, aux=aux_arg)
+            aux = aux_arg
         mu = model.mean(eta)
         score_residual = (y - mu) * model.link_deriv(mu)
-        _, _, weight = model.working_weights(eta, irls_disp)
+        _, _, weight = model.working_weights(eta, irls_disp, aux_arg)
 
         beta = jnp.ravel(beta)
-        fitted_aux = canonical_init_aux
-        if isinstance(model.family, NegativeBinomial):
-            fitted_aux = model.canonicalize_auxiliary(disp)
+        canonical_disp, canonical_aux = model.canonicalize_params(disp, aux)
 
         return FitResult(
-            params=Params(beta=beta, disp=model.canonicalize_dispersion(disp), aux=fitted_aux),
+            params=Params(beta=beta, disp=canonical_disp, aux=canonical_aux),
             X=X,
             y=y,
             eta=eta,
