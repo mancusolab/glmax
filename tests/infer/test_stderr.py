@@ -1,5 +1,7 @@
 # pattern: Imperative Shell
 
+from dataclasses import fields
+
 import pytest
 
 import equinox as eqx
@@ -21,9 +23,36 @@ def _make_gaussian_xy(n: int = 30, p: int = 2, seed: int = 0):
     return X, y
 
 
+def unchecked_fitted(base, **overrides: object):
+    values = {field.name: getattr(base, field.name) for field in fields(type(base))}
+    values.update(overrides)
+
+    fitted = object.__new__(type(base))
+    for name, value in values.items():
+        object.__setattr__(fitted, name, value)
+    return fitted
+
+
+class _ScaleTrapModel:
+    def __init__(self, base_model):
+        self._base_model = base_model
+
+    def scale(self, X, y, mu):
+        del X, y, mu
+        raise AssertionError("FisherInfoError must not call model.scale(...).")
+
+    def __getattr__(self, name):
+        return getattr(self._base_model, name)
+
+
+def _without_scale_access(fitted):
+    return unchecked_fitted(fitted, model=_ScaleTrapModel(fitted.model))
+
+
 def _with_dispersion(fitted, disp):
     params = fitted.params._replace(disp=jnp.asarray(disp))
-    return eqx.tree_at(lambda tree: tree.result.params, fitted, params)
+    _, _, weight = fitted.model.working_weights(fitted.result.eta, params.disp, params.aux)
+    return eqx.tree_at(lambda tree: (tree.result.params, tree.result.glm_wt), fitted, (params, weight))
 
 
 def _expected_huber_covariance(fitted):
@@ -36,6 +65,14 @@ def _expected_huber_covariance(fitted):
     score_no_x = fitted.result.glm_wt * fitted.result.score_residual / phi
     meat = (X * (score_no_x**2)[:, jnp.newaxis]).T @ X
     return bread @ meat @ bread
+
+
+def _expected_fisher_covariance(fitted):
+    X = fitted.result.X
+    phi = jnp.asarray(fitted.params.disp)
+    w_pure = fitted.result.glm_wt * phi
+    information = (X * w_pure[:, jnp.newaxis]).T @ X
+    return phi * jla.inv(information)
 
 
 def test_fisher_info_error_jit_safe_and_finite():
@@ -122,6 +159,20 @@ def test_huber_error_uses_fitted_dispersion_as_phi_source_of_truth() -> None:
     assert bool(jnp.allclose(cov, expected_cov, atol=1e-5)), (
         "HuberError must use fitted.params.disp as phi.\n"
         f"phi={scaled_fitted.params.disp}\nactual diag={jnp.diag(cov)}\nexpected diag={jnp.diag(expected_cov)}"
+    )
+
+
+def test_fisher_info_error_uses_fitted_dispersion_as_phi_source_of_truth() -> None:
+    X, y = _make_gaussian_xy(seed=13)
+    fitted = glmax.fit(glmax.specify(family=Gaussian()), GLMData(X=X, y=y))
+    trapped_fitted = _without_scale_access(fitted)
+
+    cov = FisherInfoError()(trapped_fitted)
+    expected_cov = _expected_fisher_covariance(fitted)
+
+    assert bool(jnp.allclose(cov, expected_cov, atol=1e-5)), (
+        "FisherInfoError must use fitted.params.disp as phi.\n"
+        f"phi={fitted.params.disp}\nactual diag={jnp.diag(cov)}\nexpected diag={jnp.diag(expected_cov)}"
     )
 
 
