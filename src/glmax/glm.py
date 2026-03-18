@@ -4,13 +4,18 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import equinox as eqx
 import jax.numpy as jnp
 
 from jax import Array
-from jaxtyping import ArrayLike, ScalarLike
 
 from .family import ExponentialDispersionFamily, Gaussian
+
+
+if TYPE_CHECKING:
+    from jaxtyping import ArrayLike, ScalarLike
 
 
 class GLM(eqx.Module):

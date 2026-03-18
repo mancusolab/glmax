@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import equinox as eqx
 
 from .._fit import FittedGLM
 from .hyptest import AbstractTest, WaldTest
 from .stderr import AbstractStdErrEstimator, FisherInfoError
-from .types import InferenceResult
+
+
+if TYPE_CHECKING:
+    from .types import InferenceResult
 
 
 __all__ = ["infer"]

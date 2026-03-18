@@ -4,17 +4,21 @@
 
 from __future__ import annotations
 
-from typing import NamedTuple, Tuple
+from typing import NamedTuple, TYPE_CHECKING
 
 import jax.numpy as jnp
 
 from jax import Array, lax
-from jaxtyping import ArrayLike, ScalarLike
 
 from ..data import GLMData
-from ..glm import GLM
 from .solve import AbstractLinearSolver, CholeskySolver
 from .types import AbstractFitter, FitResult, Params
+
+
+if TYPE_CHECKING:
+    from jaxtyping import ArrayLike, ScalarLike
+
+    from ..glm import GLM
 
 
 __all__ = ["IRLSFitter"]
@@ -46,7 +50,7 @@ def _irls(
     """IRLS to solve GLM."""
     _, p = X.shape
 
-    def body_fun(val: Tuple):
+    def body_fun(val: tuple):
         likelihood_o, diff, num_iter, _beta_o, eta_o, disp_o, aux_o = val
 
         mu_k, g_deriv_k, weight = model.working_weights(eta_o, disp_o, aux_o)
@@ -61,7 +65,7 @@ def _irls(
 
         return likelihood_n, diff, num_iter + 1, beta, eta_n, disp_n, aux_n
 
-    def cond_fun(val: Tuple):
+    def cond_fun(val: tuple):
         likelihood_o, diff, num_iter, beta, eta, disp, aux = val
         del likelihood_o, beta, eta, disp, aux
         return jnp.logical_and(jnp.fabs(diff) > tol, num_iter <= max_iter)

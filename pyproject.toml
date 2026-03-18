@@ -83,32 +83,22 @@ cov = [
 ]
 
 [[tool.hatch.envs.all.matrix]]
-python = ["3.9", "3.10", "3.11", "3.12"]
+python = ["3.10", "3.11", "3.12"]
 
 [tool.hatch.envs.lint]
 detached = true
 dependencies = [
-  "mypy>=1.0.0",
+  "pyright>=1.1.46",
   "ruff>=0.2.2",
 ]
 
 [tool.ruff]
-target-version = "py37"
 line-length = 120
 
 [tool.ruff.lint]
-fixable = ["I001", "F401"]
-select = ["E", "F", "I001"]
-ignore = [
-  # Allow non-abstract empty methods in abstract base classes
-  "B027",
-  # Allow boolean positional values in function calls, like `dict.get(... True)`
-  "FBT003",
-  # Ignore checks for possible passwords
-  "S105", "S106", "S107",
-  # Ignore complexity
-  "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915",
-]
+fixable = ["I001", "F401", "SIM", "UP", "TC"]
+select = ["E", "F", "I001", "SIM", "UP", "TC"]
+ignore = ["E402", "E721", "E731", "E741", "F722"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["glmax"]

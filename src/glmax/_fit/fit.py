@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import equinox as eqx
-import jax.numpy as jnp
 
 from ..data import GLMData
 from ..glm import GLM
@@ -16,6 +17,9 @@ from .types import (
     Params,
 )
 
+
+if TYPE_CHECKING:
+    from jax import Array
 
 __all__ = ["fit", "predict"]
 
@@ -80,7 +84,7 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Abstra
 
 
 @eqx.filter_jit
-def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:
+def predict(model: GLM, params: Params, data: GLMData) -> Array:
     r"""Apply a fitted model to new data and return predicted means.
 
     This is the canonical `predict` grammar verb. It is `@eqx.filter_jit`-wrapped.

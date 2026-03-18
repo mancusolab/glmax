@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import NamedTuple
+from typing import NamedTuple, TYPE_CHECKING
 
 import equinox as eqx
 
 from jax import Array, numpy as jnp
 
-from ..data import GLMData
 from ..glm import GLM
-from .solve import AbstractLinearSolver
+
+
+if TYPE_CHECKING:
+    from ..data import GLMData
+    from .solve import AbstractLinearSolver
 
 
 class Params(NamedTuple):
