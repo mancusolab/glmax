@@ -81,8 +81,11 @@ def test_glmax_fit_accepts_params_init_for_nb_without_aux() -> None:
 
     fit_result = glmax.fit(model, data, init=init)
 
+    assert list(fit_result.params._fields) == ["beta", "disp", "aux"]
     assert fit_result.params.beta.shape == (1,)
-    assert fit_result.params.aux is None
+    assert jnp.allclose(fit_result.params.disp, jnp.array(1.0))
+    assert fit_result.params.aux is not None
+    assert float(jnp.asarray(fit_result.params.aux)) > 0.0
 
 
 def test_params_schema_is_beta_disp_and_aux() -> None:

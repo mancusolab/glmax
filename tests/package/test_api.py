@@ -38,6 +38,24 @@ def _make_fit_result() -> FitResult:
     )
 
 
+def _assert_canonical_params_for_family(family, params: Params) -> None:
+    assert params._fields == ("beta", "disp", "aux")
+    assert params.beta.ndim == 1
+    assert jnp.asarray(params.disp).shape == ()
+
+    if isinstance(family, NegativeBinomial):
+        assert jnp.allclose(params.disp, jnp.array(1.0))
+        assert params.aux is not None
+        assert float(jnp.asarray(params.aux)) > 0.0
+        return
+
+    assert params.aux is None
+    if isinstance(family, (Gaussian, Gamma)):
+        assert float(jnp.asarray(params.disp)) > 0.0
+    else:
+        assert jnp.allclose(params.disp, jnp.array(1.0))
+
+
 def test_canonical_contract_imports_exist() -> None:
     assert GLMData is not None
     assert Params is not None
@@ -178,16 +196,17 @@ def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
 
 
 @pytest.mark.parametrize(
-    ("family", "y"),
+    ("family", "X", "y"),
     [
-        (Gaussian(), jnp.array([0.1, 1.0, 2.1, 2.9, 4.2])),
-        (Poisson(), jnp.array([0.0, 1.0, 1.0, 2.0, 3.0])),
-        (Binomial(), jnp.array([0.0, 0.0, 1.0, 1.0, 1.0])),
-        (NegativeBinomial(), jnp.array([0.0, 1.0, 2.0, 1.0, 4.0])),
+        (Gaussian(), jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), jnp.array([0.1, 1.0, 2.1, 2.9, 4.2])),
+        (Gamma(), jnp.array([[1.0], [2.0], [3.0], [4.0], [5.0]]), jnp.array([0.8, 1.1, 1.7, 2.2, 2.9])),
+        (Poisson(), jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), jnp.array([0.0, 1.0, 1.0, 2.0, 3.0])),
+        (Binomial(), jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), jnp.array([0.0, 0.0, 1.0, 1.0, 1.0])),
+        (NegativeBinomial(), jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), jnp.array([0.0, 1.0, 2.0, 1.0, 4.0])),
     ],
 )
-def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
-    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), y=y)
+def test_canonical_fit_succeeds_for_supported_families(family, X, y) -> None:
+    data = GLMData(X=X, y=y)
     result = glmax.fit(glmax.GLM(family=family), data)
 
     assert isinstance(result, FittedGLM)
@@ -195,10 +214,7 @@ def test_canonical_fit_succeeds_for_supported_families(family, y) -> None:
     assert result.score_residual.shape == (data.n_samples,)
     assert bool(jnp.isfinite(result.objective))
     assert bool(jnp.isfinite(result.objective_delta))
-    if isinstance(family, (NegativeBinomial, Gaussian)):
-        assert result.params.disp > 0
-    else:
-        assert jnp.allclose(result.params.disp, jnp.array(1.0))
+    _assert_canonical_params_for_family(family, result.params)
 
 
 def test_predict_rejects_invalid_params_contracts_deterministically() -> None:

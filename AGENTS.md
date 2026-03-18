@@ -14,18 +14,19 @@
   - `glmax.predict(model, params, data)` is also `@eqx.filter_jit`-wrapped.
   - `infer(fitted, inferrer=WaldTest(), stderr=FisherInfoError())` and `check(fitted)` operate on the fitted noun without refitting.
   - `GLM` is a pure specification noun (`family` field only). It has no `.fit` method and no `solver` field. Use `glmax.fit(model, data)`. The solver lives on the fitter strategy.
-  - `GLM` exposes a method interface that the fitting and inference kernels program against. User-facing: `mean(eta)`, `log_prob(y, eta, disp)`, `sample(key, eta, disp)`. Kernel-facing: `init_eta(y)`, `working_weights(eta, disp)`, `link_deriv(mu)`, `update_dispersion(...)`, `estimate_dispersion(...)`, `canonicalize_dispersion(disp)`, `scale(X, y, mu)`. All delegate to `self.family`. Do not call `model.family.xxx` from kernels — use `model.xxx`.
+  - `GLM` exposes a method interface that the fitting and inference kernels program against. User-facing: `mean(eta)`, `log_prob(y, eta, disp, aux=None)`, `sample(key, eta, disp, aux=None)`. Kernel-facing: `init_eta(y)`, `working_weights(eta, disp, aux=None)`, `link_deriv(mu)`, `update_dispersion(..., aux=None)`, `estimate_dispersion(..., aux=None)`, `canonicalize_dispersion(disp)`, `canonicalize_auxiliary(aux)`, `canonicalize_params(disp, aux)`, `scale(X, y, mu)`. All delegate to `self.family`. Do not call `model.family.xxx` from kernels — use `model.xxx`.
   - `Gamma` is a supported family (exported from `glmax.family`). Dispersion estimation for Gamma is deferred.
 - **Expects**:
   - `GLMData.X` is rank-2 with shape `(n, p)` and `GLMData.y` is rank-1 with shape `(n,)`.
   - Optional `offset` and `weights` inputs broadcast over the sample axis when present.
-  - `Params.beta` is an inexact rank-1 vector of length `p`; `Params.disp` is an inexact scalar.
+  - `Params.beta` is an inexact rank-1 vector of length `p`; `Params.disp` is an inexact scalar; `Params.aux` is either `None` or an inexact family-specific scalar.
   - `FitResult` is the fitter contract and carries `params`, `X`, `y`, `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`, `objective_delta`, and `score_residual`.
   - `FittedGLM` is the public fitted noun and binds `model` plus `result`, forwarding common fit artifacts for ergonomics.
   - `InferenceResult` carries `params`, `se`, `stat`, and `p`; those summaries are produced by `infer(fitted, ...)`, not `fit(...)`.
   - `Diagnostics` is reserved for `check(fitted)` model-fit assessment. The current `check()` seam is a placeholder contract and does not yet expose finalized model-diagnostic fields.
   - `AbstractFitter` subclasses must declare a `solver: AbstractLinearSolver` field. `IRLSFitter` defaults to `CholeskySolver()`.
   - `GLMData.weights` is not part of the supported public `fit` or `predict` contract unless docs and tests are updated in the same change.
+  - Negative Binomial stores its auxiliary `alpha` in `Params.aux`; canonical `Params.disp` remains the GLM dispersion slot and is `1.0` for Negative Binomial fits.
 
 ## Dependencies
 - **Uses**: `jax`, `jaxlib`, `equinox`, `jaxtyping`, `lineax`, `optimistix`.

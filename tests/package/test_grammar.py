@@ -6,12 +6,13 @@ from dataclasses import fields
 
 import pytest
 
+import equinox as eqx
 import jax.numpy as jnp
 
 import glmax
 
 from glmax import Diagnostics, FitResult, FittedGLM, GLMData, InferenceResult, Params
-from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
 
 def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
@@ -34,19 +35,36 @@ def unchecked_fitted(base: FittedGLM, **overrides: object) -> FittedGLM:
     return fitted
 
 
+def _assert_canonical_params_for_family(family, params: Params) -> None:
+    assert params._fields == ("beta", "disp", "aux")
+
+    if isinstance(family, NegativeBinomial):
+        assert jnp.allclose(params.disp, jnp.array(1.0))
+        assert params.aux is not None
+        assert float(jnp.asarray(params.aux)) > 0.0
+        return
+
+    assert params.aux is None
+    if isinstance(family, (Gaussian, Gamma)):
+        assert float(jnp.asarray(params.disp)) > 0.0
+    else:
+        assert jnp.allclose(params.disp, jnp.array(1.0))
+
+
 @pytest.mark.parametrize(
-    ("family", "y"),
+    ("family", "X", "y"),
     [
-        (Gaussian(), jnp.array([0.1, 1.0, 2.1, 2.9, 4.2])),
-        (Poisson(), jnp.array([0.0, 1.0, 1.0, 2.0, 3.0])),
-        (Binomial(), jnp.array([0.0, 0.0, 1.0, 1.0, 1.0])),
-        (NegativeBinomial(), jnp.array([0.0, 1.0, 2.0, 1.0, 4.0])),
+        (Gaussian(), jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), jnp.array([0.1, 1.0, 2.1, 2.9, 4.2])),
+        (Gamma(), jnp.array([[1.0], [2.0], [3.0], [4.0], [5.0]]), jnp.array([0.8, 1.1, 1.7, 2.2, 2.9])),
+        (Poisson(), jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), jnp.array([0.0, 1.0, 1.0, 2.0, 3.0])),
+        (Binomial(), jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), jnp.array([0.0, 0.0, 1.0, 1.0, 1.0])),
+        (NegativeBinomial(), jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), jnp.array([0.0, 1.0, 2.0, 1.0, 4.0])),
     ],
 )
-def test_grammar_contract_matrix_across_all_verbs(family, y) -> None:
+def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
     current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
     model = glmax.specify(family=family)
-    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]]), y=y)
+    data = GLMData(X=X, y=y)
 
     fitted = glmax.fit(model, data)
     prediction = glmax.predict(model, fitted.params, data)
@@ -54,8 +72,10 @@ def test_grammar_contract_matrix_across_all_verbs(family, y) -> None:
     diagnostics = glmax.check(fitted)
 
     assert isinstance(fitted, current_fitted_glm_type)
+    _assert_canonical_params_for_family(family, fitted.params)
     assert prediction.shape == y.shape
     assert isinstance(inferred, InferenceResult)
+    _assert_canonical_params_for_family(family, inferred.params)
     assert inferred.se.shape == fitted.params.beta.shape
     assert isinstance(diagnostics, Diagnostics)
     assert diagnostics == Diagnostics()
@@ -86,7 +106,7 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
             fitted,
             result=unchecked_fit_result(
                 fitted.result,
-                params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(0.0), aux=None),
+                params=Params(beta=jnp.array([jnp.nan]), disp=jnp.array(1.0), aux=None),
             ),
         ),
     )
@@ -99,13 +119,13 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
     with pytest.raises(ValueError, match="Params.aux must be a scalar"):
         glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.2, 0.3])), data)
 
-    inferred = glmax.infer(
-        unchecked_fitted(
-            fitted,
-            result=unchecked_fit_result(
-                fitted.result,
-                params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0), aux=None),
+    with pytest.raises(eqx.EquinoxRuntimeError, match="fitted.params.disp"):
+        glmax.infer(
+            unchecked_fitted(
+                fitted,
+                result=unchecked_fit_result(
+                    fitted.result,
+                    params=Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0), aux=None),
+                ),
             ),
-        ),
-    )
-    assert isinstance(inferred, InferenceResult)
+        )
