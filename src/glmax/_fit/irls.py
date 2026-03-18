@@ -12,6 +12,7 @@ from jax import Array, lax
 from jaxtyping import ArrayLike, ScalarLike
 
 from ..data import GLMData
+from ..family import NegativeBinomial
 from ..glm import GLM
 from .solve import AbstractLinearSolver, CholeskySolver
 from .types import _canonicalize_init, AbstractFitter, FitResult, Params
@@ -134,6 +135,8 @@ class IRLSFitter(AbstractFitter, strict=True):
             canonical_init_disp, canonical_init_aux = model.canonicalize_params(init_disp, init_aux)
         init_eta = X @ init_beta + 0.0 if init_beta is not None else model.init_eta(y)
         disp_init = canonical_init_disp if canonical_init_disp is not None else model.canonicalize_dispersion(1.0)
+        if isinstance(model.family, NegativeBinomial):
+            disp_init = canonical_init_aux if canonical_init_aux is not None else model.canonicalize_auxiliary(None)
 
         state = _irls(
             X,
@@ -156,9 +159,12 @@ class IRLSFitter(AbstractFitter, strict=True):
         _, _, weight = model.working_weights(eta, irls_disp)
 
         beta = jnp.ravel(beta)
+        fitted_aux = canonical_init_aux
+        if isinstance(model.family, NegativeBinomial):
+            fitted_aux = model.canonicalize_auxiliary(disp)
 
         return FitResult(
-            params=Params(beta=beta, disp=model.canonicalize_dispersion(disp), aux=canonical_init_aux),
+            params=Params(beta=beta, disp=model.canonicalize_dispersion(disp), aux=fitted_aux),
             X=X,
             y=y,
             eta=eta,

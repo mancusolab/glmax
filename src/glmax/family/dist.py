@@ -1,4 +1,6 @@
 # pattern: Functional Core
+import math
+
 from abc import abstractmethod
 from typing import ClassVar, TYPE_CHECKING
 
@@ -22,12 +24,39 @@ else:
     from equinox import AbstractClassVar
 
 
+def _reject_auxiliary(family_name: str, aux: ScalarLike | None) -> None:
+    if aux is not None:
+        raise ValueError(f"{family_name} requires aux to be None.")
+
+
+def _validate_positive_finite_scalar(name: str, value: ScalarLike) -> Array:
+    scalar = jnp.asarray(value)
+    if scalar.ndim > 0 and scalar.size != 1:
+        raise ValueError(f"{name} must be a scalar.")
+
+    try:
+        python_scalar = float(scalar)
+    except TypeError:
+        # Traced callers cannot branch on Python scalars; keep the value
+        # numerically valid and let boundary callers handle deterministic errors.
+        return jnp.clip(scalar, min=jnp.finfo(jnp.float64).tiny)
+
+    if not math.isfinite(python_scalar) or python_scalar <= 0.0:
+        raise ValueError(f"{name} must be positive and finite, got {python_scalar}.")
+    return scalar
+
+
+def _nb_alpha_from_split(disp: ScalarLike, aux: ScalarLike | None) -> Array:
+    alpha = aux if aux is not None else disp
+    return jnp.clip(jnp.asarray(alpha), min=jnp.finfo(jnp.float64).tiny)
+
+
 class ExponentialDispersionFamily(eqx.Module):
     r"""Abstract base for one-parameter exponential dispersion family distributions.
 
     A GLM models the conditional mean $\mu = \mathrm{E}(Y \mid X)$ via a link
     function $g$ such that $g(\mu) = \eta = X\beta$.  Subclasses implement the
-    family-specific density, variance function, and dispersion handling.
+    family-specific density, variance function, and split `(disp, aux)` handling.
 
     Concrete families: `Gaussian`, `Poisson`, `Binomial`, `NegativeBinomial`, `Gamma`.
     """
@@ -56,7 +85,13 @@ class ExponentialDispersionFamily(eqx.Module):
         """
 
     @abstractmethod
-    def negloglikelihood(self, y: ArrayLike, eta: ArrayLike, disp: ScalarLike = 0.0) -> Array:
+    def negloglikelihood(
+        self,
+        y: ArrayLike,
+        eta: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Compute negative log-likelihood.
 
         **Arguments:**
@@ -64,6 +99,7 @@ class ExponentialDispersionFamily(eqx.Module):
         - `y`: observed responses, shape `(n,)`.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: dispersion parameter, scalar.
+        - `aux`: optional family-specific auxiliary scalar.
 
         **Returns:**
 
@@ -71,13 +107,14 @@ class ExponentialDispersionFamily(eqx.Module):
         """
 
     @abstractmethod
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0) -> Array:
+    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
         r"""Variance function $V(\mu)$.
 
         **Arguments:**
 
         - `mu`: mean parameter, shape `(n,)`.
         - `disp`: dispersion parameter, scalar.
+        - `aux`: optional family-specific auxiliary scalar.
 
         **Returns:**
 
@@ -85,7 +122,13 @@ class ExponentialDispersionFamily(eqx.Module):
         """
 
     @abstractmethod
-    def sample(self, key: Array, eta: ArrayLike, disp: ScalarLike = 0.0) -> Array:
+    def sample(
+        self,
+        key: Array,
+        eta: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Draw samples from the family's distribution.
 
         **Arguments:**
@@ -93,6 +136,7 @@ class ExponentialDispersionFamily(eqx.Module):
         - `key`: JAX PRNGKey.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: dispersion parameter, scalar.
+        - `aux`: optional family-specific auxiliary scalar.
 
         **Returns:**
 
@@ -118,6 +162,7 @@ class ExponentialDispersionFamily(eqx.Module):
         self,
         eta: ArrayLike,
         disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
     ) -> tuple[Array, Array, Array]:
         r"""Compute IRLS weights.
 
@@ -128,13 +173,14 @@ class ExponentialDispersionFamily(eqx.Module):
 
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: dispersion parameter, scalar.
+        - `aux`: optional family-specific auxiliary scalar.
 
         **Returns:**
 
         Three-tuple `(mu, variance, weight)`, each shape `(n,)`.
         """
         mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
-        v = jnp.clip(self.variance(mu, disp), min=jnp.finfo(float).tiny)
+        v = jnp.clip(self.variance(mu, disp, aux), min=jnp.finfo(float).tiny)
         w = 1.0 / (v * self.glink.deriv(mu) ** 2)
         return mu, v, w
 
@@ -146,9 +192,11 @@ class ExponentialDispersionFamily(eqx.Module):
         X: ArrayLike,
         y: ArrayLike,
         eta: ArrayLike,
-        alpha: ScalarLike = 0.01,
+        disp: ScalarLike = 0.01,
         step_size: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
     ) -> Array:
+        del aux
         return self.canonical_dispersion(0.0)
 
     def estimate_dispersion(
@@ -156,17 +204,37 @@ class ExponentialDispersionFamily(eqx.Module):
         X: ArrayLike,
         y: ArrayLike,
         eta: ArrayLike,
-        alpha: ScalarLike = 0.01,
+        disp: ScalarLike = 0.01,
         step_size: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
         tol: ScalarLike = 1e-3,
         max_iter: int = 1000,
         offset_eta: ScalarLike = 0.0,
     ) -> Array:
+        del aux
         return self.canonical_dispersion(0.0)
 
     def canonical_dispersion(self, disp: ScalarLike = 0.0) -> Array:
         del disp
         return jnp.asarray(0.0)
+
+    def canonical_auxiliary(self, aux: ScalarLike | None = None) -> Array | None:
+        r"""Canonicalize optional family-specific auxiliary state.
+
+        **Arguments:**
+
+        - `aux`: optional family-specific auxiliary scalar.
+
+        **Returns:**
+
+        Canonical auxiliary scalar, or `None` for families without auxiliary state.
+
+        **Raises:**
+
+        - `ValueError`: if the family forbids auxiliary state and `aux` is not `None`.
+        """
+        _reject_auxiliary(type(self).__name__, aux)
+        return None
 
 
 class Gaussian(ExponentialDispersionFamily):
@@ -176,7 +244,7 @@ class Gaussian(ExponentialDispersionFamily):
     $y \mid \mu \sim \mathcal{N}(\mu, \sigma^2)$.
 
     The variance function is $V(\mu) = \sigma^2$ and the canonical link
-    is the identity $g(\mu) = \mu$.
+    is the identity $g(\mu) = \mu$. Gaussian uses `disp` as EDM dispersion and ignores `aux`.
     """
 
     glink: AbstractLink = IdentityLink()
@@ -195,7 +263,13 @@ class Gaussian(ExponentialDispersionFamily):
         phi = resid / df
         return phi
 
-    def negloglikelihood(self, y: ArrayLike, eta: ArrayLike, disp: ScalarLike = 1.0) -> Array:
+    def negloglikelihood(
+        self,
+        y: ArrayLike,
+        eta: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Gaussian negative log-likelihood.
 
         **Arguments:**
@@ -205,16 +279,18 @@ class Gaussian(ExponentialDispersionFamily):
         - `disp`: variance $\sigma^2$, scalar.  When `disp <= 0` (e.g. the
           IRLS sentinel `0.0` before dispersion estimation is wired in),
           falls back to `1.0` so the objective remains finite and comparable.
+        - `aux`: ignored.
 
         **Returns:**
 
         Scalar negative log-likelihood.
         """
+        del aux
         mu = self.glink.inverse(eta)
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return -jnp.sum(jaxstats.norm.logpdf(y, mu, jnp.sqrt(safe_disp)))
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0) -> Array:
+    def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
         r"""Gaussian variance function $V(\mu) = \sigma^2$.
 
         When `disp <= 0` (e.g. the IRLS sentinel `0.0` on the first step
@@ -226,11 +302,13 @@ class Gaussian(ExponentialDispersionFamily):
 
         - `mu`: mean, shape `(n,)`.
         - `disp`: variance $\sigma^2$, scalar.
+        - `aux`: ignored.
 
         **Returns:**
 
         $\sigma^2 \cdot \mathbf{1}$, shape `(n,)`.
         """
+        del aux
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return jnp.ones_like(mu) * safe_disp
 
@@ -239,8 +317,9 @@ class Gaussian(ExponentialDispersionFamily):
         X: ArrayLike,
         y: ArrayLike,
         eta: ArrayLike,
-        alpha: ScalarLike = 0.01,
+        disp: ScalarLike = 0.01,
         step_size: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
     ) -> Array:
         r"""Compute RSS/df as the Gaussian dispersion estimate.
 
@@ -249,8 +328,9 @@ class Gaussian(ExponentialDispersionFamily):
         - `X`: design matrix, shape `(n, p)`.
         - `y`: responses, shape `(n,)`.
         - `eta`: linear predictor at current iteration, shape `(n,)`.
-        - `alpha`: unused.
+        - `disp`: unused.
         - `step_size`: unused.
+        - `aux`: ignored.
 
         **Returns:**
 
@@ -258,12 +338,19 @@ class Gaussian(ExponentialDispersionFamily):
         (saturated or over-parameterised design), the denominator is clamped to
         1 to keep the result finite and non-negative.
         """
+        del disp, step_size, aux
         mu = self.glink.inverse(eta)
         n, p = X.shape
         df = jnp.maximum(n - p, 1)
         return jnp.sum((y - mu) ** 2) / df
 
-    def sample(self, key: Array, eta: ArrayLike, disp: ScalarLike = 1.0) -> Array:
+    def sample(
+        self,
+        key: Array,
+        eta: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Sample from $\mathcal{N}(\mu, \sigma^2)$ where $\mu = g^{-1}(\eta)$.
 
         **Arguments:**
@@ -271,11 +358,13 @@ class Gaussian(ExponentialDispersionFamily):
         - `key`: JAX PRNGKey.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: variance $\sigma^2$, scalar.
+        - `aux`: ignored.
 
         **Returns:**
 
         Gaussian samples, shape `(n,)`.
         """
+        del aux
         mu = self.glink.inverse(eta)
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return mu + rdm.normal(key, shape=mu.shape) * jnp.sqrt(safe_disp)
@@ -286,6 +375,7 @@ class Gaussian(ExponentialDispersionFamily):
         y: ArrayLike,
         eta: ArrayLike,
         disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
         **kwargs,
     ) -> Array:
         r"""Estimate $\sigma^2 = \mathrm{RSS} / (n - p)$.
@@ -307,12 +397,13 @@ class Gaussian(ExponentialDispersionFamily):
         - `y`: responses, shape `(n,)`.
         - `eta`: linear predictor at convergence, shape `(n,)`.
         - `disp`: unused (replaced by RSS/df).
+        - `aux`: ignored.
 
         **Returns:**
 
         $\hat{\sigma}^2$, scalar.
         """
-        del disp
+        del disp, aux
         return self.update_dispersion(X, y, eta)
 
     def canonical_dispersion(self, disp: ScalarLike = 1.0) -> Array:
@@ -328,6 +419,10 @@ class Gaussian(ExponentialDispersionFamily):
         """
         return jnp.asarray(disp)
 
+    def canonical_auxiliary(self, aux: ScalarLike | None = None) -> Array | None:
+        del aux
+        return None
+
 
 class Binomial(ExponentialDispersionFamily):
     r"""Binomial exponential family for binary responses.
@@ -336,7 +431,7 @@ class Binomial(ExponentialDispersionFamily):
     $y \mid \mu \sim \mathrm{Bernoulli}(\mu)$, $\mu \in (0, 1)$.
 
     The variance function is $V(\mu) = \mu(1 - \mu)$ and the canonical link
-    is the logit $g(\mu) = \log(\mu / (1 - \mu))$.
+    is the logit $g(\mu) = \log(\mu / (1 - \mu))$. Binomial fixes `disp = 1.0` and requires `aux is None`.
     """
 
     glink: AbstractLink = LogitLink()
@@ -356,42 +451,60 @@ class Binomial(ExponentialDispersionFamily):
     def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
         return jnp.asarray(1.0)
 
-    def negloglikelihood(self, y: ArrayLike, eta: ArrayLike, disp: ScalarLike = 0.0) -> Array:
+    def negloglikelihood(
+        self,
+        y: ArrayLike,
+        eta: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Binomial negative log-likelihood.
 
         **Arguments:**
 
         - `y`: binary responses in `{0, 1}`, shape `(n,)`.
         - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: unused (phi = 1 for Binomial).
+        - `disp`: ignored; Binomial fixes `disp = 1.0`.
+        - `aux`: must be `None`.
 
         **Returns:**
 
         Scalar negative log-likelihood.
         """
         del disp
+        self.canonical_auxiliary(aux)
         return -jnp.sum(jaxstats.bernoulli.logpmf(y, self.glink.inverse(eta)))
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0) -> Array:
+    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
+        del disp
+        self.canonical_auxiliary(aux)
         return mu * (1 - mu)
 
     def init_eta(self, y: ArrayLike) -> Array:
         return self.glink((y + 0.5) / 2.0)
 
-    def sample(self, key: Array, eta: ArrayLike, disp: ScalarLike = 0.0) -> Array:
+    def sample(
+        self,
+        key: Array,
+        eta: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Sample from $\mathrm{Bernoulli}(\mu)$ where $\mu = g^{-1}(\eta)$.
 
         **Arguments:**
 
         - `key`: JAX PRNGKey.
         - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: unused (phi = 1 for Binomial).
+        - `disp`: ignored; Binomial fixes `disp = 1.0`.
+        - `aux`: must be `None`.
 
         **Returns:**
 
         Binary samples, shape `(n,)`.
         """
         del disp
+        self.canonical_auxiliary(aux)
         mu = self.glink.inverse(eta)
         return rdm.bernoulli(key, p=mu, shape=mu.shape).astype(jnp.float64)
 
@@ -413,7 +526,7 @@ class Poisson(ExponentialDispersionFamily):
     $y \mid \mu \sim \mathrm{Poisson}(\mu)$, $\mu > 0$.
 
     The variance function is $V(\mu) = \mu$ and the canonical link
-    is the log $g(\mu) = \log(\mu)$.
+    is the log $g(\mu) = \log(\mu)$. Poisson fixes `disp = 1.0` and requires `aux is None`.
     """
 
     glink: AbstractLink = LogLink()
@@ -429,39 +542,57 @@ class Poisson(ExponentialDispersionFamily):
     def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
         return jnp.asarray(1.0)
 
-    def negloglikelihood(self, y: ArrayLike, eta: ArrayLike, disp: ScalarLike = 0.0) -> Array:
+    def negloglikelihood(
+        self,
+        y: ArrayLike,
+        eta: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Poisson negative log-likelihood.
 
         **Arguments:**
 
         - `y`: count responses, shape `(n,)`.
         - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: unused (phi = 1 for Poisson).
+        - `disp`: ignored; Poisson fixes `disp = 1.0`.
+        - `aux`: must be `None`.
 
         **Returns:**
 
         Scalar negative log-likelihood.
         """
         del disp
+        self.canonical_auxiliary(aux)
         return -jnp.sum(jaxstats.poisson.logpmf(y, self.glink.inverse(eta)))
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0) -> Array:
+    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
+        del disp
+        self.canonical_auxiliary(aux)
         return mu
 
-    def sample(self, key: Array, eta: ArrayLike, disp: ScalarLike = 0.0) -> Array:
+    def sample(
+        self,
+        key: Array,
+        eta: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Sample from $\mathrm{Poisson}(\mu)$ where $\mu = g^{-1}(\eta)$.
 
         **Arguments:**
 
         - `key`: JAX PRNGKey.
         - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: unused (phi = 1 for Poisson).
+        - `disp`: ignored; Poisson fixes `disp = 1.0`.
+        - `aux`: must be `None`.
 
         **Returns:**
 
         Count samples, shape `(n,)`.
         """
         del disp
+        self.canonical_auxiliary(aux)
         lam = self.glink.inverse(eta)
         return rdm.poisson(key, lam=lam).astype(jnp.float64)
 
@@ -481,10 +612,12 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
     Models a non-negative integer response via the NB-2 parameterisation
     $\mathrm{Var}(y \mid \mu) = \mu + \alpha \mu^2$, where $\alpha > 0$ is the
-    overdispersion parameter.  Uses a log link by default.
+    overdispersion parameter. Uses a log link by default.
+    Negative Binomial fixes `disp = 1.0` and uses `aux` as `alpha`.
 
-    The dispersion $\alpha$ is estimated jointly with $\beta$ during fitting
-    using Newton steps on $\log \alpha$.
+    During the transition to the split contract, methods still accept legacy
+    callers that pass `alpha` through `disp`; when `aux` is provided it always
+    takes precedence.
     """
 
     glink: AbstractLink = LogLink()
@@ -500,32 +633,35 @@ class NegativeBinomial(ExponentialDispersionFamily):
     def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
         return jnp.asarray(1.0)
 
-    def negloglikelihood(self, y: ArrayLike, eta: ArrayLike, disp: ScalarLike = 0.1) -> Array:
+    def negloglikelihood(
+        self,
+        y: ArrayLike,
+        eta: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Negative-binomial log-likelihood (numerically stable via `logaddexp`).
 
         Uses $r = 1/\alpha$ and the log-probability parameterization to avoid
         catastrophic cancellation for large counts.
 
-        **Precondition:** `disp > 0`.  When `disp` is zero or below-`tiny`
-        (e.g. passed as the IRLS sentinel `0.0` before dispersion estimation
-        is wired in), it is silently clipped to `jnp.finfo(jnp.float64).tiny`
-        so the result remains finite.  Callers that rely on meaningful
-        likelihood values must supply a positive `disp`.
+        **Precondition:** NB uses `aux` as `alpha > 0` and fixes `disp = 1.0`.
+        When `aux` is omitted, the legacy `disp` carrier is still accepted
+        during the phase transition and clipped to keep the objective finite.
 
         **Arguments:**
 
         - `y`: count responses, shape `(n,)`.
         - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: overdispersion $\alpha > 0$, scalar.
+        - `disp`: fixed at `1.0`; ignored when `aux` is provided.
+        - `aux`: overdispersion $\alpha > 0$, scalar.
 
         **Returns:**
 
         Scalar negative log-likelihood.
         """
-        # Defensive guard added alongside Gamma work (Phase 4): clip prevents
-        # log(0) when disp arrives as the IRLS sentinel 0.0 before estimation.
-        disp = jnp.maximum(jnp.asarray(disp), jnp.finfo(jnp.float64).tiny)
-        log_r = -jnp.log(disp)
+        alpha = _nb_alpha_from_split(disp, aux)
+        log_r = -jnp.log(alpha)
         r = jnp.exp(log_r)
         # Compute log_mu in log-domain directly (glink is LogLink: inverse = exp(eta)).
         # Clipping eta avoids exp() overflow before log(), keeping log_mu finite.
@@ -537,10 +673,17 @@ class NegativeBinomial(ExponentialDispersionFamily):
         term2 = r * log1m_p + y * log_p
         return -jnp.sum(term1 + term2)
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0) -> Array:
-        return mu + disp * (mu**2)
+    def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
+        alpha = _nb_alpha_from_split(disp, aux)
+        return mu + alpha * (mu**2)
 
-    def sample(self, key: Array, eta: ArrayLike, disp: ScalarLike = 0.1) -> Array:
+    def sample(
+        self,
+        key: Array,
+        eta: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Sample from $\mathrm{NB}(r, \mu)$ via Gamma-Poisson mixture.
 
         $\mathrm{NB}(r, \mu)$ is equivalent to $\mathrm{Poisson}(\lambda)$ where
@@ -550,19 +693,17 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         - `key`: JAX PRNGKey.
         - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: overdispersion $\alpha > 0$, scalar.
+        - `disp`: fixed at `1.0`; ignored when `aux` is provided.
+        - `aux`: overdispersion $\alpha > 0$, scalar.
 
         **Returns:**
 
         Count samples, shape `(n,)`.
         """
-        # Defensive guard added alongside Gamma work (Phase 4): hard-fail at
-        # boundary so sampling never silently draws from an ill-defined r = inf.
-        if float(jnp.asarray(disp)) <= 0:
-            raise ValueError(f"NegativeBinomial.sample: disp must be > 0, got {disp}")
         key1, key2 = rdm.split(key)
         mu = self.glink.inverse(eta)
-        r = 1.0 / disp
+        alpha = _nb_alpha_from_split(disp, aux)
+        r = 1.0 / alpha
         # jax.random.gamma samples Gamma(a=r, scale=1); multiply by mu/r to get Gamma(a=r, scale=mu/r)
         gamma_sample = rdm.gamma(key1, r, shape=mu.shape) * (mu / r)
         return rdm.poisson(key2, lam=gamma_sample).astype(jnp.float64)
@@ -624,11 +765,13 @@ class NegativeBinomial(ExponentialDispersionFamily):
         X: ArrayLike,
         y: ArrayLike,
         eta: ArrayLike,
-        alpha: ScalarLike = 0.1,
+        disp: ScalarLike = 1.0,
         step_size: ScalarLike = 0.1,
+        aux: ScalarLike | None = None,
     ) -> Array:
         # TODO: update alpha such that it is lower bounded by 1e-6 (used to be 1e-8)
         #   should have either parameter or smarter update on Manifold
+        alpha = _nb_alpha_from_split(disp, aux)
         log_alpha = jnp.log(alpha)
         score, hess = self.log_alpha_score_and_hessian(X, y, eta, log_alpha)
         log_alpha_n = jnp.clip(
@@ -644,12 +787,13 @@ class NegativeBinomial(ExponentialDispersionFamily):
         X: ArrayLike,
         y: ArrayLike,
         eta: ArrayLike,
-        alpha: ScalarLike = 0.1,
+        disp: ScalarLike = 1.0,
         step_size=0.1,
+        aux: ScalarLike | None = None,
         tol=1e-3,
         max_iter=1000,
     ) -> Array:
-        alpha = jnp.asarray(alpha)
+        alpha = _nb_alpha_from_split(disp, aux)
 
         def body_fun(val: tuple):
             diff, num_iter, alpha_o = val
@@ -675,7 +819,13 @@ class NegativeBinomial(ExponentialDispersionFamily):
         return alpha
 
     def canonical_dispersion(self, disp: ScalarLike = 0.0) -> Array:
-        return jnp.asarray(disp)
+        del disp
+        return jnp.asarray(1.0)
+
+    def canonical_auxiliary(self, aux: ScalarLike | None = None) -> Array:
+        if aux is None:
+            return jnp.asarray(0.1)
+        return _validate_positive_finite_scalar("NegativeBinomial alpha", aux)
 
 
 class Gamma(ExponentialDispersionFamily):
@@ -688,7 +838,7 @@ class Gamma(ExponentialDispersionFamily):
 
     The canonical link for Gamma is `InverseLink` ($g(\mu) = 1/\mu$).
     `estimate_dispersion` is a no-op in this release; dispersion estimation is
-    deferred to a future design.
+    deferred to a future design. Gamma uses `disp` as EDM dispersion and ignores `aux`.
     """
 
     glink: AbstractLink = InverseLink()
@@ -721,7 +871,13 @@ class Gamma(ExponentialDispersionFamily):
         # dispersion estimation for Gamma is a non-goal in this design. When a future
         # design adds Gamma dispersion estimation, this method will be updated.
 
-    def negloglikelihood(self, y: ArrayLike, eta: ArrayLike, disp: ScalarLike = 1.0) -> Array:
+    def negloglikelihood(
+        self,
+        y: ArrayLike,
+        eta: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Gamma negative log-likelihood.
 
         Uses `jax.scipy.stats.gamma.logpdf` with shape $k = 1/\phi$ and
@@ -736,18 +892,20 @@ class Gamma(ExponentialDispersionFamily):
         - `y`: positive responses, shape `(n,)`.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: dispersion $\phi > 0$, scalar.
+        - `aux`: ignored.
 
         **Returns:**
 
         Scalar negative log-likelihood.
         """
+        del aux
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
         k = 1.0 / safe_disp
         theta = mu * safe_disp
         return -jnp.sum(jaxstats.gamma.logpdf(y, a=k, scale=theta))
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0) -> Array:
+    def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
         r"""Gamma variance $V(\mu) = \phi \mu^2$.
 
         When `disp <= 0` (e.g. the IRLS sentinel `0.0` on the first step
@@ -759,11 +917,13 @@ class Gamma(ExponentialDispersionFamily):
 
         - `mu`: mean, shape `(n,)`.
         - `disp`: dispersion $\phi$, scalar.
+        - `aux`: ignored.
 
         **Returns:**
 
         $\phi \mu^2$, shape `(n,)`.
         """
+        del aux
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return safe_disp * mu**2
 
@@ -787,6 +947,7 @@ class Gamma(ExponentialDispersionFamily):
         eta: ArrayLike,
         disp: ScalarLike = 1.0,
         step_size: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
     ) -> Array:
         r"""Return dispersion unchanged (estimation deferred).
 
@@ -797,12 +958,13 @@ class Gamma(ExponentialDispersionFamily):
         - `eta`: linear predictor (unused).
         - `disp`: current dispersion estimate.
         - `step_size`: unused.
+        - `aux`: ignored.
 
         **Returns:**
 
         `jnp.asarray(disp)` unchanged.
         """
-        del X, y, eta, step_size
+        del X, y, eta, step_size, aux
         return self.canonical_dispersion(disp)
 
     def estimate_dispersion(
@@ -811,6 +973,7 @@ class Gamma(ExponentialDispersionFamily):
         y: ArrayLike,
         eta: ArrayLike,
         disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
         **kwargs,
     ) -> Array:
         r"""Return dispersion unchanged (estimation deferred).
@@ -821,15 +984,22 @@ class Gamma(ExponentialDispersionFamily):
         - `y`: responses (unused).
         - `eta`: linear predictor (unused).
         - `disp`: dispersion to return unchanged.
+        - `aux`: ignored.
 
         **Returns:**
 
         `jnp.asarray(disp)`.
         """
-        del X, y, eta
+        del X, y, eta, aux
         return self.canonical_dispersion(disp)
 
-    def sample(self, key: Array, eta: ArrayLike, disp: ScalarLike = 1.0) -> Array:
+    def sample(
+        self,
+        key: Array,
+        eta: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
         r"""Sample from $\mathrm{Gamma}(k, \theta)$ where $k = 1/\phi$, $\theta = \mu\phi$.
 
         **Arguments:**
@@ -837,13 +1007,19 @@ class Gamma(ExponentialDispersionFamily):
         - `key`: JAX PRNGKey.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: dispersion $\phi > 0$, scalar.
+        - `aux`: ignored.
 
         **Returns:**
 
         Positive samples, shape `(n,)`.
         """
+        del aux
         mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
         disp = jnp.clip(jnp.asarray(disp), min=jnp.finfo(float).tiny)
         k = 1.0 / disp
         theta = mu * disp
         return rdm.gamma(key, k, shape=mu.shape) * theta
+
+    def canonical_auxiliary(self, aux: ScalarLike | None = None) -> Array | None:
+        del aux
+        return None
