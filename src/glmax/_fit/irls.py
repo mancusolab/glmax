@@ -155,10 +155,9 @@ class IRLSFitter(AbstractFitter, strict=True):
 
         eta = X @ beta + offset
         aux = irls_aux if default_aux is not None else None
-        mu = model.mean(eta)
-        score_residual = (y - mu) * model.link_deriv(mu)
+        mu, link_deriv, weight = model.working_weights(eta, disp, aux)
+        score_residual = (y - mu) * link_deriv
         beta = jnp.ravel(beta)
-        _, _, weight = model.working_weights(eta, disp, aux)
 
         return FitResult(
             params=Params(beta=beta, disp=disp, aux=aux),

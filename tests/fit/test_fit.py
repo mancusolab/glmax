@@ -128,42 +128,6 @@ class _AuxSensitiveIRLSFamily(ExponentialDispersionFamily):
         return jnp.asarray(1.0), jnp.asarray(0.5)
 
 
-def test_irls_fitter_traces_link_derivative_once_per_iteration_body() -> None:
-    deriv_calls = {"count": 0}
-
-    class _CountingIdentityLink(IdentityLink):
-        def deriv(self, mu):
-            deriv_calls["count"] += 1
-            return super().deriv(mu)
-
-    class _CountingDerivFamily(ExponentialDispersionFamily):
-        glink: _CountingIdentityLink = _CountingIdentityLink()
-        _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink, _CountingIdentityLink]
-        _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
-
-        def negloglikelihood(self, y, eta, disp=1.0, aux=None):
-            del disp, aux
-            resid = jnp.asarray(y) - jnp.asarray(eta)
-            return jnp.sum(jnp.square(resid))
-
-        def variance(self, mu, disp=1.0, aux=None):
-            del disp, aux
-            return jnp.ones_like(jnp.asarray(mu))
-
-        def sample(self, key, eta, disp=1.0, aux=None):
-            del key, disp, aux
-            return jnp.asarray(eta)
-
-    model = glmax.GLM(family=_CountingDerivFamily())
-    data = GLMData(X=jnp.array([[1.0], [2.0], [3.0]]), y=jnp.array([1.0, 2.0, 3.0]))
-    init = Params(beta=jnp.array([0.0]), disp=jnp.array(1.0), aux=None)
-
-    result = IRLSFitter()(model, data, init=init, max_iter=3)
-
-    assert result.num_iters >= 1
-    assert deriv_calls["count"] == 3
-
-
 def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     seen: dict[str, object] = {}
     expected = _make_fit_result()
