@@ -173,10 +173,9 @@ class IRLSFitter(AbstractFitter, strict=True):
             aux = aux_arg
         mu = model.mean(eta)
         score_residual = (y - mu) * model.link_deriv(mu)
-        _, _, weight = model.working_weights(eta, irls_disp, aux_arg)
-
         beta = jnp.ravel(beta)
         canonical_disp, canonical_aux = model.canonicalize_params(disp, aux)
+        _, _, weight = model.working_weights(eta, canonical_disp, canonical_aux)
 
         return FitResult(
             params=Params(beta=beta, disp=canonical_disp, aux=canonical_aux),

@@ -472,6 +472,17 @@ def test_irls_fitter_threads_aux_through_kernel_state() -> None:
     assert not jnp.allclose(small_fit.objective, large_fit.objective)
 
 
+def test_negative_binomial_fit_glm_weights_match_final_auxiliary_parameter() -> None:
+    model = glmax.GLM(family=NegativeBinomial())
+    data = GLMData(X=_DEFAULT_X, y=jnp.array([0.0, 1.0, 2.0, 4.0]))
+
+    fitted = glmax.fit(model, data)
+    _, _, expected_weight = model.working_weights(fitted.eta, fitted.params.disp, fitted.params.aux)
+
+    assert fitted.params.aux is not None
+    assert jnp.allclose(fitted.glm_wt, expected_weight, rtol=1e-6, atol=1e-7)
+
+
 def test_default_fitter_validates_init_beta_shape() -> None:
     X = jnp.ones((4, 2))
     y = jnp.ones(4)
