@@ -1,13 +1,13 @@
 # Clarify GLM Dispersion Terminology and Params Aux Contract Design
 
 ## Status
-Draft
+Approved for Implementation
 
 ## Handoff Decision
-- Current decision: blocked
-- Ready for implementation: no
+- Current decision: approved
+- Ready for implementation: yes
 - Blocking items:
-  - Pending plan review and explicit approval.
+  - None.
 
 ## Metadata
 - Date: 2026-03-17
@@ -84,7 +84,7 @@ Not applicable. This plan refines terminology and contracts for the existing sup
 ### Source Pin
 | Source ID | Source Type (`local-directory` or `github-url`) | Path/URL | Commit/Tag | Notes |
 | --- | --- | --- | --- | --- |
-| PORT-SRC-1 | local-directory | `/Users/nicholas/Projects/glmax` | worktree-state-2026-03-17 | Unreleased package; breaking changes are allowed. |
+| PORT-SRC-1 | local-directory | /Users/nicholas/Projects/glmax | worktree-state-2026-03-17 | Unreleased package; breaking changes are allowed. |
 
 ### Behavior Inventory And Parity Targets
 | Behavior ID | Surface (`cli`/`api`/`numerics`/`io`) | Current Behavior | Target Behavior | Evidence Plan (tests/golden outputs) |
@@ -303,3 +303,5 @@ Not applicable. The design does not add or change multi-input reconciliation beh
 | Date | From | To | Why | By |
 | --- | --- | --- | --- | --- |
 | 2026-03-17 | N/A | Draft | Plan created | |
+| 2026-03-18 | Draft | In Review | Plan review advanced through the status workflow. | Codex |
+| 2026-03-18 | In Review | Approved for Implementation | Readiness validation passed and implementation was already complete. | Codex |
