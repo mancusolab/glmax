@@ -110,6 +110,18 @@ class GLM(eqx.Module):
         """
         return self.family.init_eta(y)
 
+    def _working_terms(
+        self,
+        eta: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> tuple[Array, Array, Array]:
+        mu = jnp.clip(self.mean(eta), *self.family._bounds)
+        g_deriv = self.link_deriv(mu)
+        variance = jnp.clip(jnp.asarray(self.family.variance(mu, disp, aux=aux)), min=jnp.finfo(float).tiny)
+        weight = 1.0 / (variance * g_deriv**2)
+        return mu, g_deriv, weight
+
     def working_weights(
         self,
         eta: ArrayLike,
@@ -126,11 +138,15 @@ class GLM(eqx.Module):
 
         **Returns:**
 
-        Tuple `(mu, variance, weight)` each of shape `(n,)`, where
+        Tuple `(mu, g_deriv, weight)` each of shape `(n,)`, where
+        `g_deriv` is the per-sample link derivative $g'(\mu_i)$ and
         `weight` is the per-sample GLM working weight $w_i = 1 / (V(\mu_i) [g'(\mu_i)]^2)$.
         """
-        mu, variance, weight = self.family.calc_weight(eta, disp, aux=aux)
-        return mu, variance, weight
+        if type(self.family).calc_weight is ExponentialDispersionFamily.calc_weight:
+            return self._working_terms(eta, disp, aux=aux)
+
+        mu, _, weight = self.family.calc_weight(eta, disp, aux=aux)
+        return mu, self.link_deriv(mu), weight
 
     def link_deriv(self, mu: ArrayLike) -> Array:
         r"""Evaluate the link derivative $g'(\mu)$.

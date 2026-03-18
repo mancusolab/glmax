@@ -53,8 +53,7 @@ def _irls(
         likelihood_o, diff, num_iter, _beta_o, eta_o, disp_o, aux_o = val
         aux_arg = aux_o if has_aux else None
 
-        mu_k, _v, weight = model.working_weights(eta_o, disp_o, aux_arg)
-        g_deriv_k = model.link_deriv(mu_k)
+        mu_k, g_deriv_k, weight = model.working_weights(eta_o, disp_o, aux_arg)
         r = eta_o + g_deriv_k * (y - mu_k) * step_size - offset_eta
 
         beta = solver(X, r, weight)

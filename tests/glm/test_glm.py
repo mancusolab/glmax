@@ -305,7 +305,7 @@ def test_glm_log_prob_is_negative_negloglikelihood() -> None:
 
 
 def test_glm_working_weights_returns_triple() -> None:
-    """GLM.working_weights returns (mu, v, w) tuple of correct shapes."""
+    """GLM.working_weights returns (mu, g', w) tuple of correct shapes."""
     model = glmax.GLM(family=Gaussian())
     eta = jnp.array([0.5, 1.0, 1.5, 2.0])
     disp = 1.0
@@ -313,9 +313,9 @@ def test_glm_working_weights_returns_triple() -> None:
     result = model.working_weights(eta, disp)
 
     assert len(result) == 3
-    mu, v, w = result
+    mu, g_deriv, w = result
     assert mu.shape == eta.shape
-    assert v.shape == eta.shape
+    assert g_deriv.shape == eta.shape
     assert w.shape == eta.shape
 
 
@@ -398,7 +398,8 @@ def test_glm_negative_binomial_working_weights_forward_aux() -> None:
     eta = jnp.log(jnp.array([1.5, 2.5, 4.0]))
 
     result = model.working_weights(eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
-    expected = model.family.calc_weight(eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
+    expected_mu, _, expected_weight = model.family.calc_weight(eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
+    expected = (expected_mu, model.link_deriv(expected_mu), expected_weight)
     ignored_disp = model.working_weights(eta, disp=jnp.array(9.0), aux=jnp.array(0.4))
     changed_aux = model.working_weights(eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
 
@@ -416,7 +417,8 @@ def test_glm_working_weights_preserves_custom_calc_weight_override_with_aux() ->
     aux = jnp.array(0.4)
 
     result = model.working_weights(eta, disp=disp, aux=aux)
-    expected = model.family.calc_weight(eta, disp=disp, aux=aux)
+    expected_mu, _, expected_weight = model.family.calc_weight(eta, disp=disp, aux=aux)
+    expected = (expected_mu, model.link_deriv(expected_mu), expected_weight)
 
     for actual, truth in zip(result, expected, strict=True):
         assert jnp.allclose(actual, truth)
@@ -458,7 +460,7 @@ def test_glm_forwards_aux_to_family_methods() -> None:
 
     log_prob = model.log_prob(y, eta, disp=disp, aux=aux)
     sample = model.sample(key, eta, disp=disp, aux=aux)
-    mu, variance, weight = model.working_weights(eta, disp=disp, aux=aux)
+    mu, g_deriv, weight = model.working_weights(eta, disp=disp, aux=aux)
     updated_disp = model.update_dispersion(X, y, eta, disp=disp, step_size=step_size, aux=aux)
     estimated_disp = model.estimate_dispersion(X, y, eta, disp=disp, aux=aux)
 
@@ -466,14 +468,15 @@ def test_glm_forwards_aux_to_family_methods() -> None:
     expected_sample = model.family.sample(key, eta, disp=disp, aux=aux)
     expected_mu = model.mean(eta)
     expected_variance = model.family.variance(expected_mu, disp=disp, aux=aux)
-    expected_weight = 1.0 / (expected_variance * model.link_deriv(expected_mu) ** 2)
+    expected_g_deriv = model.link_deriv(expected_mu)
+    expected_weight = 1.0 / (expected_variance * expected_g_deriv**2)
     expected_updated_disp = model.family.update_dispersion(X, y, eta, disp=disp, step_size=step_size, aux=aux)
     expected_estimated_disp = model.family.estimate_dispersion(X, y, eta, disp=disp, aux=aux)
 
     assert jnp.allclose(log_prob, expected_log_prob)
     assert jnp.allclose(sample, expected_sample)
     assert jnp.allclose(mu, expected_mu)
-    assert jnp.allclose(variance, expected_variance)
+    assert jnp.allclose(g_deriv, expected_g_deriv)
     assert jnp.allclose(weight, expected_weight)
     assert jnp.allclose(updated_disp, expected_updated_disp)
     assert jnp.allclose(estimated_disp, expected_estimated_disp)
