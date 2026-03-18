@@ -12,7 +12,7 @@ import glmax
 from glmax import FittedGLM, GLMData, InferenceResult
 from glmax._infer.hyptest import ScoreTest, WaldTest
 from glmax._infer.stderr import AbstractStdErrEstimator, HuberError
-from glmax.family import Gaussian
+from glmax.family import Gaussian, NegativeBinomial
 
 
 def unchecked_fit_result(base, **overrides: object):
@@ -45,6 +45,15 @@ def _make_fitted():
     return fitted
 
 
+def _make_negative_binomial_fitted():
+    model = glmax.specify(family=NegativeBinomial())
+    data = GLMData(
+        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
+        y=jnp.array([0.0, 1.0, 2.0, 4.0]),
+    )
+    return glmax.fit(model, data)
+
+
 def test_infer_returns_inference_result_without_refitting() -> None:
     fitted = _make_fitted()
 
@@ -52,11 +61,24 @@ def test_infer_returns_inference_result_without_refitting() -> None:
 
     assert isinstance(inferred, InferenceResult)
     assert bool(eqx.tree_equal(inferred.params, fitted.params))
+    assert inferred.params._fields == ("beta", "disp", "aux")
     assert inferred.se.shape == fitted.params.beta.shape
     assert inferred.stat.shape == fitted.params.beta.shape
     assert inferred.p.shape == fitted.params.beta.shape
     with pytest.raises(AttributeError):
         inferred.z
+
+
+def test_infer_preserves_canonical_negative_binomial_params() -> None:
+    fitted = _make_negative_binomial_fitted()
+
+    inferred = glmax.infer(fitted)
+
+    assert inferred.params._fields == ("beta", "disp", "aux")
+    assert jnp.allclose(inferred.params.disp, jnp.array(1.0))
+    assert inferred.params.aux is not None
+    assert float(jnp.asarray(inferred.params.aux)) > 0.0
+    assert jnp.allclose(inferred.params.beta, fitted.params.beta)
 
 
 def test_infer_uses_injected_stderr_estimator() -> None:

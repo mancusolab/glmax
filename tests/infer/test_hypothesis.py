@@ -57,11 +57,9 @@ def _make_perfect_fit_gaussian_fitted():
 def _expected_score_stat(fitted):
     fit_result = fitted.result
     X = fit_result.X
-    y = fit_result.y
-    mu = fit_result.mu
     glm_wt = fit_result.glm_wt
     score_residual = fit_result.score_residual
-    phi = jnp.asarray(fitted.model.family.scale(X, y, mu))
+    phi = jnp.asarray(fitted.params.disp)
     numerator = X.T @ (glm_wt * score_residual)
     fisher_diag = jnp.sum(X * (glm_wt[:, jnp.newaxis] * X), axis=0)
     return numerator / jnp.sqrt(phi * fisher_diag)
@@ -178,7 +176,7 @@ def test_score_test_gaussian_p_values_valid() -> None:
 def test_score_test_rejects_degenerate_scale() -> None:
     fitted = _make_perfect_fit_gaussian_fitted()
 
-    with pytest.raises(ValueError, match="family.scale"):
+    with pytest.raises(ValueError, match="finite and > 0"):
         ScoreTest()(fitted, FisherInfoError())
 
 
@@ -187,13 +185,7 @@ def test_score_test_rejects_degenerate_fisher_diag() -> None:
     degenerate_X = fitted.X.at[:, 1].set(0.0)
     degenerate_fitted = eqx.tree_at(lambda tree: tree.result.X, fitted, degenerate_X)
 
-    phi = jnp.asarray(
-        degenerate_fitted.model.family.scale(
-            degenerate_fitted.result.X,
-            degenerate_fitted.result.y,
-            degenerate_fitted.result.mu,
-        )
-    )
+    phi = jnp.asarray(degenerate_fitted.params.disp)
     fisher_diag = jnp.sum(
         degenerate_fitted.result.X * (degenerate_fitted.result.glm_wt[:, jnp.newaxis] * degenerate_fitted.result.X),
         axis=0,

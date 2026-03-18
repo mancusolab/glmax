@@ -88,8 +88,7 @@ def test_gaussian_se_equals_ols_formula() -> None:
     result = glmax.fit(model, GLMData(X=X, y=y))
     inference = glmax.infer(result)
 
-    family = Gaussian()
-    phi = family.scale(result.X, result.y, result.mu)
+    phi = result.params.disp
     w_pure = result.glm_wt * phi
     information = (result.X * w_pure[:, jnp.newaxis]).T @ result.X
     expected_cov = phi * jla.inv(information)

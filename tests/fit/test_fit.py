@@ -117,6 +117,50 @@ class _NonIdempotentCanonicalWarmStartFamily(ExponentialDispersionFamily):
         return jnp.where(aux_array < 1.0, jnp.asarray(1.0), jnp.asarray(2.0))
 
 
+class _AuxSensitiveIRLSFamily(ExponentialDispersionFamily):
+    glink: IdentityLink = IdentityLink()
+    _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
+    _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+
+    def scale(self, X, y, mu):
+        del X, y, mu
+        return jnp.asarray(1.0)
+
+    def negloglikelihood(self, y, eta, disp=1.0, aux=None):
+        del disp
+        alpha = self.canonical_auxiliary(aux)
+        resid = jnp.asarray(y) - jnp.asarray(eta)
+        return jnp.sum(jnp.square(resid)) / alpha + alpha
+
+    def variance(self, mu, disp=1.0, aux=None):
+        del disp
+        alpha = self.canonical_auxiliary(aux)
+        return jnp.ones_like(jnp.asarray(mu)) * alpha
+
+    def sample(self, key, eta, disp=1.0, aux=None):
+        del key, disp
+        return jnp.asarray(eta) + self.canonical_auxiliary(aux)
+
+    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, aux=None):
+        del X, y, eta, disp, step_size, aux
+        return jnp.asarray(1.0)
+
+    def estimate_dispersion(
+        self, X, y, eta, disp=1.0, aux=None, step_size=1.0, tol=1e-3, max_iter=1000, offset_eta=0.0
+    ):
+        del X, y, eta, disp, aux, step_size, tol, max_iter, offset_eta
+        return jnp.asarray(1.0)
+
+    def canonical_dispersion(self, disp=1.0):
+        del disp
+        return jnp.asarray(1.0)
+
+    def canonical_auxiliary(self, aux=None):
+        if aux is None:
+            return jnp.asarray(0.5)
+        return jnp.asarray(aux)
+
+
 def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     seen: dict[str, object] = {}
     expected = _make_fit_result()
@@ -165,6 +209,24 @@ _DEFAULT_X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
 _GAMMA_X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
 
 
+def _assert_canonical_params_for_family(family, params: Params) -> None:
+    assert params._fields == ("beta", "disp", "aux")
+    assert params.beta.ndim == 1
+    assert jnp.asarray(params.disp).shape == ()
+
+    if isinstance(family, NegativeBinomial):
+        assert jnp.allclose(params.disp, jnp.array(1.0))
+        assert params.aux is not None
+        assert float(jnp.asarray(params.aux)) > 0.0
+        return
+
+    assert params.aux is None
+    if isinstance(family, Gaussian):
+        assert float(jnp.asarray(params.disp)) > 0.0
+    else:
+        assert jnp.allclose(params.disp, jnp.array(1.0))
+
+
 @pytest.mark.parametrize(
     ("family", "X", "y"),
     [
@@ -188,6 +250,7 @@ def test_default_fitter_returns_canonical_fitresult_for_supported_families(famil
     assert result.mu.shape == y.shape
     assert result.glm_wt.shape == y.shape
     assert result.score_residual.shape == y.shape
+    _assert_canonical_params_for_family(family, result.params)
 
 
 def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
@@ -382,6 +445,33 @@ def test_public_fit_matches_single_canonicalization_reference_for_non_idempotent
     assert jnp.allclose(inferred.params.aux, first.params.aux)
 
 
+def test_default_fitter_initializes_aux_for_aux_aware_families() -> None:
+    model = glmax.GLM(family=_AuxSensitiveIRLSFamily())
+    data = GLMData(X=jnp.array([[1.0], [1.0], [1.0]]), y=jnp.array([1.0, 2.0, 3.0]))
+
+    result = glmax.fit(model, data)
+
+    assert isinstance(result, FittedGLM)
+    assert jnp.allclose(result.params.disp, jnp.array(1.0))
+    assert result.params.aux is not None
+    assert jnp.allclose(result.params.aux, jnp.array(0.5))
+
+
+def test_irls_fitter_threads_aux_through_kernel_state() -> None:
+    model = glmax.GLM(family=_AuxSensitiveIRLSFamily())
+    data = GLMData(X=jnp.array([[1.0], [1.0], [1.0]]), y=jnp.array([1.0, 2.0, 3.0]))
+    small_aux = Params(beta=jnp.array([0.0]), disp=jnp.array(1.0), aux=jnp.array(0.5))
+    large_aux = Params(beta=jnp.array([0.0]), disp=jnp.array(1.0), aux=jnp.array(2.0))
+
+    small_fit = IRLSFitter()(model, data, init=small_aux)
+    large_fit = IRLSFitter()(model, data, init=large_aux)
+
+    assert jnp.allclose(small_fit.params.aux, small_aux.aux)
+    assert jnp.allclose(large_fit.params.aux, large_aux.aux)
+    assert not jnp.allclose(small_fit.glm_wt, large_fit.glm_wt)
+    assert not jnp.allclose(small_fit.objective, large_fit.objective)
+
+
 def test_default_fitter_validates_init_beta_shape() -> None:
     X = jnp.ones((4, 2))
     y = jnp.ones(4)
@@ -409,10 +499,7 @@ def test_all_families_succeed_with_default_fitter(family, y) -> None:
     assert result.score_residual.shape == (data.n_samples,)
     assert bool(jnp.isfinite(result.objective))
     assert bool(jnp.isfinite(result.objective_delta))
-    if isinstance(family, (NegativeBinomial, Gaussian)):
-        assert result.params.disp > 0
-    else:
-        assert jnp.allclose(result.params.disp, jnp.array(1.0))
+    _assert_canonical_params_for_family(family, result.params)
 
 
 def test_single_feature_beta_shape_roundtrip() -> None:

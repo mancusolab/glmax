@@ -31,6 +31,14 @@ def test_predict_generates_stable_shape_for_supported_families(family, y) -> Non
     assert pred1.shape == y.shape
     assert jnp.all(jnp.isfinite(pred1))
     assert jnp.allclose(pred1, pred2)
+    assert fit_result.params._fields == ("beta", "disp", "aux")
+
+    if isinstance(family, NegativeBinomial):
+        assert jnp.allclose(fit_result.params.disp, jnp.array(1.0))
+        assert fit_result.params.aux is not None
+        assert float(jnp.asarray(fit_result.params.aux)) > 0.0
+    else:
+        assert fit_result.params.aux is None
 
     if isinstance(family, Binomial):
         assert jnp.all(pred1 >= 0.0)
@@ -50,6 +58,12 @@ def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> Non
     model = glmax.specify(family=family)
     data = GLMData(X=X, y=y)
     fit_result = glmax.fit(model, data)
+    assert fit_result.params._fields == ("beta", "disp", "aux")
+    assert fit_result.params.aux is None
+    if isinstance(family, Gaussian):
+        assert float(jnp.asarray(fit_result.params.disp)) > 0.0
+    else:
+        assert jnp.allclose(fit_result.params.disp, jnp.array(1.0))
     params_with_aux = Params(beta=fit_result.params.beta, disp=fit_result.params.disp, aux=jnp.array(0.25))
 
     assert jnp.allclose(

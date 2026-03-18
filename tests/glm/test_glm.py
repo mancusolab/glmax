@@ -232,8 +232,10 @@ def test_NegativeBinomial(getkey):
     jaxqtl_nb = glmax.specify(family=NegativeBinomial())
     glm_state = glmax.fit(jaxqtl_nb, GLMData(X=X, y=y))
     infer_state = glmax.infer(glm_state)
+    assert glm_state.params._fields == ("beta", "disp", "aux")
     assert jnp.allclose(glm_state.params.disp, jnp.array(1.0))
     assert glm_state.params.aux is not None
+    assert float(jnp.asarray(glm_state.params.aux)) > 0.0
 
     # solve using statsmodel method (ground truth)
     sm_negbin = sm.GLM(np.array(y), np.array(X), family=sm.families.NegativeBinomial(alpha=glm_state.params.aux))
