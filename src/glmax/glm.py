@@ -161,7 +161,7 @@ class GLM(eqx.Module):
         """
         return self.family.glink.deriv(mu)
 
-    def update_dispersion(
+    def update_nuisance(
         self,
         X: ArrayLike,
         y: ArrayLike,
@@ -169,8 +169,14 @@ class GLM(eqx.Module):
         disp: ScalarLike,
         step_size: ScalarLike,
         aux: ScalarLike | None = None,
-    ) -> Array:
-        r"""Apply one dispersion update step inside the IRLS loop.
+    ) -> tuple[Array, Array | None]:
+        r"""Apply one nuisance-parameter update step inside the IRLS loop.
+
+        Returns the updated `(disp, aux)` pair.  Families that estimate a
+        nuisance parameter update whichever slot they own — `disp` for
+        EDM-dispersion families (e.g. Gaussian), `aux` for structural-parameter
+        families (e.g. Negative Binomial).  Fixed-dispersion families
+        (Poisson, Binomial) return `(disp, aux)` unchanged.
 
         **Arguments:**
 
@@ -183,110 +189,22 @@ class GLM(eqx.Module):
 
         **Returns:**
 
-        Updated dispersion scalar.
+        Tuple `(new_disp, new_aux)`.
         """
-        return self.family.update_dispersion(X, y, eta, disp, step_size, aux=aux)
+        return self.family.update_nuisance(X, y, eta, disp, step_size, aux=aux)
 
-    def estimate_dispersion(
-        self,
-        X: ArrayLike,
-        y: ArrayLike,
-        eta: ArrayLike,
-        disp: ScalarLike,
-        aux: ScalarLike | None = None,
-    ) -> Array:
-        r"""Post-convergence dispersion estimate.
+    def init_nuisance(self) -> tuple[Array, Array | None]:
+        r"""Return the default ``(disp, aux)`` pair used to seed the IRLS loop.
 
-        Called once after IRLS convergence to produce the final $\hat\phi$.
-
-        **Arguments:**
-
-        - `X`: covariate matrix, shape `(n, p)`.
-        - `y`: observed response, shape `(n,)`.
-        - `eta`: converged linear predictor, shape `(n,)`.
-        - `disp`: IRLS EDM dispersion at convergence.
-        - `aux`: optional family-specific auxiliary scalar.
+        Delegates to the active family so the caller does not need to distinguish
+        between families at the kernel level.
 
         **Returns:**
 
-        Final dispersion estimate scalar.
+        ``(default_disp, default_aux)`` where ``default_aux`` is ``None`` for
+        families without auxiliary state.
         """
-        return self.family.estimate_dispersion(X, y, eta, disp, aux=aux)
-
-    def canonicalize_dispersion(self, disp: ScalarLike) -> Array:
-        r"""Map a raw dispersion value to its canonical stored form.
-
-        Fixed-dispersion families (e.g. Poisson, Binomial) always return `1.0`.
-
-        **Arguments:**
-
-        - `disp`: raw dispersion value.
-
-        **Returns:**
-
-        Canonical dispersion scalar.
-        """
-        return self.family.canonical_dispersion(disp)
-
-    def canonicalize_auxiliary(self, aux: ScalarLike | None) -> Array | None:
-        r"""Map a raw auxiliary value to its canonical stored form.
-
-        The `GLM` boundary always delegates to the active family's
-        `canonical_auxiliary(...)` hook so the split `disp`/`aux` semantics stay
-        centralized in the family contract.
-
-        **Arguments:**
-
-        - `aux`: optional raw family-specific auxiliary value.
-
-        **Returns:**
-
-        Canonical auxiliary scalar, or `None` when the active family does not
-        use auxiliary state.
-
-        """
-        canonical_aux = self.family.canonical_auxiliary(aux)
-        if canonical_aux is None:
-            return None
-        return jnp.asarray(canonical_aux)
-
-    def canonicalize_params(self, disp: ScalarLike, aux: ScalarLike | None) -> tuple[Array, Array | None]:
-        r"""Canonicalize `(disp, aux)` through the model boundary.
-
-        This keeps warm-start normalization and family-compatibility checks on
-        the `GLM` seam instead of duplicating them in fitting or inference
-        kernels.
-
-        **Arguments:**
-
-        - `disp`: raw dispersion value.
-        - `aux`: optional raw family-specific auxiliary value.
-
-        **Returns:**
-
-        Tuple `(canonical_disp, canonical_aux)` with family-aware canonical
-        storage values.
-        """
-        return self.canonicalize_dispersion(disp), self.canonicalize_auxiliary(aux)
-
-    def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
-        r"""Compute the scale helper used by inference estimators.
-
-        This method remains an implementation helper for covariance scaling.
-        It does not define the fitted `(disp, aux)` contract; fitted parameter
-        semantics are carried by `canonicalize_params(...)` and stored `Params`.
-
-        **Arguments:**
-
-        - `X`: covariate matrix, shape `(n, p)`.
-        - `y`: observed response, shape `(n,)`.
-        - `mu`: fitted means, shape `(n,)`.
-
-        **Returns:**
-
-        Scalar $\hat\phi$ used to scale covariance matrices in inference.
-        """
-        return self.family.scale(X, y, mu)
+        return self.family.init_nuisance()
 
 
 def specify(

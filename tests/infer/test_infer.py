@@ -15,18 +15,6 @@ from glmax._infer.stderr import AbstractStdErrEstimator, HuberError
 from glmax.family import Gaussian, NegativeBinomial
 
 
-class _ScaleTrapModel:
-    def __init__(self, base_model):
-        self._base_model = base_model
-
-    def scale(self, X, y, mu):
-        del X, y, mu
-        raise AssertionError("glmax.infer must not call model.scale(...) on the default Wald/Fisher path.")
-
-    def __getattr__(self, name):
-        return getattr(self._base_model, name)
-
-
 def unchecked_fit_result(base, **overrides: object):
     values = {field.name: getattr(base, field.name) for field in fields(type(base))}
     values.update(overrides)
@@ -45,10 +33,6 @@ def unchecked_fitted(base: FittedGLM, **overrides: object) -> FittedGLM:
     for name, value in values.items():
         object.__setattr__(fitted, name, value)
     return fitted
-
-
-def _without_scale_access(fitted: FittedGLM) -> FittedGLM:
-    return unchecked_fitted(fitted, model=_ScaleTrapModel(fitted.model))
 
 
 def _make_fitted():
@@ -139,14 +123,13 @@ def test_infer_default_matches_explicit_wald_test() -> None:
 
 def test_infer_default_uses_fitted_dispersion_for_fisher_path() -> None:
     fitted = _make_fitted()
-    trapped_fitted = _without_scale_access(fitted)
 
     phi = jnp.asarray(fitted.params.disp)
     w_pure = fitted.result.glm_wt * phi
     information = (fitted.result.X * w_pure[:, jnp.newaxis]).T @ fitted.result.X
     expected_se = jnp.sqrt(jnp.diag(phi * jnp.linalg.inv(information)))
 
-    inferred = glmax.infer(trapped_fitted)
+    inferred = glmax.infer(fitted)
 
     assert jnp.allclose(inferred.se, expected_se, atol=1e-5), (
         "glmax.infer must use fitted.params.disp for the default Wald/Fisher path.\n"

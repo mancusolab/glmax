@@ -26,9 +26,11 @@ def _validated_params(params: Params, n_features: int) -> Params:
     return Params(beta=beta, disp=disp, aux=aux)
 
 
-def _canonicalize_model_params(model: GLM, params: Params) -> Params:
-    canonical_disp, canonical_aux = model.canonicalize_params(params.disp, params.aux)
-    return Params(beta=params.beta, disp=canonical_disp, aux=canonical_aux)
+def _normalize_init_aux(model: GLM, params: Params) -> Params:
+    _, default_aux = model.init_nuisance()
+    if default_aux is None and params.aux is not None:
+        return Params(beta=params.beta, disp=params.disp, aux=None)
+    return params
 
 
 @eqx.filter_jit
@@ -67,7 +69,7 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Abstra
     if init is not None:
         init = _validated_params(init, data.X.shape[1])
         if not isinstance(fitter, IRLSFitter):
-            init = _canonicalize_model_params(model, init)
+            init = _normalize_init_aux(model, init)
 
     result = fitter(model, data, init)
 
@@ -109,7 +111,7 @@ def predict(model: GLM, params: Params, data: GLMData) -> jnp.ndarray:
         raise ValueError("GLMData.weights is not supported in predict yet.")
 
     X_array, _, offset_array, _ = data.canonical_arrays()
-    params = _canonicalize_model_params(model, _validated_params(params, X_array.shape[1]))
+    params = _normalize_init_aux(model, _validated_params(params, X_array.shape[1]))
 
     eta = X_array @ params.beta + offset_array
     return model.mean(eta)

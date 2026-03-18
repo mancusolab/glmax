@@ -159,95 +159,69 @@ class TestGaussianDispersion:
         v = g.variance(mu)
         assert jnp.allclose(v, jnp.ones(4)), f"variance default (disp=1) expected ones, got {v}"
 
-    def test_canonical_dispersion_passthrough(self):
-        """Gaussian.canonical_dispersion(disp) must return jnp.asarray(disp)."""
-        g = Gaussian()
-        cd = g.canonical_dispersion(3.0)
-        assert float(cd) == pytest.approx(3.0), f"canonical_dispersion expected 3.0, got {cd}"
-
-    def test_canonical_auxiliary_ignores_value(self):
-        g = Gaussian()
-        assert g.canonical_auxiliary(jnp.array(0.3)) is None
-
-    def test_estimate_dispersion_rss_over_df(self):
-        """estimate_dispersion(X, y, eta) must return RSS / (n - p)."""
+    def test_update_nuisance_rss_over_df(self):
+        """update_nuisance(X, y, eta) must return (RSS / (n - p), None)."""
         g = Gaussian()
         n, p = 10, 2
         X = jnp.ones((n, p))
         y = jnp.full(n, 3.0)
         eta = jnp.full(n, 2.0)  # mu = 2.0 via identity link, residual = 1.0 each
-        ed = g.estimate_dispersion(X, y, eta)
+        new_disp, new_aux = g.update_nuisance(X, y, eta, disp=1.0)
         expected = jnp.sum((y - 2.0) ** 2) / (n - p)  # 10 / 8 = 1.25
-        assert jnp.allclose(ed, expected), f"estimate_dispersion expected {expected}, got {ed}"
+        assert jnp.allclose(new_disp, expected), f"update_nuisance expected {expected}, got {new_disp}"
+        assert new_aux is None
 
-    def test_estimate_dispersion_is_finite(self):
-        """estimate_dispersion must return a finite scalar."""
+    def test_update_nuisance_is_finite(self):
+        """update_nuisance disp must be a finite scalar."""
         g = Gaussian()
         X = jnp.ones((10, 2))
         y = jnp.ones(10) * 2.0
         eta = jnp.ones(10) * 2.0
-        ed = g.estimate_dispersion(X, y, eta)
-        assert jnp.isfinite(ed), "estimate_dispersion must be finite"
+        new_disp, _ = g.update_nuisance(X, y, eta, disp=1.0)
+        assert jnp.isfinite(new_disp), "update_nuisance disp must be finite"
 
-    def test_estimate_dispersion_zero_residual(self):
-        """When mu == y exactly, estimate_dispersion returns 0."""
+    def test_update_nuisance_zero_residual(self):
+        """When mu == y exactly, update_nuisance returns (0, None)."""
         g = Gaussian()
         X = jnp.ones((6, 2))
         y = jnp.ones(6)
         eta = jnp.ones(6)  # identity link: mu = eta = 1.0 = y
-        ed = g.estimate_dispersion(X, y, eta)
-        assert jnp.allclose(ed, 0.0), f"Expected 0 residual dispersion, got {ed}"
+        new_disp, new_aux = g.update_nuisance(X, y, eta, disp=1.0)
+        assert jnp.allclose(new_disp, 0.0), f"Expected 0 residual dispersion, got {new_disp}"
+        assert new_aux is None
 
 
 class TestGaussianSaturatedDesign:
-    """update_dispersion and estimate_dispersion must return finite, non-negative
-    results even when n == p (saturated design, df = n - p = 0)."""
+    """update_nuisance must return finite, non-negative disp even when n == p
+    (saturated design, df = n - p = 0)."""
 
-    def test_update_dispersion_saturated_is_finite(self):
+    def test_update_nuisance_saturated_is_finite(self):
         g = Gaussian()
         n = p = 4
         X = jnp.eye(n, p)
         y = jnp.array([1.0, 2.0, 3.0, 4.0])
         eta = y  # identity link: mu == y, RSS == 0 when perfect fit — still must be finite
-        result = g.update_dispersion(X, y, eta)
-        assert jnp.isfinite(result), f"update_dispersion saturated: expected finite, got {result}"
+        result, _ = g.update_nuisance(X, y, eta, disp=1.0)
+        assert jnp.isfinite(result), f"update_nuisance saturated: expected finite, got {result}"
 
-    def test_update_dispersion_saturated_is_non_negative(self):
+    def test_update_nuisance_saturated_is_non_negative(self):
         g = Gaussian()
         n = p = 4
         X = jnp.eye(n, p)
         y = jnp.array([1.0, 2.0, 3.0, 4.0])
         eta = jnp.zeros(n)  # non-zero RSS to make dispersion positive
-        result = g.update_dispersion(X, y, eta)
-        assert result >= 0.0, f"update_dispersion saturated: expected >= 0, got {result}"
+        result, _ = g.update_nuisance(X, y, eta, disp=1.0)
+        assert result >= 0.0, f"update_nuisance saturated: expected >= 0, got {result}"
 
-    def test_estimate_dispersion_saturated_is_finite(self):
-        g = Gaussian()
-        n = p = 5
-        X = jnp.eye(n, p)
-        y = jnp.ones(n) * 3.0
-        eta = jnp.zeros(n)  # non-zero residuals
-        result = g.estimate_dispersion(X, y, eta)
-        assert jnp.isfinite(result), f"estimate_dispersion saturated: expected finite, got {result}"
-
-    def test_estimate_dispersion_saturated_is_non_negative(self):
-        g = Gaussian()
-        n = p = 5
-        X = jnp.eye(n, p)
-        y = jnp.ones(n) * 3.0
-        eta = jnp.zeros(n)
-        result = g.estimate_dispersion(X, y, eta)
-        assert result >= 0.0, f"estimate_dispersion saturated: expected >= 0, got {result}"
-
-    def test_update_dispersion_overparameterised_is_finite(self):
+    def test_update_nuisance_overparameterised_is_finite(self):
         """n < p (more params than observations) must also be finite."""
         g = Gaussian()
         n, p = 3, 5
         X = jnp.ones((n, p))
         y = jnp.ones(n)
         eta = jnp.ones(n)
-        result = g.update_dispersion(X, y, eta)
-        assert jnp.isfinite(result), f"update_dispersion n<p: expected finite, got {result}"
+        result, _ = g.update_nuisance(X, y, eta, disp=1.0)
+        assert jnp.isfinite(result), f"update_nuisance n<p: expected finite, got {result}"
 
 
 class TestGaussianSampleDispGuard:
@@ -306,16 +280,9 @@ class TestNBNegloglikelihoodStability:
         assert jnp.allclose(ignored_disp, baseline)
         assert not jnp.allclose(changed_aux, baseline)
 
-    @pytest.mark.parametrize("bad_aux", [0.0, -1.0, jnp.nan, jnp.inf, -jnp.inf])
-    def test_nb_invalid_aux_is_rejected(self, bad_aux):
-        nb = NegativeBinomial()
-
-        with pytest.raises(ValueError, match="alpha"):
-            nb.canonical_auxiliary(bad_aux)
-
     @pytest.mark.parametrize(
         "method_name",
-        ["negloglikelihood", "variance", "sample", "update_dispersion", "estimate_dispersion"],
+        ["negloglikelihood", "variance", "sample", "update_nuisance"],
     )
     @pytest.mark.parametrize("bad_aux", [0.0, -1.0, jnp.nan, jnp.inf, -jnp.inf])
     def test_nb_invalid_aux_is_rejected_by_direct_numeric_methods(self, method_name, bad_aux):
@@ -329,8 +296,7 @@ class TestNBNegloglikelihoodStability:
             "negloglikelihood": lambda value: nb.negloglikelihood(y, eta, disp=1.0, aux=value),
             "variance": lambda value: nb.variance(mu, disp=1.0, aux=value),
             "sample": lambda value: nb.sample(_KEY, eta, disp=1.0, aux=value),
-            "update_dispersion": lambda value: nb.update_dispersion(X, y, eta, disp=1.0, aux=value),
-            "estimate_dispersion": lambda value: nb.estimate_dispersion(X, y, eta, disp=1.0, aux=value),
+            "update_nuisance": lambda value: nb.update_nuisance(X, y, eta, disp=1.0, aux=value),
         }
 
         with pytest.raises(ValueError, match="alpha"):
@@ -338,7 +304,7 @@ class TestNBNegloglikelihoodStability:
 
     @pytest.mark.parametrize(
         "method_name",
-        ["negloglikelihood", "variance", "sample", "update_dispersion", "estimate_dispersion"],
+        ["negloglikelihood", "variance", "sample", "update_nuisance"],
     )
     @pytest.mark.parametrize("bad_disp", [0.0, -1.0, jnp.nan, jnp.inf, -jnp.inf])
     def test_nb_invalid_legacy_disp_is_rejected_by_direct_numeric_methods(self, method_name, bad_disp):
@@ -352,8 +318,7 @@ class TestNBNegloglikelihoodStability:
             "negloglikelihood": lambda value: nb.negloglikelihood(y, eta, disp=value),
             "variance": lambda value: nb.variance(mu, disp=value),
             "sample": lambda value: nb.sample(_KEY, eta, disp=value),
-            "update_dispersion": lambda value: nb.update_dispersion(X, y, eta, disp=value),
-            "estimate_dispersion": lambda value: nb.estimate_dispersion(X, y, eta, disp=value),
+            "update_nuisance": lambda value: nb.update_nuisance(X, y, eta, disp=value),
         }
 
         with pytest.raises(ValueError, match="alpha"):
@@ -572,42 +537,16 @@ class TestSample:
 # ---------------------------------------------------------------------------
 
 
-class TestCanonicalDispersionUnitFamilies:
-    def test_poisson_canonical_dispersion_is_one(self):
-        """Poisson.canonical_dispersion(any) must return 1.0."""
-        p = Poisson()
-        assert float(p.canonical_dispersion(0.0)) == pytest.approx(1.0)
+def test_init_nuisance_returns_correct_defaults() -> None:
+    for family in [Gaussian(), Poisson(), Binomial(), Gamma()]:
+        disp, aux = family.init_nuisance()
+        assert jnp.allclose(disp, jnp.asarray(1.0))
+        assert aux is None
 
-    def test_poisson_canonical_dispersion_ignores_argument(self):
-        """Poisson.canonical_dispersion(5.0) must still return 1.0."""
-        p = Poisson()
-        assert float(p.canonical_dispersion(5.0)) == pytest.approx(1.0)
-
-    def test_binomial_canonical_dispersion_is_one(self):
-        """Binomial.canonical_dispersion(any) must return 1.0."""
-        b = Binomial()
-        assert float(b.canonical_dispersion(0.0)) == pytest.approx(1.0)
-
-    def test_binomial_canonical_dispersion_ignores_argument(self):
-        """Binomial.canonical_dispersion(3.0) must still return 1.0."""
-        b = Binomial()
-        assert float(b.canonical_dispersion(3.0)) == pytest.approx(1.0)
-
-    def test_poisson_canonical_dispersion_returns_jax_array(self):
-        p = Poisson()
-        result = p.canonical_dispersion(0.0)
-        assert isinstance(result, jax.Array)
-
-    def test_binomial_canonical_dispersion_returns_jax_array(self):
-        b = Binomial()
-        result = b.canonical_dispersion(0.0)
-        assert isinstance(result, jax.Array)
-
-    @pytest.mark.parametrize("FamilyCls", [Poisson, Binomial])
-    def test_fixed_dispersion_families_ignore_auxiliary(self, FamilyCls):
-        family = FamilyCls()
-
-        assert family.canonical_auxiliary(jnp.array(0.2)) is None
+    nb_disp, nb_aux = NegativeBinomial().init_nuisance()
+    assert jnp.allclose(nb_disp, jnp.asarray(1.0))
+    assert nb_aux is not None
+    assert float(nb_aux) > 0.0
 
 
 class TestFamilyDocstrings:
@@ -656,21 +595,11 @@ class TestGamma:
         assert s.shape == (20,)
         assert jnp.all(s > 0), "Gamma samples must be positive"
 
-    def test_canonical_dispersion_passthrough(self):
-        assert float(Gamma().canonical_dispersion(2.5)) == 2.5
-
-    def test_canonical_auxiliary_ignores_value(self):
-        assert Gamma().canonical_auxiliary(jnp.array(0.3)) is None
-
-    def test_update_dispersion_passthrough(self):
+    def test_update_nuisance_passthrough(self):
         g = Gamma()
-        result = g.update_dispersion(jnp.zeros((5, 3)), jnp.ones(5), jnp.ones(5) * 0.5, disp=1.0)
-        assert float(result) == 1.0
-
-    def test_estimate_dispersion_passthrough(self):
-        g = Gamma()
-        result = g.estimate_dispersion(jnp.zeros((5, 3)), jnp.ones(5), jnp.ones(5) * 0.5, disp=1.0)
-        assert float(result) == 1.0
+        result_disp, result_aux = g.update_nuisance(jnp.zeros((5, 3)), jnp.ones(5), jnp.ones(5) * 0.5, disp=1.0)
+        assert float(result_disp) == 1.0
+        assert result_aux is None
 
     def test_fits_positive_response_dataset(self):
         key = jr.PRNGKey(42)

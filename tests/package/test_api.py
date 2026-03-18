@@ -279,42 +279,29 @@ def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None
         _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
         _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
 
-        def scale(self, X, y, mu):
-            del X, y, mu
-            return jnp.asarray(1.0)
-
         def negloglikelihood(self, y, eta, disp=1.0, aux=None):
             del aux
             resid = jnp.asarray(y) - jnp.asarray(eta)
-            safe_disp = self.canonical_dispersion(disp)
+            safe_disp = jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
             return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
 
         def variance(self, mu, disp=1.0, aux=None):
             del aux
-            safe_disp = self.canonical_dispersion(disp)
+            safe_disp = jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
             return jnp.ones_like(jnp.asarray(mu)) * safe_disp
 
         def sample(self, key, eta, disp=1.0, aux=None):
             del key, disp, aux
             return jnp.asarray(eta)
 
-        def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, aux=None):
-            del X, y, eta, step_size, aux
-            return jnp.asarray(disp)
+        def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
+            del X, y, eta, step_size
+            new_disp = jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
+            new_aux = jnp.maximum(jnp.asarray(aux), jnp.asarray(0.25)) if aux is not None else jnp.asarray(0.25)
+            return new_disp, new_aux
 
-        def estimate_dispersion(
-            self, X, y, eta, disp=1.0, step_size=1.0, aux=None, tol=1e-3, max_iter=1000, offset_eta=0.0
-        ):
-            del X, y, eta, step_size, aux, tol, max_iter, offset_eta
-            return jnp.asarray(disp)
-
-        def canonical_dispersion(self, disp=0.0):
-            return jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
-
-        def canonical_auxiliary(self, aux=None):
-            if aux is None:
-                return jnp.asarray(0.25)
-            return jnp.maximum(jnp.asarray(aux), jnp.asarray(0.25))
+        def init_nuisance(self):
+            return jnp.asarray(1.0), jnp.asarray(0.25)
 
     model = glmax.GLM(family=_CanonicalWarmStartFamily())
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])

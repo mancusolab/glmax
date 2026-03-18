@@ -42,42 +42,29 @@ class _CanonicalWarmStartFamily(ExponentialDispersionFamily):
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
 
-    def scale(self, X, y, mu):
-        del X, y, mu
-        return jnp.asarray(1.0)
-
     def negloglikelihood(self, y, eta, disp=1.0, aux=None):
         del aux
         resid = jnp.asarray(y) - jnp.asarray(eta)
-        safe_disp = self.canonical_dispersion(disp)
+        safe_disp = jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
         return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
 
     def variance(self, mu, disp=1.0, aux=None):
         del aux
-        safe_disp = self.canonical_dispersion(disp)
+        safe_disp = jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
         return jnp.ones_like(jnp.asarray(mu)) * safe_disp
 
     def sample(self, key, eta, disp=1.0, aux=None):
         del key, disp, aux
         return jnp.asarray(eta)
 
-    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, aux=None):
-        del X, y, eta, step_size, aux
-        return jnp.asarray(disp)
+    def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
+        del X, y, eta, step_size
+        new_disp = jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
+        new_aux = jnp.maximum(jnp.asarray(aux), jnp.asarray(0.25)) if aux is not None else jnp.asarray(0.25)
+        return new_disp, new_aux
 
-    def estimate_dispersion(
-        self, X, y, eta, disp=1.0, step_size=1.0, aux=None, tol=1e-3, max_iter=1000, offset_eta=0.0
-    ):
-        del X, y, eta, step_size, aux, tol, max_iter, offset_eta
-        return jnp.asarray(disp)
-
-    def canonical_dispersion(self, disp=0.0):
-        return jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
-
-    def canonical_auxiliary(self, aux=None):
-        if aux is None:
-            return jnp.asarray(0.25)
-        return jnp.maximum(jnp.asarray(aux), jnp.asarray(0.25))
+    def init_nuisance(self):
+        return jnp.asarray(1.0), jnp.asarray(0.25)
 
 
 class _NonIdempotentCanonicalWarmStartFamily(ExponentialDispersionFamily):
@@ -85,10 +72,6 @@ class _NonIdempotentCanonicalWarmStartFamily(ExponentialDispersionFamily):
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
 
-    def scale(self, X, y, mu):
-        del X, y, mu
-        return jnp.asarray(1.0)
-
     def negloglikelihood(self, y, eta, disp=1.0, aux=None):
         del aux
         resid = jnp.asarray(y) - jnp.asarray(eta)
@@ -104,25 +87,16 @@ class _NonIdempotentCanonicalWarmStartFamily(ExponentialDispersionFamily):
         del key, disp, aux
         return jnp.asarray(eta)
 
-    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, aux=None):
-        del X, y, eta, step_size, aux
-        return jnp.asarray(disp)
-
-    def estimate_dispersion(
-        self, X, y, eta, disp=1.0, step_size=1.0, aux=None, tol=1e-3, max_iter=1000, offset_eta=0.0
-    ):
-        del X, y, eta, step_size, aux, tol, max_iter, offset_eta
-        return jnp.asarray(disp)
-
-    def canonical_dispersion(self, disp=0.0):
+    def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
+        del X, y, eta, step_size
         disp_array = jnp.asarray(disp)
-        return jnp.where(disp_array < 1.0, jnp.asarray(1.0), jnp.asarray(2.0))
+        new_disp = jnp.where(disp_array < 1.0, jnp.asarray(1.0), jnp.asarray(2.0))
+        aux_array = jnp.asarray(aux) if aux is not None else jnp.asarray(0.0)
+        new_aux = jnp.where(aux_array < 1.0, jnp.asarray(1.0), jnp.asarray(2.0))
+        return new_disp, new_aux
 
-    def canonical_auxiliary(self, aux=None):
-        if aux is None:
-            return jnp.asarray(2.0)
-        aux_array = jnp.asarray(aux)
-        return jnp.where(aux_array < 1.0, jnp.asarray(1.0), jnp.asarray(2.0))
+    def init_nuisance(self):
+        return jnp.asarray(1.0), jnp.asarray(2.0)
 
 
 class _AuxSensitiveIRLSFamily(ExponentialDispersionFamily):
@@ -130,43 +104,28 @@ class _AuxSensitiveIRLSFamily(ExponentialDispersionFamily):
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
 
-    def scale(self, X, y, mu):
-        del X, y, mu
-        return jnp.asarray(1.0)
-
     def negloglikelihood(self, y, eta, disp=1.0, aux=None):
         del disp
-        alpha = self.canonical_auxiliary(aux)
+        alpha = jnp.asarray(0.5) if aux is None else jnp.asarray(aux)
         resid = jnp.asarray(y) - jnp.asarray(eta)
         return jnp.sum(jnp.square(resid)) / alpha + alpha
 
     def variance(self, mu, disp=1.0, aux=None):
         del disp
-        alpha = self.canonical_auxiliary(aux)
+        alpha = jnp.asarray(0.5) if aux is None else jnp.asarray(aux)
         return jnp.ones_like(jnp.asarray(mu)) * alpha
 
     def sample(self, key, eta, disp=1.0, aux=None):
         del key, disp
-        return jnp.asarray(eta) + self.canonical_auxiliary(aux)
+        alpha = jnp.asarray(0.5) if aux is None else jnp.asarray(aux)
+        return jnp.asarray(eta) + alpha
 
-    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, aux=None):
-        del X, y, eta, disp, step_size, aux
-        return jnp.asarray(1.0)
+    def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
+        del X, y, eta, disp, step_size
+        return jnp.asarray(1.0), aux
 
-    def estimate_dispersion(
-        self, X, y, eta, disp=1.0, aux=None, step_size=1.0, tol=1e-3, max_iter=1000, offset_eta=0.0
-    ):
-        del X, y, eta, disp, aux, step_size, tol, max_iter, offset_eta
-        return jnp.asarray(1.0)
-
-    def canonical_dispersion(self, disp=1.0):
-        del disp
-        return jnp.asarray(1.0)
-
-    def canonical_auxiliary(self, aux=None):
-        if aux is None:
-            return jnp.asarray(0.5)
-        return jnp.asarray(aux)
+    def init_nuisance(self):
+        return jnp.asarray(1.0), jnp.asarray(0.5)
 
 
 def test_irls_fitter_traces_link_derivative_once_per_iteration_body() -> None:
@@ -181,10 +140,6 @@ def test_irls_fitter_traces_link_derivative_once_per_iteration_body() -> None:
         glink: _CountingIdentityLink = _CountingIdentityLink()
         _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink, _CountingIdentityLink]
         _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
-
-        def scale(self, X, y, mu):
-            del X, y, mu
-            return jnp.asarray(1.0)
 
         def negloglikelihood(self, y, eta, disp=1.0, aux=None):
             del disp, aux

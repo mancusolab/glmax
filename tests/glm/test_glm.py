@@ -13,7 +13,7 @@ import jax.random as rdm
 import glmax
 
 from glmax import GLMData
-from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
+from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
 from glmax.family.links import IdentityLink
 
@@ -96,10 +96,6 @@ class _AuxiliaryWarmStartFamily(ExponentialDispersionFamily):
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
 
-    def scale(self, X, y, mu):
-        del X, y, mu
-        return jnp.asarray(1.0)
-
     def negloglikelihood(self, y, eta, disp=0.0, aux=None):
         del disp, aux
         return jnp.sum(jnp.square(jnp.asarray(y) - jnp.asarray(eta)))
@@ -112,33 +108,18 @@ class _AuxiliaryWarmStartFamily(ExponentialDispersionFamily):
         del key, disp, aux
         return jnp.asarray(eta)
 
-    def update_dispersion(self, X, y, eta, disp=0.0, step_size=1.0, aux=None):
-        del X, y, eta, step_size, aux
-        return jnp.asarray(disp) + 2.0
+    def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
+        del X, y, eta, step_size
+        return jnp.asarray(disp) + 2.0, jnp.asarray(aux) + 0.5
 
-    def estimate_dispersion(
-        self, X, y, eta, disp=0.0, step_size=1.0, aux=None, tol=1e-3, max_iter=1000, offset_eta=0.0
-    ):
-        del X, y, eta, step_size, aux, tol, max_iter, offset_eta
-        return jnp.asarray(disp) + 3.0
-
-    def canonical_dispersion(self, disp=0.0):
-        return jnp.asarray(disp) + 1.0
-
-    def canonical_auxiliary(self, aux=None):
-        if aux is None:
-            return jnp.asarray(0.25)
-        return jnp.asarray(aux) + 0.5
+    def init_nuisance(self):
+        return jnp.asarray(1.0), jnp.asarray(0.25)
 
 
 class _LegacyCalcWeightFamily(ExponentialDispersionFamily):
     glink: IdentityLink = IdentityLink()
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
-
-    def scale(self, X, y, mu):
-        del X, y, mu
-        return jnp.asarray(1.0)
 
     def negloglikelihood(self, y, eta, disp=0.0, aux=None):
         del disp, aux
@@ -164,10 +145,6 @@ class _MissingAuxLogProbFamily(ExponentialDispersionFamily):
     glink: IdentityLink = IdentityLink()
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
-
-    def scale(self, X, y, mu):
-        del X, y, mu
-        return jnp.asarray(1.0)
 
     def negloglikelihood(self, y, eta, disp=0.0):
         del disp
@@ -330,19 +307,6 @@ def test_glm_link_deriv_matches_family() -> None:
     assert jnp.allclose(result, expected)
 
 
-def test_glm_scale_delegates() -> None:
-    """GLM.scale(X, y, mu) matches family.scale(X, y, mu)."""
-    model = glmax.GLM(family=Gaussian())
-    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
-    y = jnp.array([1.0, 2.0, 3.0])
-    mu = jnp.array([1.1, 1.9, 3.1])
-
-    result = model.scale(X, y, mu)
-    expected = model.family.scale(X, y, mu)
-
-    assert jnp.allclose(result, expected)
-
-
 def test_glm_init_eta_matches_family() -> None:
     """GLM.init_eta(y) matches family.init_eta(y)."""
     model = glmax.GLM(family=Gaussian())
@@ -350,17 +314,6 @@ def test_glm_init_eta_matches_family() -> None:
 
     result = model.init_eta(y)
     expected = model.family.init_eta(y)
-
-    assert jnp.allclose(result, expected)
-
-
-def test_glm_canonicalize_dispersion_matches_family() -> None:
-    """GLM.canonicalize_dispersion(disp) matches family.canonical_dispersion(disp)."""
-    model = glmax.GLM(family=Gaussian())
-    disp = 2.5
-
-    result = model.canonicalize_dispersion(disp)
-    expected = model.family.canonical_dispersion(disp)
 
     assert jnp.allclose(result, expected)
 
@@ -461,8 +414,7 @@ def test_glm_forwards_aux_to_family_methods() -> None:
     log_prob = model.log_prob(y, eta, disp=disp, aux=aux)
     sample = model.sample(key, eta, disp=disp, aux=aux)
     mu, g_deriv, weight = model.working_weights(eta, disp=disp, aux=aux)
-    updated_disp = model.update_dispersion(X, y, eta, disp=disp, step_size=step_size, aux=aux)
-    estimated_disp = model.estimate_dispersion(X, y, eta, disp=disp, aux=aux)
+    new_disp, new_aux = model.update_nuisance(X, y, eta, disp=disp, step_size=step_size, aux=aux)
 
     expected_log_prob = -model.family.negloglikelihood(y, eta, disp=disp, aux=aux)
     expected_sample = model.family.sample(key, eta, disp=disp, aux=aux)
@@ -470,16 +422,17 @@ def test_glm_forwards_aux_to_family_methods() -> None:
     expected_variance = model.family.variance(expected_mu, disp=disp, aux=aux)
     expected_g_deriv = model.link_deriv(expected_mu)
     expected_weight = 1.0 / (expected_variance * expected_g_deriv**2)
-    expected_updated_disp = model.family.update_dispersion(X, y, eta, disp=disp, step_size=step_size, aux=aux)
-    expected_estimated_disp = model.family.estimate_dispersion(X, y, eta, disp=disp, aux=aux)
+    expected_new_disp, expected_new_aux = model.family.update_nuisance(
+        X, y, eta, disp=disp, step_size=step_size, aux=aux
+    )
 
     assert jnp.allclose(log_prob, expected_log_prob)
     assert jnp.allclose(sample, expected_sample)
     assert jnp.allclose(mu, expected_mu)
     assert jnp.allclose(g_deriv, expected_g_deriv)
     assert jnp.allclose(weight, expected_weight)
-    assert jnp.allclose(updated_disp, expected_updated_disp)
-    assert jnp.allclose(estimated_disp, expected_estimated_disp)
+    assert jnp.allclose(new_disp, expected_new_disp)
+    assert (new_aux is None) == (expected_new_aux is None)
 
 
 def test_glm_docstrings_describe_split_disp_aux_contract() -> None:
@@ -490,25 +443,20 @@ def test_glm_docstrings_describe_split_disp_aux_contract() -> None:
         glmax.GLM.log_prob,
         glmax.GLM.sample,
         glmax.GLM.working_weights,
-        glmax.GLM.canonicalize_auxiliary,
-        glmax.GLM.canonicalize_params,
     ):
         assert method.__doc__ is not None
         assert "`disp`" in method.__doc__
         assert "`aux`" in method.__doc__
 
 
-def test_glm_canonicalize_auxiliary_ignores_aux_for_gaussian() -> None:
-    model = glmax.GLM(family=Gaussian())
-
-    assert model.canonicalize_auxiliary(jnp.array(0.2)) is None
-
-
-@pytest.mark.parametrize("family", [Poisson(), Binomial(), Gamma()])
-def test_glm_canonicalize_auxiliary_ignores_aux_for_families_without_aux_state(family) -> None:
-    model = glmax.GLM(family=family)
-
-    assert model.canonicalize_auxiliary(jnp.array(0.2)) is None
+def test_glm_init_nuisance_returns_family_defaults() -> None:
+    """GLM.init_nuisance() returns (1.0, None) for non-aux families and (1.0, array) for NB."""
+    assert glmax.GLM(family=Gaussian()).init_nuisance() == (jnp.asarray(1.0), None)
+    assert glmax.GLM(family=Poisson()).init_nuisance() == (jnp.asarray(1.0), None)
+    nb_disp, nb_aux = glmax.GLM(family=NegativeBinomial()).init_nuisance()
+    assert jnp.allclose(nb_disp, jnp.asarray(1.0))
+    assert nb_aux is not None
+    assert float(nb_aux) > 0.0
 
 
 @pytest.mark.parametrize(
@@ -532,22 +480,3 @@ def test_glm_methods_ignore_aux_for_families_without_aux_state(family, y, eta) -
     for actual, truth in zip(with_aux_weight, baseline_weight, strict=True):
         assert jnp.allclose(actual, truth)
     assert jnp.array_equal(with_aux_sample, baseline_sample)
-
-
-def test_glm_canonicalize_params_routes_negative_binomial_alpha_to_aux() -> None:
-    model = glmax.GLM(family=NegativeBinomial())
-
-    canonical_disp, canonical_aux = model.canonicalize_params(jnp.array(3.5), jnp.array(0.2))
-
-    assert jnp.allclose(canonical_disp, jnp.array(1.0))
-    assert canonical_aux is not None
-    assert jnp.allclose(canonical_aux, jnp.array(0.2))
-
-
-def test_glm_canonicalize_params_delegates_warm_start_values_through_model_boundary() -> None:
-    model = glmax.GLM(family=_AuxiliaryWarmStartFamily())
-
-    canonical_disp, canonical_aux = model.canonicalize_params(jnp.array(0.5), None)
-
-    assert jnp.allclose(canonical_disp, jnp.array(1.5))
-    assert jnp.allclose(canonical_aux, jnp.array(0.25))

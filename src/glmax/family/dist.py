@@ -11,7 +11,6 @@ import jax.random as rdm
 import jax.scipy.stats as jaxstats
 
 from equinox import AbstractVar
-from jax import lax
 from jax.scipy.special import gammaln
 from jaxtyping import Array, ArrayLike, ScalarLike
 
@@ -63,21 +62,6 @@ class ExponentialDispersionFamily(eqx.Module):
     def __check_init__(self):
         if not any([isinstance(self.glink, link) for link in self._links]):
             raise ValueError(f"Link {self.glink} is invalid for Family {self}")
-
-    @abstractmethod
-    def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
-        """Compute the dispersion scale factor.
-
-        **Arguments:**
-
-        - `X`: design matrix, shape `(n, p)`.
-        - `y`: observed responses, shape `(n,)`.
-        - `mu`: mean parameter, shape `(n,)`.
-
-        **Returns:**
-
-        Scalar dispersion estimate.
-        """
 
     @abstractmethod
     def negloglikelihood(
@@ -138,21 +122,6 @@ class ExponentialDispersionFamily(eqx.Module):
         Samples, shape `(n,)`, same dtype as JAX float default.
         """
 
-    def score(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
-        r"""Score vector $\nabla_\beta \ell = X^\top (y - \mu) / \phi$.
-
-        **Arguments:**
-
-        - `X`: design matrix, shape `(n, p)`.
-        - `y`: observed responses, shape `(n,)`.
-        - `mu`: fitted means, shape `(n,)`.
-
-        **Returns:**
-
-        Score vector, shape `(p,)`.
-        """
-        return -X.T @ (y - mu) / self.scale(X, y, mu)
-
     def calc_weight(
         self,
         eta: ArrayLike,
@@ -182,51 +151,47 @@ class ExponentialDispersionFamily(eqx.Module):
     def init_eta(self, y: ArrayLike) -> Array:
         return self.glink((y + y.mean()) / 2)
 
-    def update_dispersion(
+    def update_nuisance(
         self,
         X: ArrayLike,
         y: ArrayLike,
         eta: ArrayLike,
-        disp: ScalarLike = 0.01,
+        disp: ScalarLike,
         step_size: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
-    ) -> Array:
-        del aux
-        return self.canonical_dispersion(0.0)
+    ) -> tuple[Array, Array | None]:
+        r"""Apply one nuisance-parameter update step inside the IRLS loop.
 
-    def estimate_dispersion(
-        self,
-        X: ArrayLike,
-        y: ArrayLike,
-        eta: ArrayLike,
-        disp: ScalarLike = 0.01,
-        step_size: ScalarLike = 1.0,
-        aux: ScalarLike | None = None,
-        tol: ScalarLike = 1e-3,
-        max_iter: int = 1000,
-        offset_eta: ScalarLike = 0.0,
-    ) -> Array:
-        del aux
-        return self.canonical_dispersion(0.0)
-
-    def canonical_dispersion(self, disp: ScalarLike = 0.0) -> Array:
-        del disp
-        return jnp.asarray(0.0)
-
-    def canonical_auxiliary(self, aux: ScalarLike | None = None) -> Array | None:
-        r"""Canonicalize optional family-specific auxiliary state.
+        Returns the updated `(disp, aux)` pair.  The base implementation is a
+        no-op identity: it returns `(disp, aux)` unchanged.  Families that
+        estimate a nuisance parameter override this method and update whichever
+        slot they own — `disp` for EDM-dispersion families (e.g. Gaussian),
+        `aux` for structural-parameter families (e.g. Negative Binomial).
 
         **Arguments:**
 
+        - `X`: design matrix, shape `(n, p)`.
+        - `y`: observed responses, shape `(n,)`.
+        - `eta`: linear predictor at current iteration, shape `(n,)`.
+        - `disp`: current EDM dispersion scalar.
+        - `step_size`: IRLS step-size multiplier.
         - `aux`: optional family-specific auxiliary scalar.
 
         **Returns:**
 
-        Canonical auxiliary scalar, or `None` for families without auxiliary state.
-        Families that do not use auxiliary state ignore any provided `aux`.
+        Tuple `(new_disp, new_aux)`.
         """
-        del aux
-        return None
+        del X, y, eta, step_size
+        return jnp.asarray(disp), aux
+
+    def init_nuisance(self) -> tuple[Array, Array | None]:
+        """Return the default ``(disp, aux)`` pair used to seed the IRLS loop.
+
+        **Returns:**
+
+        ``(jnp.asarray(1.0), None)`` for families without auxiliary state.
+        """
+        return jnp.asarray(1.0), None
 
 
 class Gaussian(ExponentialDispersionFamily):
@@ -248,12 +213,6 @@ class Gaussian(ExponentialDispersionFamily):
         - `glink`: link function (default: `IdentityLink()`).
         """
         self.glink = glink
-
-    def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
-        resid = jnp.sum(jnp.square(mu - y))
-        df = y.shape[0] - X.shape[1]
-        phi = resid / df
-        return phi
 
     def negloglikelihood(
         self,
@@ -304,16 +263,16 @@ class Gaussian(ExponentialDispersionFamily):
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return jnp.ones_like(mu) * safe_disp
 
-    def update_dispersion(
+    def update_nuisance(
         self,
         X: ArrayLike,
         y: ArrayLike,
         eta: ArrayLike,
-        disp: ScalarLike = 0.01,
+        disp: ScalarLike,
         step_size: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
-    ) -> Array:
-        r"""Compute RSS/df as the Gaussian dispersion estimate.
+    ) -> tuple[Array, Array | None]:
+        r"""Compute RSS/df and return as the updated `(disp, aux)` pair.
 
         **Arguments:**
 
@@ -326,15 +285,15 @@ class Gaussian(ExponentialDispersionFamily):
 
         **Returns:**
 
-        $\hat{\sigma}^2 = \mathrm{RSS} / (n - p)$, scalar.  When $n \le p$
-        (saturated or over-parameterised design), the denominator is clamped to
-        1 to keep the result finite and non-negative.
+        `(hat_sigma_sq, None)` where $\hat{\sigma}^2 = \mathrm{RSS} / (n - p)$.
+        When $n \le p$ (saturated or over-parameterised design), the denominator
+        is clamped to 1 to keep the result finite and non-negative.
         """
         del disp, step_size, aux
         mu = self.glink.inverse(eta)
         n, p = X.shape
         df = jnp.maximum(n - p, 1)
-        return jnp.sum((y - mu) ** 2) / df
+        return jnp.sum((y - mu) ** 2) / df, None
 
     def sample(
         self,
@@ -361,60 +320,6 @@ class Gaussian(ExponentialDispersionFamily):
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return mu + rdm.normal(key, shape=mu.shape) * jnp.sqrt(safe_disp)
 
-    def estimate_dispersion(
-        self,
-        X: ArrayLike,
-        y: ArrayLike,
-        eta: ArrayLike,
-        disp: ScalarLike = 1.0,
-        aux: ScalarLike | None = None,
-        **kwargs,
-    ) -> Array:
-        r"""Estimate $\sigma^2 = \mathrm{RSS} / (n - p)$.
-
-        Delegates to `update_dispersion`.
-
-        **Note on estimator:** $\mathrm{RSS} / (n - p)$ is the REML/unbiased
-        estimator of $\sigma^2$ (not the MLE, which divides by $n$).  The
-        denominator is clamped to at least 1 when $n \le p$ to keep the
-        result finite.
-
-        **Note on standard errors:** `FisherInfoError` phi-scaling is deferred
-        to Phase 5.  Until Phase 5 lands, Gaussian standard errors returned by
-        `_infer()` are *not* phi-scaled (they assume $\phi = 1$).
-
-        **Arguments:**
-
-        - `X`: design matrix, shape `(n, p)`.
-        - `y`: responses, shape `(n,)`.
-        - `eta`: linear predictor at convergence, shape `(n,)`.
-        - `disp`: unused (replaced by RSS/df).
-        - `aux`: ignored.
-
-        **Returns:**
-
-        $\hat{\sigma}^2$, scalar.
-        """
-        del disp, aux
-        return self.update_dispersion(X, y, eta)
-
-    def canonical_dispersion(self, disp: ScalarLike = 1.0) -> Array:
-        r"""Return dispersion as-is (sigma^2 for Gaussian).
-
-        **Arguments:**
-
-        - `disp`: variance $\sigma^2$, scalar.
-
-        **Returns:**
-
-        `jnp.asarray(disp)`.
-        """
-        return jnp.asarray(disp)
-
-    def canonical_auxiliary(self, aux: ScalarLike | None = None) -> Array | None:
-        del aux
-        return None
-
 
 class Binomial(ExponentialDispersionFamily):
     r"""Binomial exponential family for binary responses.
@@ -440,9 +345,6 @@ class Binomial(ExponentialDispersionFamily):
         """
         self.glink = glink
 
-    def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
-        return jnp.asarray(1.0)
-
     def negloglikelihood(
         self,
         y: ArrayLike,
@@ -463,13 +365,11 @@ class Binomial(ExponentialDispersionFamily):
 
         Scalar negative log-likelihood.
         """
-        del disp
-        self.canonical_auxiliary(aux)
+        del disp, aux
         return -jnp.sum(jaxstats.bernoulli.logpmf(y, self.glink.inverse(eta)))
 
     def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
-        del disp
-        self.canonical_auxiliary(aux)
+        del disp, aux
         return mu * (1 - mu)
 
     def init_eta(self, y: ArrayLike) -> Array:
@@ -495,20 +395,9 @@ class Binomial(ExponentialDispersionFamily):
 
         Binary samples, shape `(n,)`.
         """
-        del disp
-        self.canonical_auxiliary(aux)
+        del disp, aux
         mu = self.glink.inverse(eta)
         return rdm.bernoulli(key, p=mu, shape=mu.shape).astype(jnp.float64)
-
-    def canonical_dispersion(self, disp: ScalarLike = 0.0) -> Array:
-        r"""Canonical dispersion for Binomial is 1.0 (phi = 1).
-
-        **Returns:**
-
-        `jnp.asarray(1.0)`.
-        """
-        del disp
-        return jnp.asarray(1.0)
 
 
 class Poisson(ExponentialDispersionFamily):
@@ -531,9 +420,6 @@ class Poisson(ExponentialDispersionFamily):
         """
         self.glink = glink
 
-    def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
-        return jnp.asarray(1.0)
-
     def negloglikelihood(
         self,
         y: ArrayLike,
@@ -554,13 +440,11 @@ class Poisson(ExponentialDispersionFamily):
 
         Scalar negative log-likelihood.
         """
-        del disp
-        self.canonical_auxiliary(aux)
+        del disp, aux
         return -jnp.sum(jaxstats.poisson.logpmf(y, self.glink.inverse(eta)))
 
     def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
-        del disp
-        self.canonical_auxiliary(aux)
+        del disp, aux
         return mu
 
     def sample(
@@ -583,20 +467,9 @@ class Poisson(ExponentialDispersionFamily):
 
         Count samples, shape `(n,)`.
         """
-        del disp
-        self.canonical_auxiliary(aux)
+        del disp, aux
         lam = self.glink.inverse(eta)
         return rdm.poisson(key, lam=lam).astype(jnp.float64)
-
-    def canonical_dispersion(self, disp: ScalarLike = 0.0) -> Array:
-        r"""Canonical dispersion for Poisson is 1.0 (phi = 1).
-
-        **Returns:**
-
-        `jnp.asarray(1.0)`.
-        """
-        del disp
-        return jnp.asarray(1.0)
 
 
 class NegativeBinomial(ExponentialDispersionFamily):
@@ -622,9 +495,6 @@ class NegativeBinomial(ExponentialDispersionFamily):
         - `glink`: link function (default: `LogLink()`).
         """
         self.glink = glink
-
-    def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
-        return jnp.asarray(1.0)
 
     def negloglikelihood(
         self,
@@ -754,17 +624,34 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         return _alpha_score(log_alpha), _alpha_hess(log_alpha)  # .reshape((1,))
 
-    def update_dispersion(
+    def update_nuisance(
         self,
         X: ArrayLike,
         y: ArrayLike,
         eta: ArrayLike,
-        disp: ScalarLike = 1.0,
+        disp: ScalarLike,
         step_size: ScalarLike = 0.1,
         aux: ScalarLike | None = None,
-    ) -> Array:
-        # TODO: update alpha such that it is lower bounded by 1e-6 (used to be 1e-8)
-        #   should have either parameter or smarter update on Manifold
+    ) -> tuple[Array, Array]:
+        r"""Apply one Newton step on $\log\alpha$ and return `(1.0, new_alpha)`.
+
+        Negative Binomial fixes `disp = 1.0` and updates `aux` (the
+        overdispersion $\alpha$) each IRLS iteration via a Newton step in
+        log-space.
+
+        **Arguments:**
+
+        - `X`: design matrix, shape `(n, p)`.
+        - `y`: observed counts, shape `(n,)`.
+        - `eta`: linear predictor at current iteration, shape `(n,)`.
+        - `disp`: ignored; Negative Binomial fixes `disp = 1.0`.
+        - `step_size`: Newton step damping factor (default `0.1`).
+        - `aux`: current overdispersion $\alpha > 0$.
+
+        **Returns:**
+
+        `(1.0, new_alpha)`.
+        """
         alpha = _nb_alpha_from_split(disp, aux)
         log_alpha = jnp.log(alpha)
         score, hess = self.log_alpha_score_and_hessian(X, y, eta, log_alpha)
@@ -773,53 +660,17 @@ class NegativeBinomial(ExponentialDispersionFamily):
             min=jnp.log(jnp.asarray(1e-9)),
             max=jnp.log(jnp.asarray(1e9)),
         )
+        return jnp.asarray(1.0), jnp.exp(log_alpha_n)
 
-        return jnp.exp(log_alpha_n)
+    def init_nuisance(self) -> tuple[Array, Array]:
+        """Return the default ``(disp, aux)`` pair for NegativeBinomial.
 
-    def estimate_dispersion(
-        self,
-        X: ArrayLike,
-        y: ArrayLike,
-        eta: ArrayLike,
-        disp: ScalarLike = 1.0,
-        step_size=0.1,
-        aux: ScalarLike | None = None,
-        tol=1e-3,
-        max_iter=1000,
-    ) -> Array:
-        alpha = _nb_alpha_from_split(disp, aux)
+        **Returns:**
 
-        def body_fun(val: tuple):
-            diff, num_iter, alpha_o = val
-            log_alpha_o = jnp.log(alpha_o)
-            score, hess = self.log_alpha_score_and_hessian(X, y, eta, log_alpha_o)
-            log_alpha_n = jnp.clip(
-                log_alpha_o - step_size * (score / hess),
-                min=jnp.log(jnp.asarray(1e-9)),
-                max=jnp.log(jnp.asarray(1e9)),
-            )
-            diff = jnp.exp(log_alpha_n) - jnp.exp(log_alpha_o)
-
-            return diff, num_iter + 1, jnp.exp(log_alpha_n)
-
-        def cond_fun(val: tuple):
-            diff, num_iter, alpha_o = val
-            cond_l = jnp.logical_and(jnp.fabs(diff) > tol, num_iter <= max_iter)
-            return cond_l
-
-        init_tuple = (10000.0, 0, alpha)
-        diff, num_iters, alpha = lax.while_loop(cond_fun, body_fun, init_tuple)
-
-        return alpha
-
-    def canonical_dispersion(self, disp: ScalarLike = 0.0) -> Array:
-        del disp
-        return jnp.asarray(1.0)
-
-    def canonical_auxiliary(self, aux: ScalarLike | None = None) -> Array:
-        if aux is None:
-            return jnp.asarray(0.1)
-        return _validate_positive_finite_scalar("NegativeBinomial alpha", aux)
+        ``(jnp.asarray(1.0), jnp.asarray(0.1))`` — ``disp`` is always 1.0 for NB;
+        ``aux`` is the initial overdispersion seed ``alpha = 0.1``.
+        """
+        return jnp.asarray(1.0), jnp.asarray(0.1)
 
 
 class Gamma(ExponentialDispersionFamily):
@@ -831,8 +682,7 @@ class Gamma(ExponentialDispersionFamily):
     The mean is $\mu > 0$ and the variance is $\phi \mu^2$.
 
     The canonical link for Gamma is `InverseLink` ($g(\mu) = 1/\mu$).
-    `estimate_dispersion` is a no-op in this release; dispersion estimation is
-    deferred to a future design. Gamma uses `disp` as EDM dispersion and ignores `aux`.
+    Gamma uses `disp` as EDM dispersion and ignores `aux`.
     """
 
     glink: AbstractLink = InverseLink()
@@ -844,26 +694,6 @@ class Gamma(ExponentialDispersionFamily):
         - `glink`: link function (default: `InverseLink()`).
         """
         self.glink = glink
-
-    def scale(self, X: ArrayLike, y: ArrayLike, mu: ArrayLike) -> Array:
-        r"""Return scale $\phi = 1$ (Gamma uses identity scale).
-
-        **Arguments:**
-
-        - `X`: design matrix, shape `(n, p)`.
-        - `y`: responses, shape `(n,)`.
-        - `mu`: mean, shape `(n,)`.
-
-        **Returns:**
-
-        Scalar `1.0`.
-        """
-        del X, y, mu
-        return jnp.asarray(1.0)
-        # Note: returning 1.0 means FisherInfoError will compute SE = 1.0 * inv(X'WX),
-        # i.e. SE is not phi-scaled for Gamma. This is the correct deferred behaviour —
-        # dispersion estimation for Gamma is a non-goal in this design. When a future
-        # design adds Gamma dispersion estimation, this method will be updated.
 
     def negloglikelihood(
         self,
@@ -921,72 +751,6 @@ class Gamma(ExponentialDispersionFamily):
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return safe_disp * mu**2
 
-    def canonical_dispersion(self, disp: ScalarLike = 1.0) -> Array:
-        r"""Pass dispersion through unchanged.
-
-        **Arguments:**
-
-        - `disp`: dispersion $\phi$, scalar.
-
-        **Returns:**
-
-        `jnp.asarray(disp)`.
-        """
-        return jnp.asarray(disp)
-
-    def update_dispersion(
-        self,
-        X: ArrayLike,
-        y: ArrayLike,
-        eta: ArrayLike,
-        disp: ScalarLike = 1.0,
-        step_size: ScalarLike = 1.0,
-        aux: ScalarLike | None = None,
-    ) -> Array:
-        r"""Return dispersion unchanged (estimation deferred).
-
-        **Arguments:**
-
-        - `X`: design matrix (unused).
-        - `y`: responses (unused).
-        - `eta`: linear predictor (unused).
-        - `disp`: current dispersion estimate.
-        - `step_size`: unused.
-        - `aux`: ignored.
-
-        **Returns:**
-
-        `jnp.asarray(disp)` unchanged.
-        """
-        del X, y, eta, step_size, aux
-        return self.canonical_dispersion(disp)
-
-    def estimate_dispersion(
-        self,
-        X: ArrayLike,
-        y: ArrayLike,
-        eta: ArrayLike,
-        disp: ScalarLike = 1.0,
-        aux: ScalarLike | None = None,
-        **kwargs,
-    ) -> Array:
-        r"""Return dispersion unchanged (estimation deferred).
-
-        **Arguments:**
-
-        - `X`: design matrix (unused).
-        - `y`: responses (unused).
-        - `eta`: linear predictor (unused).
-        - `disp`: dispersion to return unchanged.
-        - `aux`: ignored.
-
-        **Returns:**
-
-        `jnp.asarray(disp)`.
-        """
-        del X, y, eta, aux
-        return self.canonical_dispersion(disp)
-
     def sample(
         self,
         key: Array,
@@ -1013,7 +777,3 @@ class Gamma(ExponentialDispersionFamily):
         k = 1.0 / disp
         theta = mu * disp
         return rdm.gamma(key, k, shape=mu.shape) * theta
-
-    def canonical_auxiliary(self, aux: ScalarLike | None = None) -> Array | None:
-        del aux
-        return None
