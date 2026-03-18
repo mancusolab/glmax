@@ -151,10 +151,9 @@ class IRLSFitter(AbstractFitter, strict=True):
             disp_init=disp_init,
             aux_init=aux_init,
         )
-        beta, n_iter, converged, disp, irls_aux, objective, objective_delta = state
+        beta, n_iter, converged, disp, aux, objective, objective_delta = state
 
         eta = X @ beta + offset
-        aux = irls_aux if default_aux is not None else None
         mu, link_deriv, weight = model.working_weights(eta, disp, aux)
         score_residual = (y - mu) * link_deriv
         beta = jnp.ravel(beta)
