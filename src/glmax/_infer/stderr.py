@@ -2,6 +2,8 @@
 
 """Internal standard-error estimators used by GLM fit/_infer kernels."""
 
+import math
+
 from abc import abstractmethod
 from typing import TYPE_CHECKING
 
@@ -14,6 +16,26 @@ from jax.numpy import linalg as jnpla
 
 if TYPE_CHECKING:
     from .. import FittedGLM
+
+
+def _validated_fitted_dispersion(fitted: "FittedGLM") -> Array:
+    """Return canonical fitted dispersion after finite/positive validation."""
+    phi = jnp.asarray(fitted.params.disp)
+    try:
+        phi_scalar = float(phi)
+    except TypeError:
+        phi_scalar = None
+
+    if phi_scalar is not None:
+        if not math.isfinite(phi_scalar) or phi_scalar <= 0.0:
+            raise ValueError("Inference requires fitted.params.disp to be finite and > 0.")
+        return phi
+
+    return eqx.error_if(
+        phi,
+        ~jnp.isfinite(phi) | (phi <= 0.0),
+        "Inference requires fitted.params.disp to be finite and > 0.",
+    )
 
 
 class AbstractStdErrEstimator(eqx.Module, strict=True):
@@ -56,9 +78,8 @@ class FisherInfoError(AbstractStdErrEstimator, strict=True):
 
         Covariance matrix, shape `(p, p)`.
         """
-        model = fitted.model
         fit_result = fitted.result
-        phi = jnp.asarray(model.scale(fit_result.X, fit_result.y, fit_result.mu))
+        phi = _validated_fitted_dispersion(fitted)
         w_pure = fit_result.glm_wt * phi
         information = (fit_result.X * w_pure[:, jnp.newaxis]).T @ fit_result.X
         return phi * jnpla.inv(information)
@@ -84,10 +105,9 @@ class HuberError(AbstractStdErrEstimator, strict=True):
 
         Sandwich covariance matrix, shape `(p, p)`.
         """
-        model = fitted.model
         fit_result = fitted.result
         X = fit_result.X
-        phi = jnp.asarray(model.scale(X, fit_result.y, fit_result.mu))
+        phi = _validated_fitted_dispersion(fitted)
         w_pure = fit_result.glm_wt * phi
         bread = phi * jnpla.inv((X * w_pure[:, jnp.newaxis]).T @ X)
 

@@ -13,7 +13,7 @@ from glmax import GLMData, InferenceResult
 from glmax._infer.hyptest import _wald_test, AbstractTest, ScoreTest, WaldTest
 from glmax._infer.infer import infer as legacy_infer
 from glmax._infer.stderr import AbstractStdErrEstimator, FisherInfoError
-from glmax.family import Binomial, Gaussian, Poisson
+from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 
 
 def _make_fitted(family=None):
@@ -45,6 +45,15 @@ def _make_binomial_fitted():
     return glmax.fit(model, data)
 
 
+def _make_negative_binomial_fitted():
+    model = glmax.specify(family=NegativeBinomial())
+    data = GLMData(
+        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
+        y=jnp.array([0.0, 1.0, 2.0, 4.0]),
+    )
+    return glmax.fit(model, data)
+
+
 def _make_perfect_fit_gaussian_fitted():
     model = glmax.specify(family=Gaussian())
     data = GLMData(
@@ -63,6 +72,11 @@ def _expected_score_stat(fitted):
     numerator = X.T @ (glm_wt * score_residual)
     fisher_diag = jnp.sum(X * (glm_wt[:, jnp.newaxis] * X), axis=0)
     return numerator / jnp.sqrt(phi * fisher_diag)
+
+
+def _with_dispersion(fitted, disp):
+    params = fitted.params._replace(disp=jnp.asarray(disp))
+    return eqx.tree_at(lambda tree: tree.result.params, fitted, params)
 
 
 def test_hypothesis_tests_are_strategy_objects() -> None:
@@ -178,6 +192,31 @@ def test_score_test_rejects_degenerate_scale() -> None:
 
     with pytest.raises(ValueError, match="finite and > 0"):
         ScoreTest()(fitted, FisherInfoError())
+
+
+def test_score_test_rejects_nonpositive_fitted_dispersion() -> None:
+    fitted = _with_dispersion(_make_fitted(), 0.0)
+
+    with pytest.raises(ValueError, match="fitted.params.disp"):
+        ScoreTest()(fitted, FisherInfoError())
+
+
+@pytest.mark.parametrize(
+    ("make_fitted", "disp"),
+    [
+        pytest.param(_make_fitted, 4.0, id="gaussian"),
+        pytest.param(_make_negative_binomial_fitted, 3.0, id="negative-binomial"),
+    ],
+)
+def test_score_test_uses_fitted_dispersion_as_phi_source_of_truth(make_fitted, disp) -> None:
+    fitted = _with_dispersion(make_fitted(), disp)
+
+    result = ScoreTest()(fitted, FisherInfoError())
+    expected_stat = _expected_score_stat(fitted)
+    expected_p = 2.0 * norm.sf(jnp.abs(expected_stat))
+
+    assert jnp.allclose(result.stat, expected_stat, atol=1e-12)
+    assert jnp.allclose(result.p, expected_p, atol=1e-12)
 
 
 def test_score_test_rejects_degenerate_fisher_diag() -> None:

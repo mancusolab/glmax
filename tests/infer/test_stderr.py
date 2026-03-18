@@ -1,5 +1,7 @@
 # pattern: Imperative Shell
 
+import pytest
+
 import equinox as eqx
 import jax.numpy as jnp
 import jax.numpy.linalg as jla
@@ -17,6 +19,23 @@ def _make_gaussian_xy(n: int = 30, p: int = 2, seed: int = 0):
     X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key, (n, p - 1))], axis=1)
     y = X @ jnp.ones(p) + jr.normal(jr.PRNGKey(seed + 1), (n,)) * 0.2
     return X, y
+
+
+def _with_dispersion(fitted, disp):
+    params = fitted.params._replace(disp=jnp.asarray(disp))
+    return eqx.tree_at(lambda tree: tree.result.params, fitted, params)
+
+
+def _expected_huber_covariance(fitted):
+    X = fitted.result.X
+    phi = jnp.asarray(fitted.params.disp)
+    w_pure = fitted.result.glm_wt * phi
+    bread = phi * jla.inv((X * w_pure[:, jnp.newaxis]).T @ X)
+
+    # `glm_wt` is the pure GLM weight; fitted `phi` supplies the covariance scale.
+    score_no_x = fitted.result.glm_wt * fitted.result.score_residual / phi
+    meat = (X * (score_no_x**2)[:, jnp.newaxis]).T @ X
+    return bread @ meat @ bread
 
 
 def test_fisher_info_error_jit_safe_and_finite():
@@ -74,6 +93,36 @@ def test_huber_error_finite_and_symmetric() -> None:
 
     assert bool(jnp.all(jnp.isfinite(cov))), f"HuberError covariance must be finite; got diag={jnp.diag(cov)}"
     assert bool(jnp.allclose(cov, cov.T, atol=1e-6)), "HuberError covariance must be symmetric"
+
+
+@pytest.mark.parametrize(
+    ("estimator",),
+    [
+        pytest.param(FisherInfoError(), id="fisher"),
+        pytest.param(HuberError(), id="huber"),
+    ],
+)
+def test_stderr_estimators_reject_nonpositive_fitted_dispersion(estimator) -> None:
+    X, y = _make_gaussian_xy()
+    fitted = glmax.fit(glmax.specify(family=Gaussian()), GLMData(X=X, y=y))
+    invalid_fitted = _with_dispersion(fitted, 0.0)
+
+    with pytest.raises(ValueError, match="fitted.params.disp"):
+        estimator(invalid_fitted)
+
+
+def test_huber_error_uses_fitted_dispersion_as_phi_source_of_truth() -> None:
+    X, y = _make_gaussian_xy(seed=11)
+    fitted = glmax.fit(glmax.specify(family=Gaussian()), GLMData(X=X, y=y))
+    scaled_fitted = _with_dispersion(fitted, jnp.asarray(fitted.params.disp) * 3.0)
+
+    cov = HuberError()(scaled_fitted)
+    expected_cov = _expected_huber_covariance(scaled_fitted)
+
+    assert bool(jnp.allclose(cov, expected_cov, atol=1e-5)), (
+        "HuberError must use fitted.params.disp as phi.\n"
+        f"phi={scaled_fitted.params.disp}\nactual diag={jnp.diag(cov)}\nexpected diag={jnp.diag(expected_cov)}"
+    )
 
 
 def test_gaussian_se_equals_ols_formula() -> None:

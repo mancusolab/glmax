@@ -17,7 +17,7 @@ from .._fit import FittedGLM
 from ..family.dist import Gaussian
 from ..family.utils import t_cdf
 from ..glm import GLM
-from .stderr import AbstractStdErrEstimator
+from .stderr import _validated_fitted_dispersion, AbstractStdErrEstimator
 from .types import InferenceResult
 
 
@@ -111,15 +111,10 @@ class ScoreTest(AbstractTest, strict=True):
         fit_result = fitted.result
 
         X = fit_result.X
-        y = fit_result.y
-        mu = fit_result.mu
         glm_wt = fit_result.glm_wt
         score_residual = fit_result.score_residual
         beta = jnp.asarray(fit_result.params.beta)
-        phi = jnp.asarray(fitted.model.scale(X, y, mu))
-        phi = eqx.error_if(
-            phi, ~jnp.isfinite(phi) | (phi <= 0.0), "ScoreTest requires family.scale(X, y, mu) to be finite and > 0."
-        )
+        phi = _validated_fitted_dispersion(fitted)
 
         numerator = X.T @ (glm_wt * score_residual)
         fisher_diag = jnp.sum(X * (glm_wt[:, jnp.newaxis] * X), axis=0)
