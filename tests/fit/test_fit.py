@@ -46,25 +46,29 @@ class _CanonicalWarmStartFamily(ExponentialDispersionFamily):
         del X, y, mu
         return jnp.asarray(1.0)
 
-    def negloglikelihood(self, y, eta, disp=1.0):
+    def negloglikelihood(self, y, eta, disp=1.0, aux=None):
+        del aux
         resid = jnp.asarray(y) - jnp.asarray(eta)
         safe_disp = self.canonical_dispersion(disp)
         return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
 
-    def variance(self, mu, disp=1.0):
+    def variance(self, mu, disp=1.0, aux=None):
+        del aux
         safe_disp = self.canonical_dispersion(disp)
         return jnp.ones_like(jnp.asarray(mu)) * safe_disp
 
-    def sample(self, key, eta, disp=1.0):
-        del key, disp
+    def sample(self, key, eta, disp=1.0, aux=None):
+        del key, disp, aux
         return jnp.asarray(eta)
 
-    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0):
-        del X, y, eta, step_size
+    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, aux=None):
+        del X, y, eta, step_size, aux
         return jnp.asarray(disp)
 
-    def estimate_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, tol=1e-3, max_iter=1000, offset_eta=0.0):
-        del X, y, eta, step_size, tol, max_iter, offset_eta
+    def estimate_dispersion(
+        self, X, y, eta, disp=1.0, step_size=1.0, aux=None, tol=1e-3, max_iter=1000, offset_eta=0.0
+    ):
+        del X, y, eta, step_size, aux, tol, max_iter, offset_eta
         return jnp.asarray(disp)
 
     def canonical_dispersion(self, disp=0.0):
@@ -85,25 +89,29 @@ class _NonIdempotentCanonicalWarmStartFamily(ExponentialDispersionFamily):
         del X, y, mu
         return jnp.asarray(1.0)
 
-    def negloglikelihood(self, y, eta, disp=1.0):
+    def negloglikelihood(self, y, eta, disp=1.0, aux=None):
+        del aux
         resid = jnp.asarray(y) - jnp.asarray(eta)
         safe_disp = jnp.asarray(disp)
         return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
 
-    def variance(self, mu, disp=1.0):
+    def variance(self, mu, disp=1.0, aux=None):
+        del aux
         safe_disp = jnp.asarray(disp)
         return jnp.ones_like(jnp.asarray(mu)) * safe_disp
 
-    def sample(self, key, eta, disp=1.0):
-        del key, disp
+    def sample(self, key, eta, disp=1.0, aux=None):
+        del key, disp, aux
         return jnp.asarray(eta)
 
-    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0):
-        del X, y, eta, step_size
+    def update_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, aux=None):
+        del X, y, eta, step_size, aux
         return jnp.asarray(disp)
 
-    def estimate_dispersion(self, X, y, eta, disp=1.0, step_size=1.0, tol=1e-3, max_iter=1000, offset_eta=0.0):
-        del X, y, eta, step_size, tol, max_iter, offset_eta
+    def estimate_dispersion(
+        self, X, y, eta, disp=1.0, step_size=1.0, aux=None, tol=1e-3, max_iter=1000, offset_eta=0.0
+    ):
+        del X, y, eta, step_size, aux, tol, max_iter, offset_eta
         return jnp.asarray(disp)
 
     def canonical_dispersion(self, disp=0.0):

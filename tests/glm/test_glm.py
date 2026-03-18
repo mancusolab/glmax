@@ -100,24 +100,26 @@ class _AuxiliaryWarmStartFamily(ExponentialDispersionFamily):
         del X, y, mu
         return jnp.asarray(1.0)
 
-    def negloglikelihood(self, y, eta, disp=0.0):
-        del disp
+    def negloglikelihood(self, y, eta, disp=0.0, aux=None):
+        del disp, aux
         return jnp.sum(jnp.square(jnp.asarray(y) - jnp.asarray(eta)))
 
-    def variance(self, mu, disp=0.0):
-        del disp
+    def variance(self, mu, disp=0.0, aux=None):
+        del disp, aux
         return jnp.ones_like(jnp.asarray(mu))
 
-    def sample(self, key, eta, disp=0.0):
-        del key, disp
+    def sample(self, key, eta, disp=0.0, aux=None):
+        del key, disp, aux
         return jnp.asarray(eta)
 
-    def update_dispersion(self, X, y, eta, disp=0.0, step_size=1.0):
-        del X, y, eta, step_size
+    def update_dispersion(self, X, y, eta, disp=0.0, step_size=1.0, aux=None):
+        del X, y, eta, step_size, aux
         return jnp.asarray(disp) + 2.0
 
-    def estimate_dispersion(self, X, y, eta, disp=0.0, step_size=1.0, tol=1e-3, max_iter=1000, offset_eta=0.0):
-        del X, y, eta, step_size, tol, max_iter, offset_eta
+    def estimate_dispersion(
+        self, X, y, eta, disp=0.0, step_size=1.0, aux=None, tol=1e-3, max_iter=1000, offset_eta=0.0
+    ):
+        del X, y, eta, step_size, aux, tol, max_iter, offset_eta
         return jnp.asarray(disp) + 3.0
 
     def canonical_dispersion(self, disp=0.0):
@@ -138,22 +140,46 @@ class _LegacyCalcWeightFamily(ExponentialDispersionFamily):
         del X, y, mu
         return jnp.asarray(1.0)
 
+    def negloglikelihood(self, y, eta, disp=0.0, aux=None):
+        del disp, aux
+        return jnp.sum(jnp.square(jnp.asarray(y) - jnp.asarray(eta)))
+
+    def variance(self, mu, disp=0.0, aux=None):
+        del aux
+        return jnp.ones_like(jnp.asarray(mu)) * (jnp.asarray(disp) + 1.0)
+
+    def sample(self, key, eta, disp=0.0, aux=None):
+        del key, disp, aux
+        return jnp.asarray(eta)
+
+    def calc_weight(self, eta, disp=0.0, aux=None):
+        mu = jnp.asarray(eta)
+        aux_shift = jnp.asarray(0.0 if aux is None else aux)
+        variance = jnp.ones_like(mu) * (jnp.asarray(disp) + 2.0 + aux_shift)
+        weight = jnp.ones_like(mu) * (7.0 + aux_shift)
+        return mu, variance, weight
+
+
+class _MissingAuxLogProbFamily(ExponentialDispersionFamily):
+    glink: IdentityLink = IdentityLink()
+    _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
+    _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+
+    def scale(self, X, y, mu):
+        del X, y, mu
+        return jnp.asarray(1.0)
+
     def negloglikelihood(self, y, eta, disp=0.0):
         del disp
         return jnp.sum(jnp.square(jnp.asarray(y) - jnp.asarray(eta)))
 
-    def variance(self, mu, disp=0.0):
-        return jnp.ones_like(jnp.asarray(mu)) * (jnp.asarray(disp) + 1.0)
+    def variance(self, mu, disp=0.0, aux=None):
+        del disp, aux
+        return jnp.ones_like(jnp.asarray(mu))
 
-    def sample(self, key, eta, disp=0.0):
-        del key, disp
+    def sample(self, key, eta, disp=0.0, aux=None):
+        del key, disp, aux
         return jnp.asarray(eta)
-
-    def calc_weight(self, eta, disp=0.0):
-        mu = jnp.asarray(eta)
-        variance = jnp.ones_like(mu) * (jnp.asarray(disp) + 2.0)
-        weight = jnp.ones_like(mu) * 7.0
-        return mu, variance, weight
 
 
 def test_poisson(getkey):
@@ -383,14 +409,14 @@ def test_glm_negative_binomial_working_weights_forward_aux() -> None:
     assert any(not jnp.allclose(actual, changed) for actual, changed in zip(result, changed_aux, strict=True))
 
 
-def test_glm_working_weights_preserves_legacy_calc_weight_override() -> None:
+def test_glm_working_weights_preserves_custom_calc_weight_override_with_aux() -> None:
     model = glmax.GLM(family=_LegacyCalcWeightFamily())
     eta = jnp.array([0.2, 0.5, 0.8])
     disp = jnp.array(1.5)
     aux = jnp.array(0.4)
 
     result = model.working_weights(eta, disp=disp, aux=aux)
-    expected = model.family.calc_weight(eta, disp=disp)
+    expected = model.family.calc_weight(eta, disp=disp, aux=aux)
 
     for actual, truth in zip(result, expected, strict=True):
         assert jnp.allclose(actual, truth)
@@ -411,7 +437,16 @@ def test_glm_negative_binomial_sample_forwards_aux() -> None:
     assert not jnp.array_equal(result, changed_aux)
 
 
-def test_glm_dispatches_legacy_family_signatures_without_aux_keyword() -> None:
+def test_glm_requires_aux_aware_family_signatures_when_aux_is_passed() -> None:
+    model = glmax.GLM(family=_MissingAuxLogProbFamily())
+    y = jnp.array([0.0, 1.0, 2.0])
+    eta = jnp.array([0.2, 0.5, 0.8])
+
+    with pytest.raises(TypeError, match="aux"):
+        model.log_prob(y, eta, disp=jnp.array(1.5), aux=jnp.array(0.4))
+
+
+def test_glm_forwards_aux_to_family_methods() -> None:
     model = glmax.GLM(family=_AuxiliaryWarmStartFamily())
     X = jnp.array([[1.0], [1.0], [1.0]])
     y = jnp.array([0.0, 1.0, 2.0])
@@ -427,13 +462,13 @@ def test_glm_dispatches_legacy_family_signatures_without_aux_keyword() -> None:
     updated_disp = model.update_dispersion(X, y, eta, disp=disp, step_size=step_size, aux=aux)
     estimated_disp = model.estimate_dispersion(X, y, eta, disp=disp, aux=aux)
 
-    expected_log_prob = -model.family.negloglikelihood(y, eta, disp=disp)
-    expected_sample = model.family.sample(key, eta, disp=disp)
+    expected_log_prob = -model.family.negloglikelihood(y, eta, disp=disp, aux=aux)
+    expected_sample = model.family.sample(key, eta, disp=disp, aux=aux)
     expected_mu = model.mean(eta)
-    expected_variance = model.family.variance(expected_mu, disp=disp)
+    expected_variance = model.family.variance(expected_mu, disp=disp, aux=aux)
     expected_weight = 1.0 / (expected_variance * model.link_deriv(expected_mu) ** 2)
-    expected_updated_disp = model.family.update_dispersion(X, y, eta, disp=disp, step_size=step_size)
-    expected_estimated_disp = model.family.estimate_dispersion(X, y, eta, disp=disp)
+    expected_updated_disp = model.family.update_dispersion(X, y, eta, disp=disp, step_size=step_size, aux=aux)
+    expected_estimated_disp = model.family.estimate_dispersion(X, y, eta, disp=disp, aux=aux)
 
     assert jnp.allclose(log_prob, expected_log_prob)
     assert jnp.allclose(sample, expected_sample)

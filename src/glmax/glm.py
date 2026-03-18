@@ -11,7 +11,6 @@ from jax import Array
 from jaxtyping import ArrayLike, ScalarLike
 
 from .family import ExponentialDispersionFamily, Gaussian
-from .family.dist import _call_family_with_optional_aux
 
 
 class GLM(eqx.Module):
@@ -70,7 +69,7 @@ class GLM(eqx.Module):
 
         Scalar total log-likelihood.
         """
-        return -_call_family_with_optional_aux(self.family.negloglikelihood, y, eta, disp, aux=aux)
+        return -self.family.negloglikelihood(y, eta, disp, aux=aux)
 
     def sample(
         self,
@@ -92,7 +91,7 @@ class GLM(eqx.Module):
 
         Sampled response values, shape `(n,)`.
         """
-        return _call_family_with_optional_aux(self.family.sample, key, eta, disp, aux=aux)
+        return self.family.sample(key, eta, disp, aux=aux)
 
     # ------------------------------------------------------------------
     # Kernel interface (used by IRLS and inference internals)
@@ -130,7 +129,7 @@ class GLM(eqx.Module):
         Tuple `(mu, variance, weight)` each of shape `(n,)`, where
         `weight` is the per-sample GLM working weight $w_i = 1 / (V(\mu_i) [g'(\mu_i)]^2)$.
         """
-        mu, variance, weight = _call_family_with_optional_aux(self.family.calc_weight, eta, disp, aux=aux)
+        mu, variance, weight = self.family.calc_weight(eta, disp, aux=aux)
         return mu, variance, weight
 
     def link_deriv(self, mu: ArrayLike) -> Array:
@@ -170,7 +169,7 @@ class GLM(eqx.Module):
 
         Updated dispersion scalar.
         """
-        return _call_family_with_optional_aux(self.family.update_dispersion, X, y, eta, disp, step_size, aux=aux)
+        return self.family.update_dispersion(X, y, eta, disp, step_size, aux=aux)
 
     def estimate_dispersion(
         self,
@@ -196,7 +195,7 @@ class GLM(eqx.Module):
 
         Final dispersion estimate scalar.
         """
-        return _call_family_with_optional_aux(self.family.estimate_dispersion, X, y, eta, disp, aux=aux)
+        return self.family.estimate_dispersion(X, y, eta, disp, aux=aux)
 
     def canonicalize_dispersion(self, disp: ScalarLike) -> Array:
         r"""Map a raw dispersion value to its canonical stored form.
