@@ -317,6 +317,66 @@ def test_glm_sample_delegates() -> None:
     assert jnp.allclose(result, expected)
 
 
+def test_glm_negative_binomial_log_prob_forwards_aux() -> None:
+    model = glmax.GLM(family=NegativeBinomial())
+    y = jnp.array([0.0, 2.0, 5.0])
+    eta = jnp.log(jnp.array([1.5, 2.5, 4.0]))
+
+    result = model.log_prob(y, eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
+    expected = -model.family.negloglikelihood(y, eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
+
+    assert jnp.allclose(result, expected)
+    assert jnp.allclose(result, model.log_prob(y, eta, disp=jnp.array(9.0), aux=jnp.array(0.4)))
+    assert not jnp.allclose(result, model.log_prob(y, eta, disp=jnp.array(1.0), aux=jnp.array(0.2)))
+
+
+def test_glm_negative_binomial_working_weights_forward_aux() -> None:
+    model = glmax.GLM(family=NegativeBinomial())
+    eta = jnp.log(jnp.array([1.5, 2.5, 4.0]))
+
+    result = model.working_weights(eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
+    expected = model.family.calc_weight(eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
+    ignored_disp = model.working_weights(eta, disp=jnp.array(9.0), aux=jnp.array(0.4))
+    changed_aux = model.working_weights(eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
+
+    for actual, truth in zip(result, expected, strict=True):
+        assert jnp.allclose(actual, truth)
+    for actual, truth in zip(result, ignored_disp, strict=True):
+        assert jnp.allclose(actual, truth)
+    assert any(not jnp.allclose(actual, changed) for actual, changed in zip(result, changed_aux, strict=True))
+
+
+def test_glm_negative_binomial_sample_forwards_aux() -> None:
+    key = rdm.PRNGKey(7)
+    model = glmax.GLM(family=NegativeBinomial())
+    eta = jnp.log(jnp.array([1.5, 2.5, 4.0]))
+
+    result = model.sample(key, eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
+    expected = model.family.sample(key, eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
+    ignored_disp = model.sample(key, eta, disp=jnp.array(9.0), aux=jnp.array(0.4))
+    changed_aux = model.sample(key, eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
+
+    assert jnp.array_equal(result, expected)
+    assert jnp.array_equal(result, ignored_disp)
+    assert not jnp.array_equal(result, changed_aux)
+
+
+def test_glm_docstrings_describe_split_disp_aux_contract() -> None:
+    assert glmax.GLM.__doc__ is not None
+    assert "(disp, aux)" in glmax.GLM.__doc__
+
+    for method in (
+        glmax.GLM.log_prob,
+        glmax.GLM.sample,
+        glmax.GLM.working_weights,
+        glmax.GLM.canonicalize_auxiliary,
+        glmax.GLM.canonicalize_params,
+    ):
+        assert method.__doc__ is not None
+        assert "`disp`" in method.__doc__
+        assert "`aux`" in method.__doc__
+
+
 def test_glm_canonicalize_auxiliary_ignores_aux_for_gaussian() -> None:
     model = glmax.GLM(family=Gaussian())
 
