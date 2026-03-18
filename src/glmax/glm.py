@@ -4,26 +4,13 @@
 
 from __future__ import annotations
 
-import inspect
-
 import equinox as eqx
 import jax.numpy as jnp
 
 from jax import Array
 from jaxtyping import ArrayLike, ScalarLike
 
-from .family.dist import ExponentialDispersionFamily, Gaussian
-
-
-def _family_method_accepts_keyword(method: object, name: str) -> bool:
-    parameters = inspect.signature(method).parameters.values()
-    return any(parameter.name == name or parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters)
-
-
-def _call_family_with_optional_aux(method: object, *args: object, aux: ScalarLike | None = None) -> object:
-    if _family_method_accepts_keyword(method, "aux"):
-        return method(*args, aux=aux)
-    return method(*args)
+from .family.dist import _call_family_with_optional_aux, ExponentialDispersionFamily, Gaussian
 
 
 class GLM(eqx.Module):
@@ -142,11 +129,8 @@ class GLM(eqx.Module):
         Tuple `(mu, variance, weight)` each of shape `(n,)`, where
         `weight` is the per-sample GLM working weight $w_i = 1 / (V(\mu_i) [g'(\mu_i)]^2)$.
         """
-        mu = jnp.clip(self.family.glink.inverse(eta), *self.family._bounds)
-        variance = _call_family_with_optional_aux(self.family.variance, mu, disp, aux=aux)
-        clipped_variance = jnp.clip(jnp.asarray(variance), min=jnp.finfo(float).tiny)
-        weight = 1.0 / (clipped_variance * self.family.glink.deriv(mu) ** 2)
-        return mu, clipped_variance, weight
+        mu, variance, weight = _call_family_with_optional_aux(self.family.calc_weight, eta, disp, aux=aux)
+        return mu, variance, weight
 
     def link_deriv(self, mu: ArrayLike) -> Array:
         r"""Evaluate the link derivative $g'(\mu)$.

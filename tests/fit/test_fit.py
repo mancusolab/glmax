@@ -271,7 +271,8 @@ def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
     assert not seen["called"]
 
 
-def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter() -> None:
+@pytest.mark.parametrize("family", [Gaussian(), Gamma()])
+def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter(family) -> None:
     seen = {"called": False}
 
     class RecordingFitter(AbstractFitter, strict=True):
@@ -295,7 +296,7 @@ def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter() -
                 score_residual=jnp.array([0.0, 0.0]),
             )
 
-    model = glmax.GLM(family=Gaussian())
+    model = glmax.GLM(family=family)
     data = GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3))
     init = Params(beta=jnp.zeros(1), disp=jnp.array(1.0), aux=jnp.array(0.2))
 

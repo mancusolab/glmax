@@ -1,4 +1,5 @@
 # pattern: Functional Core
+import inspect
 import math
 
 from abc import abstractmethod
@@ -22,6 +23,17 @@ if TYPE_CHECKING:
     from typing import ClassVar as AbstractClassVar
 else:
     from equinox import AbstractClassVar
+
+
+def _family_method_accepts_keyword(method: object, name: str) -> bool:
+    parameters = inspect.signature(method).parameters.values()
+    return any(parameter.name == name or parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters)
+
+
+def _call_family_with_optional_aux(method: object, *args: object, aux: ScalarLike | None = None) -> object:
+    if _family_method_accepts_keyword(method, "aux"):
+        return method(*args, aux=aux)
+    return method(*args)
 
 
 def _reject_auxiliary(family_name: str, aux: ScalarLike | None) -> None:
@@ -180,7 +192,9 @@ class ExponentialDispersionFamily(eqx.Module):
         Three-tuple `(mu, variance, weight)`, each shape `(n,)`.
         """
         mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
-        v = jnp.clip(self.variance(mu, disp, aux), min=jnp.finfo(float).tiny)
+        v = jnp.clip(
+            jnp.asarray(_call_family_with_optional_aux(self.variance, mu, disp, aux=aux)), min=jnp.finfo(float).tiny
+        )
         w = 1.0 / (v * self.glink.deriv(mu) ** 2)
         return mu, v, w
 

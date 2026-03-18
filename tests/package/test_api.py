@@ -15,7 +15,7 @@ import glmax
 from glmax import AbstractFitter, Diagnostics, FitResult, FittedGLM, GLMData, InferenceResult, Params
 from glmax._fit import IRLSFitter
 from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
-from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
 
 WORKTREE_ROOT = Path(__file__).resolve().parents[2]
@@ -234,9 +234,16 @@ def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
         glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), data)
 
 
-def test_predict_ignores_aux_for_families_without_aux_state() -> None:
-    model = glmax.GLM(family=Gaussian())
-    data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
+@pytest.mark.parametrize(
+    ("family", "X", "y"),
+    [
+        (Gaussian(), jnp.array([[0.0], [1.0], [2.0]]), jnp.array([0.0, 1.0, 2.0])),
+        (Gamma(), jnp.array([[1.0], [2.0], [3.0]]), jnp.array([0.8, 1.1, 1.7])),
+    ],
+)
+def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> None:
+    model = glmax.GLM(family=family)
+    data = GLMData(X=X, y=y)
     params = Params(beta=jnp.array([1.0]), disp=jnp.array(1.0), aux=jnp.array(0.25))
     canonical_params = Params(beta=jnp.array([1.0]), disp=jnp.array(1.0), aux=None)
 

@@ -129,6 +129,33 @@ class _AuxiliaryWarmStartFamily(ExponentialDispersionFamily):
         return jnp.asarray(aux) + 0.5
 
 
+class _LegacyCalcWeightFamily(ExponentialDispersionFamily):
+    glink: IdentityLink = IdentityLink()
+    _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
+    _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+
+    def scale(self, X, y, mu):
+        del X, y, mu
+        return jnp.asarray(1.0)
+
+    def negloglikelihood(self, y, eta, disp=0.0):
+        del disp
+        return jnp.sum(jnp.square(jnp.asarray(y) - jnp.asarray(eta)))
+
+    def variance(self, mu, disp=0.0):
+        return jnp.ones_like(jnp.asarray(mu)) * (jnp.asarray(disp) + 1.0)
+
+    def sample(self, key, eta, disp=0.0):
+        del key, disp
+        return jnp.asarray(eta)
+
+    def calc_weight(self, eta, disp=0.0):
+        mu = jnp.asarray(eta)
+        variance = jnp.ones_like(mu) * (jnp.asarray(disp) + 2.0)
+        weight = jnp.ones_like(mu) * 7.0
+        return mu, variance, weight
+
+
 def test_poisson(getkey):
     n_samples = 200
     n_features = 5
@@ -352,6 +379,19 @@ def test_glm_negative_binomial_working_weights_forward_aux() -> None:
     for actual, truth in zip(result, ignored_disp, strict=True):
         assert jnp.allclose(actual, truth)
     assert any(not jnp.allclose(actual, changed) for actual, changed in zip(result, changed_aux, strict=True))
+
+
+def test_glm_working_weights_preserves_legacy_calc_weight_override() -> None:
+    model = glmax.GLM(family=_LegacyCalcWeightFamily())
+    eta = jnp.array([0.2, 0.5, 0.8])
+    disp = jnp.array(1.5)
+    aux = jnp.array(0.4)
+
+    result = model.working_weights(eta, disp=disp, aux=aux)
+    expected = model.family.calc_weight(eta, disp=disp)
+
+    for actual, truth in zip(result, expected, strict=True):
+        assert jnp.allclose(actual, truth)
 
 
 def test_glm_negative_binomial_sample_forwards_aux() -> None:
