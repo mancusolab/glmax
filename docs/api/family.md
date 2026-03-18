@@ -9,8 +9,8 @@ interpreted.
 | --- | --- | --- |
 | `Gaussian` | EDM dispersion / variance parameter | ignored |
 | `Gamma` | EDM dispersion | ignored |
-| `Poisson` | canonical `1.0` | must be `None` |
-| `Binomial` | canonical `1.0` | must be `None` |
+| `Poisson` | canonical `1.0` | ignored |
+| `Binomial` | canonical `1.0` | ignored |
 | `NegativeBinomial` | canonical `1.0` | stores auxiliary `alpha` |
 
 ## Families

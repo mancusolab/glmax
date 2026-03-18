@@ -262,12 +262,12 @@ Not applicable. The design does not add or change multi-input reconciliation beh
 - **`params-disp-aux.AC1.1` Success:** `Params` stores `beta`, `disp`, and `aux`, and remains a valid pytree and warm-start carrier.
 - **`params-disp-aux.AC1.2` Success:** `beta` remains the coefficient vector, `disp` remains the GLM/EDM dispersion scalar, and `aux` remains the optional family-specific scalar.
 - **`params-disp-aux.AC1.3` Failure:** non-inexact or non-scalar `disp`/`aux` values raise deterministic validation errors.
-- **`params-disp-aux.AC1.4` Failure:** non-`None` `aux` is rejected for families that do not use an auxiliary parameter.
+- **`params-disp-aux.AC1.4` Success:** families that do not use an auxiliary parameter ignore any provided `aux` and canonicalize it to `None`.
 - **`params-disp-aux.AC1.5` Success:** warm-start paths accept canonical `Params(beta, disp, aux)` and preserve values through `fit(...)` and `infer(...)`.
 
 ### `params-disp-aux.AC2`: family semantics split EDM dispersion from auxiliary parameters
 - **`params-disp-aux.AC2.1` Success:** Gaussian and Gamma use `disp` as EDM dispersion and ignore `aux`.
-- **`params-disp-aux.AC2.2` Success:** Poisson and Binomial canonicalize `disp` to `1.0` and require `aux is None`.
+- **`params-disp-aux.AC2.2` Success:** Poisson and Binomial canonicalize `disp` to `1.0` and ignore `aux`.
 - **`params-disp-aux.AC2.3` Success:** Negative Binomial canonicalizes `disp` to `1.0` and uses `aux` as `alpha` in likelihood, variance, sampling, and fitting updates.
 - **`params-disp-aux.AC2.4` Failure:** invalid NB `aux` values such as non-positive or non-finite `alpha` are rejected deterministically.
 - **`params-disp-aux.AC2.5` Success:** family and `GLM` docstrings describe which of `disp` and `aux` each family uses, fixes, or ignores.

@@ -52,6 +52,8 @@ def test_predict_generates_stable_shape_for_supported_families(family, y) -> Non
     [
         (Gaussian(), jnp.array([[0.0], [1.0], [2.0], [3.0]]), jnp.array([0.1, 1.0, 2.2, 2.9])),
         (Gamma(), jnp.array([[1.0], [2.0], [3.0], [4.0]]), jnp.array([0.8, 1.1, 1.7, 2.4])),
+        (Poisson(), jnp.array([[0.0], [1.0], [2.0], [3.0]]), jnp.array([0.0, 1.0, 1.0, 2.0])),
+        (Binomial(), jnp.array([[0.0], [1.0], [2.0], [3.0]]), jnp.array([0.0, 0.0, 1.0, 1.0])),
     ],
 )
 def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> None:

@@ -36,11 +36,6 @@ def _call_family_with_optional_aux(method: object, *args: object, aux: ScalarLik
     return method(*args)
 
 
-def _reject_auxiliary(family_name: str, aux: ScalarLike | None) -> None:
-    if aux is not None:
-        raise ValueError(f"{family_name} requires aux to be None.")
-
-
 def _validate_positive_finite_scalar(name: str, value: ScalarLike) -> Array:
     scalar = jnp.asarray(value)
     if scalar.ndim > 0 and scalar.size != 1:
@@ -242,12 +237,9 @@ class ExponentialDispersionFamily(eqx.Module):
         **Returns:**
 
         Canonical auxiliary scalar, or `None` for families without auxiliary state.
-
-        **Raises:**
-
-        - `ValueError`: if the family forbids auxiliary state and `aux` is not `None`.
+        Families that do not use auxiliary state ignore any provided `aux`.
         """
-        _reject_auxiliary(type(self).__name__, aux)
+        del aux
         return None
 
 
@@ -445,7 +437,7 @@ class Binomial(ExponentialDispersionFamily):
     $y \mid \mu \sim \mathrm{Bernoulli}(\mu)$, $\mu \in (0, 1)$.
 
     The variance function is $V(\mu) = \mu(1 - \mu)$ and the canonical link
-    is the logit $g(\mu) = \log(\mu / (1 - \mu))$. Binomial fixes `disp = 1.0` and requires `aux is None`.
+    is the logit $g(\mu) = \log(\mu / (1 - \mu))$. Binomial fixes `disp = 1.0` and ignores `aux`.
     """
 
     glink: AbstractLink = LogitLink()
@@ -479,7 +471,7 @@ class Binomial(ExponentialDispersionFamily):
         - `y`: binary responses in `{0, 1}`, shape `(n,)`.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: ignored; Binomial fixes `disp = 1.0`.
-        - `aux`: must be `None`.
+        - `aux`: ignored.
 
         **Returns:**
 
@@ -511,7 +503,7 @@ class Binomial(ExponentialDispersionFamily):
         - `key`: JAX PRNGKey.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: ignored; Binomial fixes `disp = 1.0`.
-        - `aux`: must be `None`.
+        - `aux`: ignored.
 
         **Returns:**
 
@@ -540,7 +532,7 @@ class Poisson(ExponentialDispersionFamily):
     $y \mid \mu \sim \mathrm{Poisson}(\mu)$, $\mu > 0$.
 
     The variance function is $V(\mu) = \mu$ and the canonical link
-    is the log $g(\mu) = \log(\mu)$. Poisson fixes `disp = 1.0` and requires `aux is None`.
+    is the log $g(\mu) = \log(\mu)$. Poisson fixes `disp = 1.0` and ignores `aux`.
     """
 
     glink: AbstractLink = LogLink()
@@ -570,7 +562,7 @@ class Poisson(ExponentialDispersionFamily):
         - `y`: count responses, shape `(n,)`.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: ignored; Poisson fixes `disp = 1.0`.
-        - `aux`: must be `None`.
+        - `aux`: ignored.
 
         **Returns:**
 
@@ -599,7 +591,7 @@ class Poisson(ExponentialDispersionFamily):
         - `key`: JAX PRNGKey.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: ignored; Poisson fixes `disp = 1.0`.
-        - `aux`: must be `None`.
+        - `aux`: ignored.
 
         **Returns:**
 

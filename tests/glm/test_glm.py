@@ -13,7 +13,7 @@ import jax.random as rdm
 import glmax
 
 from glmax import GLMData
-from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
+from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
 from glmax.family.links import IdentityLink
 
@@ -466,12 +466,34 @@ def test_glm_canonicalize_auxiliary_ignores_aux_for_gaussian() -> None:
     assert model.canonicalize_auxiliary(jnp.array(0.2)) is None
 
 
-@pytest.mark.parametrize("family", [Poisson(), Binomial()])
-def test_glm_canonicalize_auxiliary_rejects_aux_for_fixed_dispersion_families(family) -> None:
+@pytest.mark.parametrize("family", [Poisson(), Binomial(), Gamma()])
+def test_glm_canonicalize_auxiliary_ignores_aux_for_families_without_aux_state(family) -> None:
     model = glmax.GLM(family=family)
 
-    with pytest.raises(ValueError, match="aux"):
-        model.canonicalize_auxiliary(jnp.array(0.2))
+    assert model.canonicalize_auxiliary(jnp.array(0.2)) is None
+
+
+@pytest.mark.parametrize(
+    ("family", "y", "eta"),
+    [
+        (Poisson(), jnp.array([0.0, 1.0, 2.0]), jnp.log(jnp.array([1.2, 2.0, 3.5]))),
+        (Binomial(), jnp.array([0.0, 1.0, 1.0]), jnp.array([-0.8, 0.3, 1.1])),
+    ],
+)
+def test_glm_methods_ignore_aux_for_families_without_aux_state(family, y, eta) -> None:
+    model = glmax.GLM(family=family)
+    key = rdm.PRNGKey(9)
+    baseline_log_prob = model.log_prob(y, eta, disp=jnp.array(1.0), aux=None)
+    with_aux_log_prob = model.log_prob(y, eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
+    baseline_weight = model.working_weights(eta, disp=jnp.array(1.0), aux=None)
+    with_aux_weight = model.working_weights(eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
+    baseline_sample = model.sample(key, eta, disp=jnp.array(1.0), aux=None)
+    with_aux_sample = model.sample(key, eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
+
+    assert jnp.allclose(with_aux_log_prob, baseline_log_prob)
+    for actual, truth in zip(with_aux_weight, baseline_weight, strict=True):
+        assert jnp.allclose(actual, truth)
+    assert jnp.array_equal(with_aux_sample, baseline_sample)
 
 
 def test_glm_canonicalize_params_routes_negative_binomial_alpha_to_aux() -> None:

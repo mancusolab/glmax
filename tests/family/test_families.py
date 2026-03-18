@@ -28,8 +28,8 @@ _ALL_FAMILIES = [Gaussian, Poisson, Binomial, NegativeBinomial]
 _ALL_FAMILIES_INCLUDING_GAMMA = [*_ALL_FAMILIES, Gamma]
 _SPLIT_FAMILY_CASES = [
     (Gaussian, 0.5, 0.2),
-    (Poisson, 7.0, None),
-    (Binomial, 7.0, None),
+    (Poisson, 7.0, 0.2),
+    (Binomial, 7.0, 0.2),
     (NegativeBinomial, 1.0, 0.5),
 ]
 _KEY = jax.random.PRNGKey(0)
@@ -604,18 +604,17 @@ class TestCanonicalDispersionUnitFamilies:
         assert isinstance(result, jax.Array)
 
     @pytest.mark.parametrize("FamilyCls", [Poisson, Binomial])
-    def test_fixed_dispersion_families_reject_auxiliary(self, FamilyCls):
+    def test_fixed_dispersion_families_ignore_auxiliary(self, FamilyCls):
         family = FamilyCls()
 
-        with pytest.raises(ValueError, match="aux"):
-            family.canonical_auxiliary(jnp.array(0.2))
+        assert family.canonical_auxiliary(jnp.array(0.2)) is None
 
 
 class TestFamilyDocstrings:
     def test_docstrings_describe_disp_aux_split(self):
         assert "uses `disp` as EDM dispersion and ignores `aux`" in Gaussian.__doc__
-        assert "fixes `disp = 1.0` and requires `aux is None`" in Poisson.__doc__
-        assert "fixes `disp = 1.0` and requires `aux is None`" in Binomial.__doc__
+        assert "fixes `disp = 1.0` and ignores `aux`" in Poisson.__doc__
+        assert "fixes `disp = 1.0` and ignores `aux`" in Binomial.__doc__
         assert "fixes `disp = 1.0` and uses `aux` as `alpha`" in NegativeBinomial.__doc__
         assert "uses `disp` as EDM dispersion and ignores `aux`" in Gamma.__doc__
 

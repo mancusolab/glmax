@@ -334,7 +334,7 @@ def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
     assert not seen["called"]
 
 
-@pytest.mark.parametrize("family", [Gaussian(), Gamma()])
+@pytest.mark.parametrize("family", [Gaussian(), Gamma(), Poisson(), Binomial()])
 def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter(family) -> None:
     seen = {"called": False}
 

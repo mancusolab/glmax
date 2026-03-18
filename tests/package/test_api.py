@@ -255,6 +255,8 @@ def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
     [
         (Gaussian(), jnp.array([[0.0], [1.0], [2.0]]), jnp.array([0.0, 1.0, 2.0])),
         (Gamma(), jnp.array([[1.0], [2.0], [3.0]]), jnp.array([0.8, 1.1, 1.7])),
+        (Poisson(), jnp.array([[0.0], [1.0], [2.0]]), jnp.array([0.0, 1.0, 1.0])),
+        (Binomial(), jnp.array([[0.0], [1.0], [2.0]]), jnp.array([0.0, 0.0, 1.0])),
     ],
 )
 def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> None:

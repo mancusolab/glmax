@@ -13,7 +13,7 @@
 | Step | Action | Expected Result |
 |------|--------|-----------------|
 | 1 | Review `tests/package/test_api.py`, `tests/package/test_grammar.py`, `tests/data/test_glmdata.py`, and `src/glmax/_fit/types.py`. | The carrier is consistently `Params(beta, disp, aux)`; no remaining two-field assumptions; public-boundary validation still targets `disp` and `aux` separately. |
-| 2 | Review `src/glmax/family/dist.py`, `src/glmax/glm.py`, `tests/family/test_families.py`, and `tests/glm/test_glm.py`. | Gaussian/Gamma use `disp`; Poisson/Binomial fix `disp=1.0`; Negative Binomial uses `aux` as `alpha`; GLM delegates the split contract consistently. |
+| 2 | Review `src/glmax/family/dist.py`, `src/glmax/glm.py`, `tests/family/test_families.py`, and `tests/glm/test_glm.py`. | Gaussian/Gamma use `disp`; Poisson/Binomial fix `disp=1.0` and ignore `aux`; Negative Binomial uses `aux` as `alpha`; GLM delegates the split contract consistently. |
 | 3 | Review `src/glmax/_fit/irls.py`, `src/glmax/_infer/stderr.py`, `src/glmax/_infer/hyptest.py`, `tests/fit/test_fit.py`, and `tests/infer/*.py`. | Fit artifacts, inference covariance scaling, and final NB `glm_wt` all align with canonical `Params(beta, disp, aux)` semantics. |
 | 4 | Review `README.md`, `docs/index.md`, `docs/api/nouns.md`, `docs/api/verbs.md`, `docs/api/fitters.md`, `docs/api/inference.md`, `docs/api/family.md`, and `AGENTS.md`. | Public terminology says `disp` is GLM dispersion and `aux` is family-specific state; Negative Binomial `alpha` is documented only as `aux`; the top-level grammar workflow remains primary. |
 
