@@ -48,7 +48,7 @@ def _validate_positive_finite_scalar(name: str, value: ScalarLike) -> Array:
 
 def _nb_alpha_from_split(disp: ScalarLike, aux: ScalarLike | None) -> Array:
     alpha = aux if aux is not None else disp
-    return jnp.clip(jnp.asarray(alpha), min=jnp.finfo(jnp.float64).tiny)
+    return _validate_positive_finite_scalar("NegativeBinomial alpha", alpha)
 
 
 class ExponentialDispersionFamily(eqx.Module):
@@ -617,7 +617,8 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
     During the transition to the split contract, methods still accept legacy
     callers that pass `alpha` through `disp`; when `aux` is provided it always
-    takes precedence.
+    takes precedence, and whichever carrier is used is validated as a positive,
+    finite `alpha`.
     """
 
     glink: AbstractLink = LogLink()
@@ -647,7 +648,8 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         **Precondition:** NB uses `aux` as `alpha > 0` and fixes `disp = 1.0`.
         When `aux` is omitted, the legacy `disp` carrier is still accepted
-        during the phase transition and clipped to keep the objective finite.
+        during the phase transition and validated as the positive, finite
+        `alpha` value.
 
         **Arguments:**
 

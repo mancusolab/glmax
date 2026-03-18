@@ -234,13 +234,13 @@ def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
         glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), data)
 
 
-def test_predict_rejects_aux_for_families_without_aux_state() -> None:
+def test_predict_ignores_aux_for_families_without_aux_state() -> None:
     model = glmax.GLM(family=Gaussian())
     data = GLMData(X=jnp.array([[0.0], [1.0], [2.0]]), y=jnp.array([0.0, 1.0, 2.0]))
     params = Params(beta=jnp.array([1.0]), disp=jnp.array(1.0), aux=jnp.array(0.25))
+    canonical_params = Params(beta=jnp.array([1.0]), disp=jnp.array(1.0), aux=None)
 
-    with pytest.raises(ValueError, match="Gaussian does not support auxiliary parameters"):
-        glmax.predict(model, params, data)
+    assert jnp.allclose(glmax.predict(model, params, data), glmax.predict(model, canonical_params, data))
 
 
 def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:

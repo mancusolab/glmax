@@ -257,8 +257,9 @@ def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
         solver: AbstractLinearSolver = CholeskySolver()
 
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
-            del model, data, init
+            del model, data
             seen["called"] = True
+            seen["init"] = init
             return _make_fit_result()
 
     model = glmax.GLM()
@@ -270,25 +271,40 @@ def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
     assert not seen["called"]
 
 
-def test_fit_rejects_aux_for_families_without_aux_state_before_custom_fitter() -> None:
+def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter() -> None:
     seen = {"called": False}
 
     class RecordingFitter(AbstractFitter, strict=True):
         solver: AbstractLinearSolver = CholeskySolver()
 
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
-            del model, data, init
+            del model, data
             seen["called"] = True
-            return _make_fit_result()
+            assert init is not None
+            return FitResult(
+                params=init,
+                X=jnp.array([[1.0], [1.0]]),
+                y=jnp.array([1.0, 1.0]),
+                eta=jnp.array([1.0, 1.0]),
+                mu=jnp.array([1.0, 1.0]),
+                glm_wt=jnp.array([1.0, 1.0]),
+                converged=jnp.array(True),
+                num_iters=jnp.array(1),
+                objective=jnp.array(0.0),
+                objective_delta=jnp.array(-1e-4),
+                score_residual=jnp.array([0.0, 0.0]),
+            )
 
     model = glmax.GLM(family=Gaussian())
     data = GLMData(X=jnp.ones((3, 1)), y=jnp.ones(3))
-    bad_init = Params(beta=jnp.zeros(1), disp=jnp.array(1.0), aux=jnp.array(0.2))
+    init = Params(beta=jnp.zeros(1), disp=jnp.array(1.0), aux=jnp.array(0.2))
 
-    with pytest.raises(ValueError, match="Gaussian does not support auxiliary parameters"):
-        glmax.fit(model, data, init=bad_init, fitter=RecordingFitter())
+    result = glmax.fit(model, data, init=init, fitter=RecordingFitter())
 
-    assert not seen["called"]
+    assert isinstance(result, FittedGLM)
+    assert seen["called"]
+    assert result.params.aux is None
+    assert jnp.allclose(result.params.disp, jnp.array(1.0))
 
 
 def test_fitter_is_abstract_equinox_model() -> None:

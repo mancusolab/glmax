@@ -112,6 +112,14 @@ class _AuxiliaryWarmStartFamily(ExponentialDispersionFamily):
         del key, disp
         return jnp.asarray(eta)
 
+    def update_dispersion(self, X, y, eta, disp=0.0, step_size=1.0):
+        del X, y, eta, step_size
+        return jnp.asarray(disp) + 2.0
+
+    def estimate_dispersion(self, X, y, eta, disp=0.0, step_size=1.0, tol=1e-3, max_iter=1000, offset_eta=0.0):
+        del X, y, eta, step_size, tol, max_iter, offset_eta
+        return jnp.asarray(disp) + 3.0
+
     def canonical_dispersion(self, disp=0.0):
         return jnp.asarray(disp) + 1.0
 
@@ -359,6 +367,39 @@ def test_glm_negative_binomial_sample_forwards_aux() -> None:
     assert jnp.array_equal(result, expected)
     assert jnp.array_equal(result, ignored_disp)
     assert not jnp.array_equal(result, changed_aux)
+
+
+def test_glm_dispatches_legacy_family_signatures_without_aux_keyword() -> None:
+    model = glmax.GLM(family=_AuxiliaryWarmStartFamily())
+    X = jnp.array([[1.0], [1.0], [1.0]])
+    y = jnp.array([0.0, 1.0, 2.0])
+    eta = jnp.array([0.2, 0.5, 0.8])
+    disp = jnp.array(1.5)
+    aux = jnp.array(0.4)
+    step_size = jnp.array(0.7)
+    key = rdm.PRNGKey(5)
+
+    log_prob = model.log_prob(y, eta, disp=disp, aux=aux)
+    sample = model.sample(key, eta, disp=disp, aux=aux)
+    mu, variance, weight = model.working_weights(eta, disp=disp, aux=aux)
+    updated_disp = model.update_dispersion(X, y, eta, disp=disp, step_size=step_size, aux=aux)
+    estimated_disp = model.estimate_dispersion(X, y, eta, disp=disp, aux=aux)
+
+    expected_log_prob = -model.family.negloglikelihood(y, eta, disp=disp)
+    expected_sample = model.family.sample(key, eta, disp=disp)
+    expected_mu = model.mean(eta)
+    expected_variance = model.family.variance(expected_mu, disp=disp)
+    expected_weight = 1.0 / (expected_variance * model.link_deriv(expected_mu) ** 2)
+    expected_updated_disp = model.family.update_dispersion(X, y, eta, disp=disp, step_size=step_size)
+    expected_estimated_disp = model.family.estimate_dispersion(X, y, eta, disp=disp)
+
+    assert jnp.allclose(log_prob, expected_log_prob)
+    assert jnp.allclose(sample, expected_sample)
+    assert jnp.allclose(mu, expected_mu)
+    assert jnp.allclose(variance, expected_variance)
+    assert jnp.allclose(weight, expected_weight)
+    assert jnp.allclose(updated_disp, expected_updated_disp)
+    assert jnp.allclose(estimated_disp, expected_estimated_disp)
 
 
 def test_glm_docstrings_describe_split_disp_aux_contract() -> None:
