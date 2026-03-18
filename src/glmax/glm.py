@@ -140,11 +140,7 @@ class GLM(eqx.Module):
         `g_deriv` is the per-sample link derivative $g'(\mu_i)$ and
         `weight` is the per-sample GLM working weight $w_i = 1 / (V(\mu_i) [g'(\mu_i)]^2)$.
         """
-        if type(self.family).calc_weight is ExponentialDispersionFamily.calc_weight:
-            return self._working_terms(eta, disp, aux=aux)
-
-        mu, _, weight = self.family.calc_weight(eta, disp, aux=aux)
-        return mu, self.link_deriv(mu), weight
+        return self.family.calc_weight(eta, disp, aux=aux)
 
     def link_deriv(self, mu: ArrayLike) -> Array:
         r"""Evaluate the link derivative $g'(\mu)$.

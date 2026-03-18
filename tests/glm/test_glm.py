@@ -1,6 +1,6 @@
 # pattern: Imperative Shell
 
-from typing import ClassVar, Tuple
+from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -35,7 +35,7 @@ def simulate_glm_data(
     n_features: int = 5,
     family: str = "poisson",
     dispersion: float = 1.0,
-) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """
     Simulates Generalized Linear Model (GLM) data.
 
@@ -361,20 +361,6 @@ def test_glm_negative_binomial_working_weights_forward_aux() -> None:
     for actual, truth in zip(result, ignored_disp, strict=True):
         assert jnp.allclose(actual, truth)
     assert any(not jnp.allclose(actual, changed) for actual, changed in zip(result, changed_aux, strict=True))
-
-
-def test_glm_working_weights_preserves_custom_calc_weight_override_with_aux() -> None:
-    model = glmax.GLM(family=_LegacyCalcWeightFamily())
-    eta = jnp.array([0.2, 0.5, 0.8])
-    disp = jnp.array(1.5)
-    aux = jnp.array(0.4)
-
-    result = model.working_weights(eta, disp=disp, aux=aux)
-    expected_mu, _, expected_weight = model.family.calc_weight(eta, disp=disp, aux=aux)
-    expected = (expected_mu, model.link_deriv(expected_mu), expected_weight)
-
-    for actual, truth in zip(result, expected, strict=True):
-        assert jnp.allclose(actual, truth)
 
 
 def test_glm_negative_binomial_sample_forwards_aux() -> None:

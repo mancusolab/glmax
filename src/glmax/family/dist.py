@@ -141,12 +141,15 @@ class ExponentialDispersionFamily(eqx.Module):
 
         **Returns:**
 
-        Three-tuple `(mu, variance, weight)`, each shape `(n,)`.
+        Tuple `(mu, g_deriv, weight)` each of shape `(n,)`, where
+        `g_deriv` is the per-sample link derivative $g'(\mu_i)$ and
+        `weight` is the per-sample GLM working weight $w_i = 1 / (V(\mu_i) [g'(\mu_i)]^2)$.
         """
         mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
         v = jnp.clip(jnp.asarray(self.variance(mu, disp, aux=aux)), min=jnp.finfo(float).tiny)
-        w = 1.0 / (v * self.glink.deriv(mu) ** 2)
-        return mu, v, w
+        g_deriv = self.glink.deriv(mu)
+        w = 1.0 / (v * g_deriv**2)
+        return mu, g_deriv, w
 
     def init_eta(self, y: ArrayLike) -> Array:
         return self.glink((y + y.mean()) / 2)

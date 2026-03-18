@@ -82,21 +82,6 @@ class TestCalcWeight:
         assert variance.shape == (5,)
         assert weight.shape == (5,)
 
-    def test_calc_weight_returns_variance_not_g_deriv(self):
-        """Second return value must be variance (V(mu)), not g'(mu).
-
-        For Poisson with log link at eta=1: mu=e, variance=e, g_deriv=1/e.
-        They are distinct, so we can confirm v == variance != g_deriv.
-        """
-        f = Poisson()
-        eta = jnp.ones(3)  # mu = exp(1) = e
-        mu, v, w = f.calc_weight(eta, 0.0)
-        expected_mu = jnp.exp(jnp.ones(3))
-        # For Poisson: variance(mu) = mu = e, g_deriv(mu) = 1/mu = 1/e
-        assert jnp.allclose(
-            v, expected_mu, rtol=1e-5
-        ), f"Second return value should be variance=mu=e, not g_deriv=1/e; got {v}"
-
     def test_calc_weight_four_args_raises_type_error(self):
         f = Gaussian()
         X = jnp.zeros((5, 3))
@@ -360,9 +345,9 @@ class TestNBNegloglikelihoodGradient:
             nb.negloglikelihood(y, eta, disp=1.0, aux=aux + eps) - nb.negloglikelihood(y, eta, disp=1.0, aux=aux - eps)
         ) / (2 * eps)
 
-        assert jnp.allclose(
-            grad_aux, fd_grad, rtol=1e-3
-        ), f"AD grad w.r.t. aux {float(grad_aux):.6g} differs from FD {float(fd_grad):.6g}"
+        assert jnp.allclose(grad_aux, fd_grad, rtol=1e-3), (
+            f"AD grad w.r.t. aux {float(grad_aux):.6g} differs from FD {float(fd_grad):.6g}"
+        )
 
     def test_fd_grad_wrt_eta(self):
         """AD gradient w.r.t. eta (scalar) must match central finite-difference to rtol=1e-3."""
@@ -380,9 +365,9 @@ class TestNBNegloglikelihoodGradient:
             - nb.negloglikelihood(y, eta0 - eps, disp=1.0, aux=aux)
         ) / (2 * eps)
 
-        assert jnp.allclose(
-            grad_eta, fd_grad, rtol=1e-3
-        ), f"AD grad w.r.t. eta {float(grad_eta):.6g} differs from FD {float(fd_grad):.6g}"
+        assert jnp.allclose(grad_eta, fd_grad, rtol=1e-3), (
+            f"AD grad w.r.t. eta {float(grad_eta):.6g} differs from FD {float(fd_grad):.6g}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -445,9 +430,9 @@ class TestTransformSafety:
             eta_scalar_batch
         )
         assert result.shape == (8,), f"{FamilyCls.__name__}: expected shape (8,), got {result.shape}"
-        assert jnp.all(
-            jnp.isfinite(result)
-        ), f"{FamilyCls.__name__}: vmap negloglikelihood produced non-finite values: {result}"
+        assert jnp.all(jnp.isfinite(result)), (
+            f"{FamilyCls.__name__}: vmap negloglikelihood produced non-finite values: {result}"
+        )
 
     @pytest.mark.parametrize(("FamilyCls", "disp", "aux"), _SPLIT_FAMILY_CASES)
     def test_vmap_sample(self, FamilyCls, disp, aux):
