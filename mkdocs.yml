@@ -66,6 +66,7 @@ plugins:
         show_bases: true
         extra_public_objects:
           - jax.Array
+          - glmax.family.ExponentialDispersionFamily
     - mkdocstrings:
         custom_templates: docs/_templates
         handlers:

@@ -1,6 +1,7 @@
 # glmax
 
-`glmax` provides generalized linear modeling with a grammar-first API.
+`glmax` provides generalized linear modeling with a grammar-first API built
+around explicit nouns and top-level verbs.
 
 The canonical workflow is:
 
@@ -14,6 +15,19 @@ The canonical nouns are `GLMData`, `Params`, `FitResult`, `FittedGLM`, `Inferenc
 The package-root also exports inference strategy and stderr types:
 `AbstractTest`, `WaldTest`, `ScoreTest`,
 `AbstractStdErrEstimator`, `FisherInfoError`, and `HuberError`.
+
+`Params(beta, disp, aux)` is the shared parameter carrier across `fit`,
+`predict`, and `infer`:
+
+- `beta` stores regression coefficients.
+- `disp` stores GLM dispersion. Gaussian and Gamma use it as EDM dispersion;
+  Poisson, Binomial, and Negative Binomial canonicalize it to `1.0`.
+- `aux` stores optional family-specific state. Negative Binomial stores its
+  `alpha` here while canonical `disp` remains `1.0`.
+
+See [docs/index.md](docs/index.md) and the [API reference](docs/api/nouns.md)
+for the public contract, and the [family guide](docs/api/family.md) for the
+family-specific `disp`/`aux` split.
 
 ## Installation
 

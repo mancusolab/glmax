@@ -26,6 +26,16 @@ diag   = glmax.check(fitted)
 
 Each verb takes and returns explicit nouns. No hidden state is threaded between calls.
 
+## Parameter Carrier
+
+`Params(beta, disp, aux)` is the parameter carrier shared by `fit`, `predict`,
+and `infer`.
+
+- `disp` is GLM dispersion / `phi`.
+- `aux` is optional family-specific state.
+- Negative Binomial stores `alpha` in `aux` while canonical `disp` remains `1.0`.
+- Gaussian and Gamma use `disp` as EDM dispersion and ignore `aux`.
+
 ## API surface
 
 **Verbs** — [`specify`](api/verbs.md), [`fit`](api/verbs.md), [`predict`](api/verbs.md), [`infer`](api/verbs.md), [`check`](api/verbs.md)
@@ -37,3 +47,6 @@ Each verb takes and returns explicit nouns. No hidden state is threaded between 
 **Inference** — [`AbstractTest`](api/inference.md), [`WaldTest`](api/inference.md), [`ScoreTest`](api/inference.md), [`AbstractStdErrEstimator`](api/inference.md), [`FisherInfoError`](api/inference.md), [`HuberError`](api/inference.md)
 
 **Families** — [`Gaussian`](api/family.md), [`Poisson`](api/family.md), [`Binomial`](api/family.md), [`NegativeBinomial`](api/family.md), [`Gamma`](api/family.md)
+
+Advanced fitter and solver details live on the API pages, but the primary user
+workflow remains the top-level grammar API shown above.

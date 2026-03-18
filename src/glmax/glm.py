@@ -10,7 +10,8 @@ import jax.numpy as jnp
 from jax import Array
 from jaxtyping import ArrayLike, ScalarLike
 
-from .family.dist import _call_family_with_optional_aux, ExponentialDispersionFamily, Gaussian
+from .family import ExponentialDispersionFamily, Gaussian
+from .family.dist import _call_family_with_optional_aux
 
 
 class GLM(eqx.Module):
