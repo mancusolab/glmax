@@ -1,17 +1,11 @@
 # pattern: Functional Core
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
 
 import equinox as eqx
 import jax.numpy as jnp
 
 from jax import Array
-
-
-if TYPE_CHECKING:
-    from jaxtyping import ArrayLike
+from jaxtyping import ArrayLike
 
 
 __all__ = ["GLMData"]

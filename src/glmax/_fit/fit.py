@@ -1,10 +1,9 @@
 # pattern: Functional Core
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
 
 import equinox as eqx
+
+from jax import Array
 
 from ..data import GLMData
 from ..glm import GLM
@@ -17,9 +16,6 @@ from .types import (
     Params,
 )
 
-
-if TYPE_CHECKING:
-    from jax import Array
 
 __all__ = ["fit", "predict"]
 

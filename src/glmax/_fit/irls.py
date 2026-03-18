@@ -2,23 +2,17 @@
 
 """IRLS optimizer kernels and default fitter strategy."""
 
-from __future__ import annotations
-
-from typing import NamedTuple, TYPE_CHECKING
+from typing import NamedTuple
 
 import jax.numpy as jnp
 
 from jax import Array, lax
+from jaxtyping import ArrayLike, ScalarLike
 
 from ..data import GLMData
+from ..glm import GLM
 from .solve import AbstractLinearSolver, CholeskySolver
 from .types import AbstractFitter, FitResult, Params
-
-
-if TYPE_CHECKING:
-    from jaxtyping import ArrayLike, ScalarLike
-
-    from ..glm import GLM
 
 
 __all__ = ["IRLSFitter"]
@@ -90,7 +84,7 @@ class IRLSFitter(AbstractFitter, strict=True):
 
     solver: AbstractLinearSolver
 
-    def __init__(self, solver: AbstractLinearSolver = CholeskySolver()) -> None:
+    def __init__(self, solver: AbstractLinearSolver = CholeskySolver()):
         r"""**Arguments:**
         - `solver`: `AbstractLinearSolver` for each IRLS weighted least-squares
           step (default: `CholeskySolver()`).

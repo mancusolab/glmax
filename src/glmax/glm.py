@@ -2,20 +2,13 @@
 
 """GLM specification noun and grammar verb factory."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 import equinox as eqx
 import jax.numpy as jnp
 
 from jax import Array
+from jaxtyping import ArrayLike, ScalarLike
 
 from .family import ExponentialDispersionFamily, Gaussian
-
-
-if TYPE_CHECKING:
-    from jaxtyping import ArrayLike, ScalarLike
 
 
 class GLM(eqx.Module):
@@ -31,7 +24,7 @@ class GLM(eqx.Module):
 
     family: ExponentialDispersionFamily
 
-    def __init__(self, family: ExponentialDispersionFamily = Gaussian()) -> None:
+    def __init__(self, family: ExponentialDispersionFamily = Gaussian()):
         r"""**Arguments:**
         - `family`: `ExponentialFamily` instance (default: `Gaussian()`).
         """

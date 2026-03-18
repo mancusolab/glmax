@@ -2,28 +2,21 @@
 
 """Inferrer strategies for the `_infer()` verb."""
 
-from __future__ import annotations
-
 from abc import abstractmethod
-from typing import TYPE_CHECKING
 
 import equinox as eqx
 import jax.numpy as jnp
 
 from jax import Array
 from jax.scipy.stats import norm
+from jaxtyping import ArrayLike
 
 from .._fit import FittedGLM
 from ..family.dist import Gaussian
 from ..family.utils import t_cdf
+from ..glm import GLM
 from .stderr import _validated_fitted_dispersion, AbstractStdErrEstimator
 from .types import InferenceResult
-
-
-if TYPE_CHECKING:
-    from jaxtyping import ArrayLike
-
-    from ..glm import GLM
 
 
 __all__ = ["AbstractTest", "WaldTest", "ScoreTest"]
