@@ -7,10 +7,11 @@ import equinox as eqx
 import jax.numpy as jnp
 import jax.scipy.stats as jaxstats
 
+from jax.scipy import linalg as jscla
 from jaxtyping import Array
 
 from ._fit import FittedGLM
-from .family.dist import Binomial, NegativeBinomial, Poisson
+from .family.dist import Binomial, Gaussian, NegativeBinomial, Poisson
 
 
 T = TypeVar("T")
@@ -19,6 +20,10 @@ T = TypeVar("T")
 __all__ = [
     "AbstractDiagnostic",
     "Diagnostics",
+    "GofStats",
+    "GoodnessOfFit",
+    "InfluenceStats",
+    "Influence",
     "PearsonResidual",
     "DevianceResidual",
     "QuantileResidual",
@@ -143,6 +148,126 @@ class QuantileResidual(AbstractDiagnostic[Array], strict=True):
         p_mid = 0.5 * (p_upper + p_lower)
         p_mid = jnp.clip(jnp.asarray(p_mid), _EPS, 1.0 - _EPS)
         return jaxstats.norm.ppf(p_mid)
+
+
+class GofStats(eqx.Module, strict=True):
+    r"""Goodness-of-fit statistics for a fitted GLM.
+
+    All fields are scalar JAX arrays. Pytree-compatible.
+
+    **Fields:**
+
+    - `deviance`: total deviance $D = \sum_i d_i$.
+    - `pearson_chi2`: Pearson chi-squared $\sum_i (y_i - \mu_i)^2 / V(\mu_i)$.
+    - `df_resid`: residual degrees of freedom $n - p$.
+    - `dispersion`: fitted dispersion parameter $\hat\phi$.
+    - `aic`: Akaike information criterion $-2\ell + 2p$.
+    - `bic`: Bayesian information criterion $-2\ell + p \log n$.
+    """
+
+    deviance: Array
+    pearson_chi2: Array
+    df_resid: Array
+    dispersion: Array
+    aic: Array
+    bic: Array
+
+
+class GoodnessOfFit(AbstractDiagnostic[GofStats], strict=True):
+    r"""Goodness-of-fit statistics: deviance, Pearson chi-squared, AIC, BIC, dispersion."""
+
+    def diagnose(self, fitted: FittedGLM) -> GofStats:
+        r"""Compute goodness-of-fit statistics.
+
+        **Arguments:**
+
+        - `fitted`: `FittedGLM` produced by `fit(...)`.
+
+        **Returns:**
+
+        `GofStats` with scalar array fields.
+        """
+        family = fitted.model.family
+        y = fitted.y
+        mu = fitted.mu
+        eta = fitted.eta
+        disp = fitted.params.disp
+        aux = fitted.params.aux
+        n, p = fitted.X.shape
+
+        deviance = jnp.sum(family.deviance_contribs(y, mu, disp, aux=aux))
+        pearson_chi2 = jnp.sum((y - mu) ** 2 / family.variance(mu, disp, aux=aux))
+
+        n_f = jnp.asarray(n, dtype=jnp.float64)
+        p_f = jnp.asarray(p, dtype=jnp.float64)
+        df_resid = n_f - p_f
+        ll_disp = jnp.clip(deviance / n_f, min=jnp.finfo(float).tiny) if isinstance(family, Gaussian) else disp
+        ll = fitted.model.log_prob(y, eta, ll_disp, aux=aux)
+        aic = -2.0 * ll + 2.0 * p_f
+        bic = -2.0 * ll + p_f * jnp.log(n_f)
+
+        return GofStats(
+            deviance=deviance,
+            pearson_chi2=pearson_chi2,
+            df_resid=df_resid,
+            dispersion=jnp.asarray(disp),
+            aic=aic,
+            bic=bic,
+        )
+
+
+class InfluenceStats(eqx.Module, strict=True):
+    r"""Per-observation influence statistics.
+
+    **Fields:**
+
+    - `leverage`: hat-matrix diagonal $h_{ii} \in (0, 1)$, shape `(n,)`.
+    - `cooks_distance`: Cook's distance $D_i \geq 0$, shape `(n,)`.
+    """
+
+    leverage: Array
+    cooks_distance: Array
+
+
+class Influence(AbstractDiagnostic[InfluenceStats], strict=True):
+    r"""Leverage and Cook's distance via Cholesky-based hat-matrix computation.
+
+    Recomputes $\operatorname{chol}(X^T W X)$ from the fitted weights;
+    does not rely on the Cholesky factor from IRLS (which is not persisted).
+    """
+
+    def diagnose(self, fitted: FittedGLM) -> InfluenceStats:
+        r"""Compute leverage and Cook's distance.
+
+        **Arguments:**
+
+        - `fitted`: `FittedGLM` produced by `fit(...)`.
+
+        **Returns:**
+
+        `InfluenceStats` with `leverage` and `cooks_distance`, each shape `(n,)`.
+        """
+        X = fitted.X
+        y = fitted.y
+        mu = fitted.mu
+        w = fitted.glm_wt
+        disp = fitted.params.disp
+        aux = fitted.params.aux
+        _, p = X.shape
+
+        sqrt_w = jnp.sqrt(w)
+        Xw = X * sqrt_w[:, jnp.newaxis]
+        A = Xw.T @ Xw
+        L = jscla.cholesky(A, lower=True)
+        Z = jscla.solve_triangular(L, Xw.T, lower=True)
+        leverage = jnp.sum(Z**2, axis=0)
+
+        v = fitted.model.family.variance(mu, disp, aux=aux)
+        r_pearson = (y - mu) / jnp.sqrt(v)
+        p_f = jnp.asarray(p, dtype=jnp.float64)
+        cooks_distance = r_pearson**2 * leverage / (p_f * (1.0 - leverage) ** 2)
+
+        return InfluenceStats(leverage=leverage, cooks_distance=cooks_distance)
 
 
 class Diagnostics(NamedTuple):
