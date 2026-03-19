@@ -19,6 +19,8 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 
+from jax.scipy.special import xlogy
+
 import glmax
 
 from glmax import GLMData
@@ -197,6 +199,16 @@ class TestDevianceContribs:
         expected = 2.0 * (log_term - (y - mu))
         assert jnp.allclose(result, expected, atol=1e-10)
 
+    def test_poisson_deviance_contribs_extreme_inputs_remain_finite(self):
+        f = Poisson()
+        y = jnp.array([1e200], dtype=jnp.float64)
+        mu = jnp.array([1e-200], dtype=jnp.float64)
+        result = f.deviance_contribs(y, mu)
+        mu_ = jnp.clip(mu, *f._bounds)
+        expected = 2.0 * (xlogy(y, y) - xlogy(y, mu_) - (y - mu_))
+        assert jnp.all(jnp.isfinite(result))
+        assert jnp.allclose(result, expected, rtol=1e-12, atol=1e-12)
+
     @pytest.mark.parametrize("FamilyCls", [Gaussian, Poisson, Binomial, NegativeBinomial, Gamma])
     def test_deviance_contribs_shape_n(self, FamilyCls):
         n = 8
@@ -218,12 +230,34 @@ class TestDevianceContribs:
         assert jnp.all(result >= 0)
         assert jnp.allclose(result, 0.0, atol=1e-10)
 
+    def test_binomial_deviance_contribs_extreme_inputs_remain_finite(self):
+        f = Binomial()
+        y = jnp.array([1.0], dtype=jnp.float64)
+        mu = jnp.array([1e-320], dtype=jnp.float64)
+        result = f.deviance_contribs(y, mu)
+        mu_ = jnp.clip(mu, *f._bounds)
+        expected = 2.0 * (xlogy(y, y) - xlogy(y, mu_) + xlogy(1.0 - y, 1.0 - y) - xlogy(1.0 - y, 1.0 - mu_))
+        assert jnp.all(jnp.isfinite(result))
+        assert jnp.allclose(result, expected, rtol=1e-12, atol=1e-12)
+
     def test_nb_deviance_zero_y_finite(self):
         f = NegativeBinomial()
         y = jnp.array([0.0, 1.0, 3.0])
         mu = jnp.array([0.5, 1.5, 2.5])
         result = f.deviance_contribs(y, mu, aux=0.5)
         assert jnp.all(jnp.isfinite(result))
+
+    def test_nb_deviance_contribs_extreme_inputs_remain_finite(self):
+        f = NegativeBinomial()
+        y = jnp.array([1e50], dtype=jnp.float64)
+        mu = jnp.array([1e-50], dtype=jnp.float64)
+        alpha = 0.5
+        r = 1.0 / alpha
+        result = f.deviance_contribs(y, mu, aux=alpha)
+        mu_ = jnp.clip(mu, *f._bounds)
+        expected = 2.0 * (r * (jnp.log1p(mu_ / r) - jnp.log1p(y / r)) + xlogy(y, y) - xlogy(y, mu_))
+        assert jnp.all(jnp.isfinite(result))
+        assert jnp.allclose(result, expected, rtol=1e-12, atol=1e-12)
 
     @pytest.mark.parametrize("FamilyCls", [Binomial, Gamma])
     def test_deviance_contribs_nonnegative_binomial_gamma(self, FamilyCls):

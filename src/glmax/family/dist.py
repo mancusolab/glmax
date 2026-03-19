@@ -108,7 +108,7 @@ class ExponentialDispersionFamily(eqx.Module):
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
-        r"""Cumulative distribution function $F(y \mid \mu)$.
+        r"""Cumulative distribution function for the family.
 
         **Arguments:**
 
@@ -130,7 +130,7 @@ class ExponentialDispersionFamily(eqx.Module):
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
-        r"""Per-observation deviance contributions $d_i = 2(\ell_i^\text{sat} - \ell_i^\text{fit})$.
+        r"""Per-observation deviance contributions for the family.
 
         **Arguments:**
 
@@ -374,6 +374,19 @@ class Gaussian(ExponentialDispersionFamily):
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Gaussian cumulative distribution function.
+
+        **Arguments:**
+
+        - `y`: observed responses, shape `(n,)`.
+        - `mu`: fitted means, shape `(n,)`.
+        - `disp`: variance $\sigma^2$, scalar.
+        - `aux`: ignored.
+
+        **Returns:**
+
+        CDF values, shape `(n,)`.
+        """
         del aux
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return jaxstats.norm.cdf(y, loc=mu, scale=jnp.sqrt(safe_disp))
@@ -385,6 +398,19 @@ class Gaussian(ExponentialDispersionFamily):
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Gaussian deviance contributions.
+
+        **Arguments:**
+
+        - `y`: observed responses, shape `(n,)`.
+        - `mu`: fitted means, shape `(n,)`.
+        - `disp`: ignored for unscaled deviance.
+        - `aux`: ignored.
+
+        **Returns:**
+
+        Non-negative deviance contributions, shape `(n,)`.
+        """
         del disp, aux
         return (jnp.asarray(y) - jnp.asarray(mu)) ** 2
 
@@ -474,6 +500,19 @@ class Binomial(ExponentialDispersionFamily):
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Bernoulli cumulative distribution function.
+
+        **Arguments:**
+
+        - `y`: binary responses in `{0, 1}`, shape `(n,)`.
+        - `mu`: success probabilities, shape `(n,)`.
+        - `disp`: ignored.
+        - `aux`: ignored.
+
+        **Returns:**
+
+        CDF values, shape `(n,)`.
+        """
         del disp, aux
         return jaxstats.bernoulli.cdf(y, p=jnp.asarray(mu))
 
@@ -484,10 +523,23 @@ class Binomial(ExponentialDispersionFamily):
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Binomial deviance contributions.
+
+        **Arguments:**
+
+        - `y`: binary responses in `{0, 1}`, shape `(n,)`.
+        - `mu`: success probabilities, shape `(n,)`.
+        - `disp`: ignored.
+        - `aux`: ignored.
+
+        **Returns:**
+
+        Non-negative deviance contributions, shape `(n,)`.
+        """
         del disp, aux
         y_ = jnp.asarray(y)
-        mu_ = jnp.asarray(mu)
-        return 2.0 * (xlogy(y_, y_ / mu_) + xlogy(1.0 - y_, (1.0 - y_) / (1.0 - mu_)))
+        mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
+        return 2.0 * (xlogy(y_, y_) - xlogy(y_, mu_) + xlogy(1.0 - y_, 1.0 - y_) - xlogy(1.0 - y_, 1.0 - mu_))
 
 
 class Poisson(ExponentialDispersionFamily):
@@ -568,6 +620,19 @@ class Poisson(ExponentialDispersionFamily):
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Poisson cumulative distribution function.
+
+        **Arguments:**
+
+        - `y`: count responses, shape `(n,)`.
+        - `mu`: fitted means (rates), shape `(n,)`.
+        - `disp`: ignored.
+        - `aux`: ignored.
+
+        **Returns:**
+
+        CDF values, shape `(n,)`.
+        """
         del disp, aux
         return jaxstats.poisson.cdf(y, mu=jnp.asarray(mu))
 
@@ -578,10 +643,23 @@ class Poisson(ExponentialDispersionFamily):
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Poisson deviance contributions.
+
+        **Arguments:**
+
+        - `y`: count responses, shape `(n,)`.
+        - `mu`: fitted means (rates), shape `(n,)`.
+        - `disp`: ignored.
+        - `aux`: ignored.
+
+        **Returns:**
+
+        Non-negative deviance contributions, shape `(n,)`.
+        """
         del disp, aux
         y_ = jnp.asarray(y)
-        mu_ = jnp.asarray(mu)
-        return 2.0 * (xlogy(y_, y_ / mu_) - (y_ - mu_))
+        mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
+        return 2.0 * (xlogy(y_, y_) - xlogy(y_, mu_) - (y_ - mu_))
 
 
 class NegativeBinomial(ExponentialDispersionFamily):
@@ -791,6 +869,19 @@ class NegativeBinomial(ExponentialDispersionFamily):
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Negative-binomial cumulative distribution function.
+
+        **Arguments:**
+
+        - `y`: count responses, shape `(n,)`.
+        - `mu`: fitted means, shape `(n,)`.
+        - `disp`: legacy alpha carrier (used if `aux` is `None`).
+        - `aux`: overdispersion $\alpha > 0$, scalar.
+
+        **Returns:**
+
+        CDF values, shape `(n,)`.
+        """
         alpha = _nb_alpha_from_split(disp, aux)
         r = 1.0 / alpha
         mu_ = jnp.asarray(mu)
@@ -804,11 +895,24 @@ class NegativeBinomial(ExponentialDispersionFamily):
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Negative-binomial deviance contributions.
+
+        **Arguments:**
+
+        - `y`: count responses, shape `(n,)`.
+        - `mu`: fitted means, shape `(n,)`.
+        - `disp`: legacy alpha carrier (used if `aux` is `None`).
+        - `aux`: overdispersion $\alpha > 0$, scalar.
+
+        **Returns:**
+
+        Non-negative deviance contributions, shape `(n,)`.
+        """
         alpha = _nb_alpha_from_split(disp, aux)
         r = 1.0 / alpha
         y_ = jnp.asarray(y)
-        mu_ = jnp.asarray(mu)
-        return 2.0 * (r * jnp.log1p((mu_ - y_) / (r + y_)) + xlogy(y_, y_ / mu_))
+        mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
+        return 2.0 * (r * (jnp.log1p(mu_ / r) - jnp.log1p(y_ / r)) + xlogy(y_, y_) - xlogy(y_, mu_))
 
 
 class Gamma(ExponentialDispersionFamily):
@@ -923,6 +1027,19 @@ class Gamma(ExponentialDispersionFamily):
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Gamma cumulative distribution function.
+
+        **Arguments:**
+
+        - `y`: positive responses, shape `(n,)`.
+        - `mu`: fitted means, shape `(n,)`.
+        - `disp`: dispersion $\phi > 0$, scalar.
+        - `aux`: ignored.
+
+        **Returns:**
+
+        CDF values, shape `(n,)`.
+        """
         del aux
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
@@ -937,6 +1054,19 @@ class Gamma(ExponentialDispersionFamily):
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
+        r"""Gamma deviance contributions.
+
+        **Arguments:**
+
+        - `y`: positive responses, shape `(n,)`.
+        - `mu`: fitted means, shape `(n,)`.
+        - `disp`: ignored for unscaled deviance.
+        - `aux`: ignored.
+
+        **Returns:**
+
+        Non-negative deviance contributions, shape `(n,)`.
+        """
         del disp, aux
         y_ = jnp.asarray(y)
         mu_ = jnp.asarray(mu)
