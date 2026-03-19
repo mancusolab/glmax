@@ -1,10 +1,17 @@
 # pattern: Imperative Shell
 
 import importlib
+import warnings
 
 from typing import ClassVar
 
+import numpy as np
 import pytest
+import statsmodels.api as sm
+
+from numpy.testing import assert_allclose
+from statsmodels.genmod.families import links as sm_links
+from statsmodels.tools.sm_exceptions import DomainWarning
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -18,6 +25,7 @@ from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
 from glmax.family.links import IdentityLink, InverseLink, LogitLink, LogLink, NBLink, PowerLink
+from glmax.family.utils import t_cdf
 from glmax.glm import specify
 
 
@@ -288,6 +296,66 @@ def _assert_canonical_params_for_family(family, params: Params) -> None:
         assert jnp.allclose(params.disp, jnp.array(1.0))
 
 
+def _statsmodels_result_for_fitted(fitted: FittedGLM):
+    family = fitted.model.family
+    glink = family.glink
+    scale = float(np.asarray(fitted.params.disp))
+    aux = None if fitted.params.aux is None else float(np.asarray(fitted.params.aux))
+
+    if isinstance(family, Gaussian):
+        if isinstance(glink, IdentityLink):
+            sm_family = sm.families.Gaussian(link=sm_links.Identity())
+        elif isinstance(glink, LogLink):
+            sm_family = sm.families.Gaussian(link=sm_links.Log())
+        else:
+            sm_family = sm.families.Gaussian(
+                link=sm_links.Power(power=float(np.asarray(glink.power))),
+                check_link=False,
+            )
+    elif isinstance(family, Poisson):
+        if isinstance(glink, IdentityLink):
+            sm_family = sm.families.Poisson(link=sm_links.Identity())
+        else:
+            sm_family = sm.families.Poisson(link=sm_links.Log())
+    elif isinstance(family, Binomial):
+        if isinstance(glink, LogitLink):
+            sm_family = sm.families.Binomial(link=sm_links.Logit())
+        elif isinstance(glink, LogLink):
+            sm_family = sm.families.Binomial(link=sm_links.Log())
+        else:
+            sm_family = sm.families.Binomial(link=sm_links.Identity())
+    elif isinstance(family, Gamma):
+        if isinstance(glink, InverseLink):
+            sm_family = sm.families.Gamma(link=sm_links.InversePower())
+        elif isinstance(glink, LogLink):
+            sm_family = sm.families.Gamma(link=sm_links.Log())
+        else:
+            sm_family = sm.families.Gamma(link=sm_links.Identity())
+    elif isinstance(family, NegativeBinomial):
+        if isinstance(glink, NBLink):
+            sm_link = sm_links.NegativeBinomial(alpha=float(np.asarray(glink.alpha)))
+        elif isinstance(glink, LogLink):
+            sm_link = sm_links.Log()
+        elif isinstance(glink, IdentityLink):
+            sm_link = sm_links.Identity()
+        else:
+            sm_link = sm_links.Power(power=float(np.asarray(glink.power)))
+        sm_family = sm.families.NegativeBinomial(alpha=aux, link=sm_link)
+    else:
+        raise TypeError(f"Unsupported statsmodels reference family: {type(family).__name__}")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DomainWarning)
+        return sm.GLM(np.asarray(fitted.y), np.asarray(fitted.X), family=sm_family).fit(scale=scale)
+
+
+def _statsmodels_expected_pvalues(fitted: FittedGLM, sm_result) -> np.ndarray:
+    if isinstance(fitted.model.family, Gaussian):
+        df = fitted.X.shape[0] - fitted.params.beta.shape[0]
+        return np.asarray(2.0 * t_cdf(-jnp.abs(jnp.asarray(sm_result.tvalues)), df))
+    return np.asarray(sm_result.pvalues)
+
+
 @pytest.mark.parametrize(
     ("family", "X", "y"),
     [
@@ -355,6 +423,19 @@ def test_fit_and_infer_succeed_across_all_supported_family_link_combinations(fam
     assert jnp.all(jnp.isfinite(inferred.stat))
     assert jnp.all(jnp.isfinite(inferred.p))
     assert jnp.all((inferred.p >= 0.0) & (inferred.p <= 1.0))
+
+
+@pytest.mark.parametrize(("family", "X", "y"), _VALID_LINK_COMBINATION_CASES)
+def test_fit_and_infer_match_statsmodels_across_all_supported_family_link_combinations(family, X, y) -> None:
+    fitted = glmax.fit(glmax.specify(family=family), GLMData(X=X, y=y))
+    inferred = glmax.infer(fitted)
+    sm_result = _statsmodels_result_for_fitted(fitted)
+    sm_p = _statsmodels_expected_pvalues(fitted, sm_result)
+
+    assert_allclose(np.asarray(fitted.params.beta), np.asarray(sm_result.params), rtol=1e-4, atol=1e-5)
+    assert_allclose(np.asarray(inferred.se), np.asarray(sm_result.bse), rtol=1e-4, atol=1e-5)
+    assert_allclose(np.asarray(inferred.stat), np.asarray(sm_result.tvalues), rtol=1e-4, atol=1e-5)
+    assert_allclose(np.asarray(inferred.p), sm_p, rtol=1e-4, atol=1e-5)
 
 
 def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
