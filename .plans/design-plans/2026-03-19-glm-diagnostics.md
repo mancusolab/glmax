@@ -32,7 +32,7 @@ glmax exposes a `check` grammar verb that currently returns an empty `Diagnostic
 ## Goals and Non-Goals
 ### Goals
 - Pluggable, extensible diagnostics under a single `AbstractDiagnostic[T]` interface
-- JIT-compatible tuple pytree return — users can `jax.tree_util.tree_map` over all outputs
+- JIT-compatible tuple pytree return — `check()` maps over the diagnostics tuple internally via `tuple(d.diagnose(fitted) for d in diagnostics)`
 - Deterministic quantile residuals via mid-quantile approximation (no PRNG key required)
 - Cover the three core diagnostic categories: residuals, goodness-of-fit, influence
 - Mirror existing codebase patterns: `eqx.Module`, `strict=True`, `AbstractXxx` base classes
@@ -109,7 +109,7 @@ Detailed artifacts:
 
 ### Egress
 - Contract: `tuple[T, ...]` where each element `T` corresponds positionally to the input `diagnostics` tuple; structure is static and JAX-pytree-traversable
-- Output mapping: `jax.tree_util.tree_map` operates over the returned tuple and recurses into any `eqx.Module` leaves
+- Output mapping: `check()` iterates over the `diagnostics` tuple, calling `diagnose(fitted)` on each; returns a positional tuple of results
 
 ## Validation Strategy
 - Boundary checks: `isinstance(fitted, FittedGLM)` at `check()` entry; family CDF outputs clamped to `[ε, 1-ε]` before `jax.scipy.stats.norm.ppf` in `QuantileResidual`
@@ -177,7 +177,7 @@ Detailed artifacts:
 
 **Dependencies:** Phases 1–3
 
-**Done when:** `glmax.check(fitted)` returns a 5-tuple pytree; `jax.tree_util.tree_map` operates over it; `eqx.filter_jit(glmax.check)(fitted)` compiles and produces correct outputs; custom diagnostics tuple accepted; `pytest -p no:capture tests/` passes
+**Done when:** `glmax.check(fitted)` returns a 5-tuple; `eqx.filter_jit(glmax.check)(fitted)` compiles and produces correct outputs; custom diagnostics tuple accepted; `pytest -p no:capture tests/` passes
 <!-- END_PHASE_4 -->
 
 ## Simulation And Inference-Consistency Validation
@@ -232,9 +232,8 @@ Detailed artifacts:
 ### glm-diagnostics.AC7: check() function
 - **glm-diagnostics.AC7.1 Success:** `glmax.check(fitted)` with default diagnostics returns a 5-tuple mapping positionally to `(PearsonResidual, DevianceResidual, QuantileResidual, GoodnessOfFit, Influence)` results
 - **glm-diagnostics.AC7.2 Success:** `glmax.check(fitted, diagnostics=(PearsonResidual(),))` returns a 1-tuple containing only Pearson residuals
-- **glm-diagnostics.AC7.3 Success:** `jax.tree_util.tree_map(fn, glmax.check(fitted))` applies `fn` to all array leaves across all diagnostics
-- **glm-diagnostics.AC7.4 Success:** `eqx.filter_jit(glmax.check)(fitted)` compiles and produces the same results as the non-JIT call
-- **glm-diagnostics.AC7.5 Failure:** `glmax.check("not_a_fitted_glm")` raises `TypeError`
+- **glm-diagnostics.AC7.3 Success:** `eqx.filter_jit(glmax.check)(fitted)` compiles and produces the same results as the non-JIT call
+- **glm-diagnostics.AC7.4 Failure:** `glmax.check("not_a_fitted_glm")` raises `TypeError`
 
 ## Glossary
 - **GLM (Generalised Linear Model)**: A regression framework that extends ordinary linear regression to response variables with non-normal distributions, via a link function and an exponential-family distribution.
@@ -242,7 +241,7 @@ Detailed artifacts:
 - **FittedGLM**: The glmax struct produced after fitting; carries the observed response `y`, design matrix `X`, fitted mean `mu`, linear predictor `eta`, weights, residuals, and model parameters.
 - **`eqx.Module` / Equinox**: A JAX-compatible scientific-computing library. `eqx.Module` is its base class for typed, immutable structs that participate in JAX's pytree system.
 - **`eqx.filter_jit`**: Equinox's JIT wrapper that traces only JAX array leaves and treats non-array fields as static, avoiding tracing errors that arise with plain `jax.jit`.
-- **pytree**: JAX's term for any nested container (tuple, list, dict, `eqx.Module`) whose array leaves can be traversed uniformly by functions like `jax.tree_util.tree_map`.
+- **pytree**: JAX's term for any nested container (tuple, list, dict, `eqx.Module`) whose array leaves JAX can traverse uniformly — required for JIT and automatic differentiation.
 - **`strict=True`** (Equinox): Module option that disallows dynamic field assignment after construction, enforcing immutability.
 - **AbstractDiagnostic[T]**: The pluggable strategy interface introduced by this plan; each concrete diagnostic encapsulates one computation and returns a typed result `T`.
 - **Pearson residual**: Observation-level residual normalised by the square root of the variance function: `(y − μ) / sqrt(V(μ))`.
