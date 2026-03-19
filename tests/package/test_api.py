@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import equinox as eqx
+import jax.nn
 import jax.numpy as jnp
 import jax.tree_util as jtu
 
@@ -293,6 +294,14 @@ def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None
         def sample(self, key, eta, disp=1.0, aux=None):
             del key, disp, aux
             return jnp.asarray(eta)
+
+        def cdf(self, y, mu, disp=1.0, aux=None):
+            del disp, aux
+            return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
+
+        def deviance_contribs(self, y, mu, disp=1.0, aux=None):
+            del disp, aux
+            return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
 
         def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
             del X, y, eta, step_size

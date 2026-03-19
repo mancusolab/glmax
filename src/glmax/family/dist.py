@@ -11,7 +11,7 @@ import jax.random as rdm
 import jax.scipy.stats as jaxstats
 
 from equinox import AbstractVar
-from jax.scipy.special import gammaln
+from jax.scipy.special import betainc, gammaln, xlogy
 from jaxtyping import Array, ArrayLike, ScalarLike
 
 from .links import AbstractLink, IdentityLink, InverseLink, LogitLink, LogLink, NBLink, PowerLink
@@ -98,6 +98,50 @@ class ExponentialDispersionFamily(eqx.Module):
         **Returns:**
 
         Variance, shape `(n,)`.
+        """
+
+    @abstractmethod
+    def cdf(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        r"""Cumulative distribution function $F(y \mid \mu)$.
+
+        **Arguments:**
+
+        - `y`: observed responses, shape `(n,)`.
+        - `mu`: fitted means, shape `(n,)`.
+        - `disp`: dispersion parameter, scalar.
+        - `aux`: optional family-specific auxiliary scalar.
+
+        **Returns:**
+
+        CDF values $F(y_i \mid \mu_i)$, shape `(n,)`, values in `[0, 1]`.
+        """
+
+    @abstractmethod
+    def deviance_contribs(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        r"""Per-observation deviance contributions $d_i = 2(\ell_i^\text{sat} - \ell_i^\text{fit})$.
+
+        **Arguments:**
+
+        - `y`: observed responses, shape `(n,)`.
+        - `mu`: fitted means, shape `(n,)`.
+        - `disp`: dispersion parameter, scalar.
+        - `aux`: optional family-specific auxiliary scalar.
+
+        **Returns:**
+
+        Non-negative deviance contributions, shape `(n,)`.
         """
 
     @abstractmethod
@@ -323,6 +367,27 @@ class Gaussian(ExponentialDispersionFamily):
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return mu + rdm.normal(key, shape=mu.shape) * jnp.sqrt(safe_disp)
 
+    def cdf(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        del aux
+        safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
+        return jaxstats.norm.cdf(y, loc=mu, scale=jnp.sqrt(safe_disp))
+
+    def deviance_contribs(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        del disp, aux
+        return (jnp.asarray(y) - jnp.asarray(mu)) ** 2
+
 
 class Binomial(ExponentialDispersionFamily):
     r"""Binomial exponential family for binary responses.
@@ -402,6 +467,28 @@ class Binomial(ExponentialDispersionFamily):
         mu = self.glink.inverse(eta)
         return rdm.bernoulli(key, p=mu, shape=mu.shape).astype(jnp.float64)
 
+    def cdf(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        del disp, aux
+        return jaxstats.bernoulli.cdf(y, p=jnp.asarray(mu))
+
+    def deviance_contribs(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        del disp, aux
+        y_ = jnp.asarray(y)
+        mu_ = jnp.asarray(mu)
+        return 2.0 * (xlogy(y_, y_ / mu_) + xlogy(1.0 - y_, (1.0 - y_) / (1.0 - mu_)))
+
 
 class Poisson(ExponentialDispersionFamily):
     r"""Poisson exponential family for count responses.
@@ -473,6 +560,28 @@ class Poisson(ExponentialDispersionFamily):
         del disp, aux
         lam = self.glink.inverse(eta)
         return rdm.poisson(key, lam=lam).astype(jnp.float64)
+
+    def cdf(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        del disp, aux
+        return jaxstats.poisson.cdf(y, mu=jnp.asarray(mu))
+
+    def deviance_contribs(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 0.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        del disp, aux
+        y_ = jnp.asarray(y)
+        mu_ = jnp.asarray(mu)
+        return 2.0 * (xlogy(y_, y_ / mu_) - (y_ - mu_))
 
 
 class NegativeBinomial(ExponentialDispersionFamily):
@@ -675,6 +784,32 @@ class NegativeBinomial(ExponentialDispersionFamily):
         """
         return jnp.asarray(1.0), jnp.asarray(0.1)
 
+    def cdf(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        alpha = _nb_alpha_from_split(disp, aux)
+        r = 1.0 / alpha
+        mu_ = jnp.asarray(mu)
+        p_fail = r / (r + mu_)
+        return betainc(r, jnp.floor(y) + 1.0, p_fail)
+
+    def deviance_contribs(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        alpha = _nb_alpha_from_split(disp, aux)
+        r = 1.0 / alpha
+        y_ = jnp.asarray(y)
+        mu_ = jnp.asarray(mu)
+        return 2.0 * (r * jnp.log1p((mu_ - y_) / (r + y_)) + xlogy(y_, y_ / mu_))
+
 
 class Gamma(ExponentialDispersionFamily):
     r"""Gamma exponential family with density
@@ -780,3 +915,30 @@ class Gamma(ExponentialDispersionFamily):
         k = 1.0 / disp
         theta = mu * disp
         return rdm.gamma(key, k, shape=mu.shape) * theta
+
+    def cdf(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        del aux
+        safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
+        mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
+        k = 1.0 / safe_disp
+        theta = mu_ * safe_disp
+        return jaxstats.gamma.cdf(y, a=k, scale=theta)
+
+    def deviance_contribs(
+        self,
+        y: ArrayLike,
+        mu: ArrayLike,
+        disp: ScalarLike = 1.0,
+        aux: ScalarLike | None = None,
+    ) -> Array:
+        del disp, aux
+        y_ = jnp.asarray(y)
+        mu_ = jnp.asarray(mu)
+        r_ = (y_ - mu_) / mu_
+        return 2.0 * (r_ - jnp.log1p(r_))
