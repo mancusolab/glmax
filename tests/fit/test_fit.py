@@ -12,12 +12,12 @@ import jax.random as jr
 
 import glmax
 
-from glmax import AbstractFitter, FitResult, FittedGLM, GLMData, Params
+from glmax import AbstractFitter, FitResult, FittedGLM, GLMData, InferenceResult, Params
 from glmax._fit import IRLSFitter
 from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
-from glmax.family.links import IdentityLink
+from glmax.family.links import IdentityLink, InverseLink, LogitLink, LogLink, NBLink, PowerLink
 from glmax.glm import specify
 
 
@@ -174,6 +174,100 @@ def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
 _DEFAULT_X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
 # Gamma uses InverseLink (eta = 1/mu); X must not include zero to avoid eta=0 at init.
 _GAMMA_X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
+_INTERCEPT_ONLY_X = jnp.ones((5, 1))
+_BINOMIAL_INTERCEPT_ONLY_X = jnp.ones((6, 1))
+_VALID_LINK_COMBINATION_CASES = [
+    pytest.param(
+        Gaussian(IdentityLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([0.8, 1.0, 1.1, 1.3, 1.6]),
+        id="gaussian-identity-link",
+    ),
+    pytest.param(
+        Gaussian(LogLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([0.8, 1.0, 1.1, 1.3, 1.6]),
+        id="gaussian-log-link",
+    ),
+    pytest.param(
+        Gaussian(PowerLink(0.5)),
+        _INTERCEPT_ONLY_X,
+        jnp.array([0.8, 1.0, 1.1, 1.3, 1.6]),
+        id="gaussian-power-link",
+    ),
+    pytest.param(
+        Poisson(IdentityLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([1.0, 2.0, 3.0, 2.0, 1.0]),
+        id="poisson-identity-link",
+    ),
+    pytest.param(
+        Poisson(LogLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([1.0, 2.0, 3.0, 2.0, 1.0]),
+        id="poisson-log-link",
+    ),
+    pytest.param(
+        Binomial(LogitLink()),
+        _BINOMIAL_INTERCEPT_ONLY_X,
+        jnp.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]),
+        id="binomial-logit-link",
+    ),
+    pytest.param(
+        Binomial(IdentityLink()),
+        _BINOMIAL_INTERCEPT_ONLY_X,
+        jnp.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]),
+        id="binomial-identity-link",
+    ),
+    pytest.param(
+        Binomial(LogLink()),
+        _BINOMIAL_INTERCEPT_ONLY_X,
+        jnp.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]),
+        id="binomial-log-link",
+    ),
+    pytest.param(
+        NegativeBinomial(IdentityLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([1.0, 2.0, 4.0, 3.0, 2.0]),
+        id="negative-binomial-identity-link",
+    ),
+    pytest.param(
+        NegativeBinomial(LogLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([1.0, 2.0, 4.0, 3.0, 2.0]),
+        id="negative-binomial-log-link",
+    ),
+    pytest.param(
+        NegativeBinomial(NBLink(alpha=0.1)),
+        _INTERCEPT_ONLY_X,
+        jnp.array([1.0, 2.0, 4.0, 3.0, 2.0]),
+        id="negative-binomial-nb-link",
+    ),
+    pytest.param(
+        NegativeBinomial(PowerLink(0.5)),
+        _INTERCEPT_ONLY_X,
+        jnp.array([1.0, 2.0, 4.0, 3.0, 2.0]),
+        id="negative-binomial-power-link",
+    ),
+    pytest.param(
+        Gamma(IdentityLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([0.8, 1.0, 1.5, 2.0, 2.4]),
+        id="gamma-identity-link",
+    ),
+    pytest.param(
+        Gamma(InverseLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([0.8, 1.0, 1.5, 2.0, 2.4]),
+        id="gamma-inverse-link",
+    ),
+    pytest.param(
+        Gamma(LogLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([0.8, 1.0, 1.5, 2.0, 2.4]),
+        id="gamma-log-link",
+    ),
+]
 
 
 def _assert_canonical_params_for_family(family, params: Params) -> None:
@@ -218,6 +312,49 @@ def test_default_fitter_returns_canonical_fitresult_for_supported_families(famil
     assert result.glm_wt.shape == y.shape
     assert result.score_residual.shape == y.shape
     _assert_canonical_params_for_family(family, result.params)
+
+
+@pytest.mark.parametrize(("family", "X", "y"), _VALID_LINK_COMBINATION_CASES)
+def test_fit_and_infer_succeed_across_all_supported_family_link_combinations(family, X, y) -> None:
+    model = glmax.specify(family=family)
+    data = GLMData(X=X, y=y)
+
+    fitted = glmax.fit(model, data)
+    inferred = glmax.infer(fitted)
+
+    assert isinstance(fitted, FittedGLM)
+    assert bool(fitted.converged)
+    assert fitted.params.beta.shape == (1,)
+    assert fitted.eta.shape == y.shape
+    assert fitted.mu.shape == y.shape
+    assert fitted.glm_wt.shape == y.shape
+    assert fitted.score_residual.shape == y.shape
+    assert jnp.all(jnp.isfinite(fitted.params.beta))
+    assert bool(jnp.isfinite(fitted.params.disp))
+    assert jnp.all(jnp.isfinite(fitted.eta))
+    assert jnp.all(jnp.isfinite(fitted.mu))
+    assert jnp.all(jnp.isfinite(fitted.glm_wt))
+    assert jnp.all(jnp.isfinite(fitted.score_residual))
+    assert bool(jnp.isfinite(fitted.objective))
+    assert bool(jnp.isfinite(fitted.objective_delta))
+    _assert_canonical_params_for_family(family, fitted.params)
+
+    if isinstance(family, NegativeBinomial):
+        assert fitted.params.aux is not None
+        assert bool(jnp.isfinite(fitted.params.aux))
+    else:
+        assert fitted.params.aux is None
+
+    assert isinstance(inferred, InferenceResult)
+    assert bool(eqx.tree_equal(inferred.params, fitted.params))
+    _assert_canonical_params_for_family(family, inferred.params)
+    assert inferred.se.shape == fitted.params.beta.shape
+    assert inferred.stat.shape == fitted.params.beta.shape
+    assert inferred.p.shape == fitted.params.beta.shape
+    assert jnp.all(jnp.isfinite(inferred.se))
+    assert jnp.all(jnp.isfinite(inferred.stat))
+    assert jnp.all(jnp.isfinite(inferred.p))
+    assert jnp.all((inferred.p >= 0.0) & (inferred.p <= 1.0))
 
 
 def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:

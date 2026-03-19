@@ -119,7 +119,6 @@ jax-ecosystem = ["equinox", "jax", "jaxtyping", "lineax", "optimistix"]
 
 [tool.pyright]
 reportIncompatibleMethodOverride = true
-reportIncompatibleVariableOverride = false  # Incompatible with eqx.AbstractVar
 include = ["glmax", "tests"]
 exclude = ["docs"]
 

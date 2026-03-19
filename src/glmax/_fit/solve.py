@@ -9,7 +9,11 @@ import equinox as eqx
 import jax.numpy as jnp
 import lineax as lx
 
-from jaxtyping import Array, ArrayLike
+from jax import Array
+from jax.typing import ArrayLike
+
+
+# from jaxtyping import Array, ArrayLike
 
 
 SolverState: TypeAlias = tuple[lx.AbstractLinearOperator, ArrayLike]

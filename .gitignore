@@ -55,11 +55,6 @@ coverage.xml
 build/*
 dist/*
 sdist/*
-docs/api/*
-!docs/api/
-!docs/api/glm.md
-docs/_rst/*
-docs/_build/*
 cover/*
 MANIFEST
 
