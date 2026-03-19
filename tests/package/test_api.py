@@ -13,7 +13,23 @@ import jax.tree_util as jtu
 
 import glmax
 
-from glmax import AbstractFitter, Diagnostics, FitResult, FittedGLM, GLMData, InferenceResult, Params
+from glmax import (
+    AbstractDiagnostic,
+    AbstractFitter,
+    DEFAULT_DIAGNOSTICS,
+    DevianceResidual,
+    FitResult,
+    FittedGLM,
+    GLMData,
+    GofStats,
+    GoodnessOfFit,
+    InferenceResult,
+    Influence,
+    InfluenceStats,
+    Params,
+    PearsonResidual,
+    QuantileResidual,
+)
 from glmax._fit import IRLSFitter
 from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
@@ -63,7 +79,15 @@ def test_canonical_contract_imports_exist() -> None:
     assert FitResult is not None
     assert FittedGLM is not None
     assert InferenceResult is not None
-    assert Diagnostics is not None
+    assert AbstractDiagnostic is not None
+    assert DEFAULT_DIAGNOSTICS is not None
+    assert DevianceResidual is not None
+    assert GoodnessOfFit is not None
+    assert GofStats is not None
+    assert Influence is not None
+    assert InfluenceStats is not None
+    assert PearsonResidual is not None
+    assert QuantileResidual is not None
     assert AbstractFitter is not None
 
 
@@ -83,7 +107,15 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
         "FitResult",
         "FittedGLM",
         "InferenceResult",
-        "Diagnostics",
+        "AbstractDiagnostic",
+        "DEFAULT_DIAGNOSTICS",
+        "DevianceResidual",
+        "GoodnessOfFit",
+        "GofStats",
+        "Influence",
+        "InfluenceStats",
+        "PearsonResidual",
+        "QuantileResidual",
         "AbstractTest",
         "WaldTest",
         "ScoreTest",

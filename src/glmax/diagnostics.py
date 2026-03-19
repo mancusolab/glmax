@@ -1,7 +1,7 @@
 # pattern: Functional Core
 
 from abc import abstractmethod
-from typing import Generic, NamedTuple, TypeVar
+from typing import Generic, TypeVar
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -19,13 +19,13 @@ T = TypeVar("T")
 
 __all__ = [
     "AbstractDiagnostic",
-    "Diagnostics",
-    "GofStats",
-    "GoodnessOfFit",
-    "InfluenceStats",
-    "Influence",
-    "PearsonResidual",
+    "DEFAULT_DIAGNOSTICS",
     "DevianceResidual",
+    "GoodnessOfFit",
+    "GofStats",
+    "Influence",
+    "InfluenceStats",
+    "PearsonResidual",
     "QuantileResidual",
     "check",
 ]
@@ -270,35 +270,45 @@ class Influence(AbstractDiagnostic[InfluenceStats], strict=True):
         return InfluenceStats(leverage=leverage, cooks_distance=cooks_distance)
 
 
-class Diagnostics(NamedTuple):
-    """Model-fit diagnostics contract returned by `check(...)`.
+DEFAULT_DIAGNOSTICS: tuple[AbstractDiagnostic, ...] = (
+    PearsonResidual(),
+    DevianceResidual(),
+    QuantileResidual(),
+    GoodnessOfFit(),
+    Influence(),
+)
 
-    !!! note
-        This is a placeholder contract. No diagnostic fields are computed yet.
-        The seam is reserved for residuals, calibration, and influence diagnostics
-        in a future release.
-    """
 
+@eqx.filter_jit
+def check(
+    fitted: FittedGLM,
+    diagnostics: tuple[AbstractDiagnostic, ...] = DEFAULT_DIAGNOSTICS,
+) -> tuple:
+    r"""Assess model fit and return a tuple of diagnostic results.
 
-def check(fitted: FittedGLM) -> Diagnostics:
-    r"""Assess model fit and return a diagnostics noun.
+    The canonical `check` grammar verb. Accepts any tuple of
+    `AbstractDiagnostic` instances and returns a positionally-matched tuple
+    of results - each element `T` corresponding to `diagnostic.diagnose(fitted)`.
 
-    The canonical `check` grammar verb. Currently returns an empty `Diagnostics`
-    placeholder; use as a seam for residual and calibration diagnostics.
+    Decorated with `eqx.filter_jit`; JIT-compiles on first call and caches
+    subsequent calls with the same structure.
 
     **Arguments:**
 
     - `fitted`: `FittedGLM` noun produced by `fit(...)`.
+    - `diagnostics`: tuple of `AbstractDiagnostic` instances to apply.
+      Defaults to `DEFAULT_DIAGNOSTICS` which computes all five built-in
+      diagnostics.
 
     **Returns:**
 
-    `Diagnostics` noun (currently empty).
+    Tuple of diagnostic results, one per entry in `diagnostics`, in the
+    same positional order.
 
     **Raises:**
 
     - `TypeError`: if `fitted` is not a `FittedGLM` instance.
     """
     if not isinstance(fitted, FittedGLM):
-        raise TypeError("check(...) expects `fitted` to be a FittedGLM instance.")
-
-    return Diagnostics()
+        raise TypeError(f"check(...) expects `fitted` to be a FittedGLM instance, got {type(fitted).__name__!r}.")
+    return tuple(d.diagnose(fitted) for d in diagnostics)
