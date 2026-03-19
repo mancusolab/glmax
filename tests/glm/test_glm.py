@@ -108,6 +108,14 @@ class _AuxiliaryWarmStartFamily(ExponentialDispersionFamily):
         del key, disp, aux
         return jnp.asarray(eta)
 
+    def cdf(self, y, mu, disp=0.0, aux=None):
+        del disp, aux
+        return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
+
+    def deviance_contribs(self, y, mu, disp=0.0, aux=None):
+        del disp, aux
+        return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
+
     def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
         del X, y, eta, step_size
         return jnp.asarray(disp) + 2.0, jnp.asarray(aux) + 0.5
@@ -133,6 +141,14 @@ class _LegacyCalcWeightFamily(ExponentialDispersionFamily):
         del key, disp, aux
         return jnp.asarray(eta)
 
+    def cdf(self, y, mu, disp=0.0, aux=None):
+        del disp, aux
+        return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
+
+    def deviance_contribs(self, y, mu, disp=0.0, aux=None):
+        del disp, aux
+        return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
+
     def calc_weight(self, eta, disp=0.0, aux=None):
         mu = jnp.asarray(eta)
         aux_shift = jnp.asarray(0.0 if aux is None else aux)
@@ -157,6 +173,14 @@ class _MissingAuxLogProbFamily(ExponentialDispersionFamily):
     def sample(self, key, eta, disp=0.0, aux=None):
         del key, disp, aux
         return jnp.asarray(eta)
+
+    def cdf(self, y, mu, disp=0.0, aux=None):
+        del disp, aux
+        return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
+
+    def deviance_contribs(self, y, mu, disp=0.0, aux=None):
+        del disp, aux
+        return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
 
 
 def test_poisson(getkey):

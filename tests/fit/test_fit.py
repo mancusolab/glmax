@@ -14,6 +14,7 @@ from statsmodels.genmod.families import links as sm_links
 from statsmodels.tools.sm_exceptions import DomainWarning
 
 import equinox as eqx
+import jax.nn
 import jax.numpy as jnp
 import jax.random as jr
 
@@ -65,6 +66,14 @@ class _CanonicalWarmStartFamily(ExponentialDispersionFamily):
         del key, disp, aux
         return jnp.asarray(eta)
 
+    def cdf(self, y, mu, disp=1.0, aux=None):
+        del disp, aux
+        return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
+
+    def deviance_contribs(self, y, mu, disp=1.0, aux=None):
+        del disp, aux
+        return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
+
     def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
         del X, y, eta, step_size
         new_disp = jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
@@ -94,6 +103,14 @@ class _NonIdempotentCanonicalWarmStartFamily(ExponentialDispersionFamily):
     def sample(self, key, eta, disp=1.0, aux=None):
         del key, disp, aux
         return jnp.asarray(eta)
+
+    def cdf(self, y, mu, disp=1.0, aux=None):
+        del disp, aux
+        return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
+
+    def deviance_contribs(self, y, mu, disp=1.0, aux=None):
+        del disp, aux
+        return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
 
     def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
         del X, y, eta, step_size
@@ -127,6 +144,14 @@ class _AuxSensitiveIRLSFamily(ExponentialDispersionFamily):
         del key, disp
         alpha = jnp.asarray(0.5) if aux is None else jnp.asarray(aux)
         return jnp.asarray(eta) + alpha
+
+    def cdf(self, y, mu, disp=1.0, aux=None):
+        del disp, aux
+        return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
+
+    def deviance_contribs(self, y, mu, disp=1.0, aux=None):
+        del disp, aux
+        return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
 
     def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
         del X, y, eta, disp, step_size

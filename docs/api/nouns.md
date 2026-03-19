@@ -39,6 +39,14 @@ carrier is `Params(beta, disp, aux)`.
 
 ::: glmax.InferenceResult
 
-## `Diagnostics`
+## `AbstractDiagnostic`
 
-::: glmax.Diagnostics
+::: glmax.AbstractDiagnostic
+
+## `GofStats`
+
+::: glmax.GofStats
+
+## `InfluenceStats`
+
+::: glmax.InfluenceStats

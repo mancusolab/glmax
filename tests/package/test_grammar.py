@@ -11,7 +11,16 @@ import jax.numpy as jnp
 
 import glmax
 
-from glmax import Diagnostics, FitResult, FittedGLM, GLMData, InferenceResult, Params
+from glmax import (
+    DEFAULT_DIAGNOSTICS,
+    FitResult,
+    FittedGLM,
+    GLMData,
+    GofStats,
+    InferenceResult,
+    InfluenceStats,
+    Params,
+)
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
 
@@ -77,8 +86,14 @@ def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
     assert isinstance(inferred, InferenceResult)
     _assert_canonical_params_for_family(family, inferred.params)
     assert inferred.se.shape == fitted.params.beta.shape
-    assert isinstance(diagnostics, Diagnostics)
-    assert diagnostics == Diagnostics()
+    assert isinstance(diagnostics, tuple)
+    assert len(diagnostics) == len(DEFAULT_DIAGNOSTICS)
+    pearson, deviance, quantile, gof, influence = diagnostics
+    assert pearson.shape == y.shape
+    assert deviance.shape == y.shape
+    assert quantile.shape == y.shape
+    assert isinstance(gof, GofStats)
+    assert isinstance(influence, InfluenceStats)
 
 
 def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:

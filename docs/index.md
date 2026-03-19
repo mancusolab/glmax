@@ -21,7 +21,7 @@ data  = GLMData(
 fitted = glmax.fit(model, data)
 mu_hat = glmax.predict(model, fitted.params, data)
 result = glmax.infer(fitted)
-diag   = glmax.check(fitted)
+pearson, deviance, quantile, gof, influence = glmax.check(fitted)
 ```
 
 Each verb takes and returns explicit nouns. No hidden state is threaded between calls.
@@ -40,7 +40,7 @@ and `infer`.
 
 **Verbs** — [`specify`](api/verbs.md), [`fit`](api/verbs.md), [`predict`](api/verbs.md), [`infer`](api/verbs.md), [`check`](api/verbs.md)
 
-**Nouns** — [`GLMData`](api/nouns.md), [`GLM`](api/nouns.md), [`Params`](api/nouns.md), [`FitResult`](api/nouns.md), [`FittedGLM`](api/nouns.md), [`InferenceResult`](api/nouns.md), [`Diagnostics`](api/nouns.md)
+**Nouns** — [`GLMData`](api/nouns.md), [`GLM`](api/nouns.md), [`Params`](api/nouns.md), [`FitResult`](api/nouns.md), [`FittedGLM`](api/nouns.md), [`InferenceResult`](api/nouns.md), [`AbstractDiagnostic`](api/nouns.md), [`GofStats`](api/nouns.md), [`InfluenceStats`](api/nouns.md)
 
 **Fitting** — [`AbstractFitter`](api/fitters.md), [`IRLSFitter`](api/fitters.md), [`AbstractLinearSolver`](api/fitters.md), [`CholeskySolver`](api/fitters.md), [`QRSolver`](api/fitters.md), [`CGSolver`](api/fitters.md)
 

@@ -23,7 +23,18 @@ from ._infer import (
     WaldTest as WaldTest,
 )
 from .data import GLMData as GLMData
-from .diagnostics import check as check, Diagnostics as Diagnostics
+from .diagnostics import (
+    AbstractDiagnostic as AbstractDiagnostic,
+    check as check,
+    DEFAULT_DIAGNOSTICS as DEFAULT_DIAGNOSTICS,
+    DevianceResidual as DevianceResidual,
+    GofStats as GofStats,
+    GoodnessOfFit as GoodnessOfFit,
+    Influence as Influence,
+    InfluenceStats as InfluenceStats,
+    PearsonResidual as PearsonResidual,
+    QuantileResidual as QuantileResidual,
+)
 from .family import (
     AbstractLink as AbstractLink,
     Binomial as Binomial,
@@ -54,7 +65,15 @@ __all__ = [
     "FitResult",
     "FittedGLM",
     "InferenceResult",
-    "Diagnostics",
+    "AbstractDiagnostic",
+    "DEFAULT_DIAGNOSTICS",
+    "DevianceResidual",
+    "GoodnessOfFit",
+    "GofStats",
+    "Influence",
+    "InfluenceStats",
+    "PearsonResidual",
+    "QuantileResidual",
     "AbstractTest",
     "WaldTest",
     "ScoreTest",

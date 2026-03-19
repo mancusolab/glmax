@@ -7,12 +7,29 @@ from pathlib import Path
 import pytest
 
 import equinox as eqx
+import jax.nn
 import jax.numpy as jnp
 import jax.tree_util as jtu
 
 import glmax
 
-from glmax import AbstractFitter, Diagnostics, FitResult, FittedGLM, GLMData, InferenceResult, Params
+from glmax import (
+    AbstractDiagnostic,
+    AbstractFitter,
+    DEFAULT_DIAGNOSTICS,
+    DevianceResidual,
+    FitResult,
+    FittedGLM,
+    GLMData,
+    GofStats,
+    GoodnessOfFit,
+    InferenceResult,
+    Influence,
+    InfluenceStats,
+    Params,
+    PearsonResidual,
+    QuantileResidual,
+)
 from glmax._fit import IRLSFitter
 from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
@@ -62,7 +79,15 @@ def test_canonical_contract_imports_exist() -> None:
     assert FitResult is not None
     assert FittedGLM is not None
     assert InferenceResult is not None
-    assert Diagnostics is not None
+    assert AbstractDiagnostic is not None
+    assert DEFAULT_DIAGNOSTICS is not None
+    assert DevianceResidual is not None
+    assert GoodnessOfFit is not None
+    assert GofStats is not None
+    assert Influence is not None
+    assert InfluenceStats is not None
+    assert PearsonResidual is not None
+    assert QuantileResidual is not None
     assert AbstractFitter is not None
 
 
@@ -82,7 +107,15 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
         "FitResult",
         "FittedGLM",
         "InferenceResult",
-        "Diagnostics",
+        "AbstractDiagnostic",
+        "DEFAULT_DIAGNOSTICS",
+        "DevianceResidual",
+        "GoodnessOfFit",
+        "GofStats",
+        "Influence",
+        "InfluenceStats",
+        "PearsonResidual",
+        "QuantileResidual",
         "AbstractTest",
         "WaldTest",
         "ScoreTest",
@@ -293,6 +326,14 @@ def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None
         def sample(self, key, eta, disp=1.0, aux=None):
             del key, disp, aux
             return jnp.asarray(eta)
+
+        def cdf(self, y, mu, disp=1.0, aux=None):
+            del disp, aux
+            return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
+
+        def deviance_contribs(self, y, mu, disp=1.0, aux=None):
+            del disp, aux
+            return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
 
         def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
             del X, y, eta, step_size

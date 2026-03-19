@@ -11,7 +11,7 @@ The canonical workflow is:
 4. `infer(fitted, inferrer=None, stderr=...)` for inferential summaries without refitting
 5. `check(fitted)` for diagnostics without refitting
 
-The canonical nouns are `GLMData`, `Params`, `FitResult`, `FittedGLM`, `InferenceResult`, and `Diagnostics`.
+The canonical nouns are `GLMData`, `Params`, `FitResult`, `FittedGLM`, `InferenceResult`, `AbstractDiagnostic`, `GofStats`, and `InfluenceStats`.
 The package-root also exports inference strategy and stderr types:
 `AbstractTest`, `WaldTest`, `ScoreTest`,
 `AbstractStdErrEstimator`, `FisherInfoError`, and `HuberError`.
@@ -58,7 +58,7 @@ pred = glmax.predict(model, params, data)
 infer_result = glmax.infer(fitted)
 # Route through an explicit inferrer when needed.
 score_result = glmax.infer(fitted, inferrer=glmax.ScoreTest())
-diagnostics = glmax.check(fitted)
+pearson, deviance, quantile, gof, influence = glmax.check(fitted)
 ```
 
 ## Testing

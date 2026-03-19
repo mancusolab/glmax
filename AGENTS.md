@@ -1,18 +1,18 @@
 # glmax
 
 ## Purpose
-`glmax` provides grammar-first generalized linear modeling in JAX. Keep the public surface centered on explicit nouns (`GLMData`, `Params`, `FitResult`, `FittedGLM`, `InferenceResult`, `Diagnostics`) and verbs (`specify`, `fit`, `predict`, `infer`, `check`) rather than wrapper-heavy or module-internal APIs.
+`glmax` provides grammar-first generalized linear modeling in JAX. Keep the public surface centered on explicit nouns (`GLMData`, `Params`, `FitResult`, `FittedGLM`, `InferenceResult`, `AbstractDiagnostic`, `GofStats`, `InfluenceStats`) and verbs (`specify`, `fit`, `predict`, `infer`, `check`) rather than wrapper-heavy or module-internal APIs.
 
 ## Contracts
 - **Exposes**:
-  - Package-root API from `src/glmax/__init__.py`: `GLMData`, `Params`, `GLM`, `AbstractFitter`, `FitResult`, `FittedGLM`, `InferenceResult`, `Diagnostics`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `specify`, `predict`, `fit`, `infer`, `check`.
+  - Package-root API from `src/glmax/__init__.py`: `GLMData`, `Params`, `GLM`, `AbstractFitter`, `FitResult`, `FittedGLM`, `InferenceResult`, `AbstractDiagnostic`, `DEFAULT_DIAGNOSTICS`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `specify`, `predict`, `fit`, `infer`, `check`.
   - Family and link implementations from `src/glmax/family/__init__.py`.
   - User-facing grammar docs in `README.md`, `docs/index.md`, `docs/api/verbs.md`, `docs/api/nouns.md`, `docs/api/fitters.md`, `docs/api/inference.md`, and `docs/api/family.md`.
 - **Guarantees**:
   - Canonical user workflow is `specify -> fit -> predict -> infer -> check`.
   - `glmax.fit(model, data, init=None, *, fitter=IRLSFitter())` is the curated public fit contract, is `@eqx.filter_jit`-wrapped, and returns `FittedGLM`.
   - `glmax.predict(model, params, data)` is also `@eqx.filter_jit`-wrapped.
-  - `infer(fitted, inferrer=WaldTest(), stderr=FisherInfoError())` and `check(fitted)` operate on the fitted noun without refitting.
+  - `infer(fitted, inferrer=WaldTest(), stderr=FisherInfoError())` and `check(fitted, diagnostics=...)` operate on the fitted noun without refitting.
   - `GLM` is a pure specification noun (`family` field only). It has no `.fit` method and no `solver` field. Use `glmax.fit(model, data)`. The solver lives on the fitter strategy.
   - `GLM` exposes a method interface that the fitting and inference kernels program against. User-facing: `mean(eta)`, `log_prob(y, eta, disp, aux=None)`, `sample(key, eta, disp, aux=None)`. Kernel-facing: `init_eta(y)`, `working_weights(eta, disp, aux=None)`, `link_deriv(mu)`, `update_nuisance(X, y, eta, disp, step_size, aux=None) -> (new_disp, new_aux)`, `init_nuisance() -> (default_disp, default_aux)`. All delegate to `self.family`. Do not call `model.family.xxx` from kernels — use `model.xxx`.
   - `Gamma` is a supported family (exported from `glmax.family`). Dispersion estimation for Gamma is deferred.
@@ -23,7 +23,7 @@
   - `FitResult` is the fitter contract and carries `params`, `X`, `y`, `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`, `objective_delta`, and `score_residual`.
   - `FittedGLM` is the public fitted noun and binds `model` plus `result`, forwarding common fit artifacts for ergonomics.
   - `InferenceResult` carries `params`, `se`, `stat`, and `p`; those summaries are produced by `infer(fitted, ...)`, not `fit(...)`.
-  - `Diagnostics` is reserved for `check(fitted)` model-fit assessment. The current `check()` seam is a placeholder contract and does not yet expose finalized model-diagnostic fields.
+  - `check(fitted)` is `@eqx.filter_jit`-wrapped and returns a tuple of diagnostic results in the same positional order as the `diagnostics` tuple argument. The default `DEFAULT_DIAGNOSTICS` computes `(PearsonResidual, DevianceResidual, QuantileResidual, GoodnessOfFit, Influence)`.
   - `AbstractFitter` subclasses must declare a `solver: AbstractLinearSolver` field. `IRLSFitter` defaults to `CholeskySolver()`.
   - `GLMData.weights` is not part of the supported public `fit` or `predict` contract unless docs and tests are updated in the same change.
   - Negative Binomial stores its auxiliary `alpha` in `Params.aux`; canonical `Params.disp` remains the GLM dispersion slot and is `1.0` for Negative Binomial fits.
@@ -38,7 +38,7 @@
   - `src/glmax/_fit/irls.py` owns `IRLSFitter` (the default fitter) and the `_irls` kernel. `_irls` takes `model: GLM` and calls only `model.xxx` methods rather than reaching into `model.family.xxx` directly. Keep user-facing fitting routed through `glmax.fit(...)`; `_irls` is an internal kernel seam.
   - `src/glmax/_fit/solve.py` is the canonical home for linear solver contracts (`AbstractLinearSolver`, `CholeskySolver`, `QRSolver`, `CGSolver`).
   - `src/glmax/_fit/__init__.py` re-exports all fit internals.
-  - `src/glmax/diagnostics.py` owns `Diagnostics` and `check`.
+  - `src/glmax/diagnostics.py` owns `AbstractDiagnostic`, the built-in diagnostic strategies/results, `DEFAULT_DIAGNOSTICS`, and `check`.
   - `src/glmax/_infer/infer.py` owns `infer`.
   - `src/glmax/_infer/types.py` owns `InferenceResult`.
   - `src/glmax/_infer/hyptest.py` owns `AbstractTest`, `WaldTest`, `ScoreTest`.
@@ -47,7 +47,7 @@
   - Other modules under `src/glmax/_infer/` are internal numerics seams, not package-root API.
 
 ## Invariants
-- Contract carrier split is deliberate: `GLMData`, `FitResult`, and `FittedGLM` are `equinox.Module` types with constructor-time validation; `Params`, `Diagnostics`, and `InferenceResult` are `NamedTuple` pytrees.
+- Contract carrier split is deliberate: `GLMData`, `FitResult`, and `FittedGLM` are `equinox.Module` types with constructor-time validation; `Params` and `InferenceResult` are `NamedTuple` pytrees; diagnostics strategies/results are `equinox.Module` types and arrays returned through `check(...)`.
 - Public exports stay centralized in `src/glmax/__init__.py`; if a user-facing noun or verb changes, update docs and contract tests in the same patch.
 - Keep workflow examples on the grammar nouns and top-level verbs. Reserve `_fit` imports for fitter/solver docs and tests; do not present `_fit` or `_infer` module paths as the primary user workflow.
 - `site/` is generated documentation output. Edit `docs/` and `mkdocs.yml`, not `site/`.

@@ -13,10 +13,13 @@ Groups:
 """
 
 import pytest
+import scipy.stats
 
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+
+from jax.scipy.special import xlogy
 
 import glmax
 
@@ -98,6 +101,175 @@ class TestCalcWeight:
         eta = jnp.array([0.5, -0.5, 0.5])
         nll = f.negloglikelihood(y, eta, disp=disp, aux=aux)
         assert jnp.isfinite(nll)
+
+
+# ---------------------------------------------------------------------------
+# ExponentialFamily interface: cdf / deviance_contribs
+# ---------------------------------------------------------------------------
+
+
+class TestCdf:
+    def test_gaussian_cdf_matches_scipy(self):
+        f = Gaussian()
+        y = jnp.array([0.0, 1.0, 2.0, -1.0])
+        mu = jnp.array([0.5, 1.5, 1.0, 0.0])
+        disp = 2.0
+        result = f.cdf(y, mu, disp)
+        expected = scipy.stats.norm.cdf(y, loc=mu, scale=jnp.sqrt(disp))
+        assert jnp.allclose(result, expected, atol=1e-10)
+
+    def test_poisson_cdf_matches_scipy(self):
+        f = Poisson()
+        y = jnp.array([0.0, 1.0, 3.0, 5.0])
+        mu = jnp.array([1.0, 2.0, 2.5, 4.0])
+        result = f.cdf(y, mu)
+        expected = scipy.stats.poisson.cdf(y, mu=mu)
+        assert jnp.allclose(result, expected, atol=1e-10)
+
+    def test_binomial_cdf_matches_scipy(self):
+        f = Binomial()
+        y = jnp.array([0.0, 1.0, 0.0, 1.0])
+        mu = jnp.array([0.3, 0.7, 0.8, 0.2])
+        result = f.cdf(y, mu)
+        expected = scipy.stats.bernoulli.cdf(y, p=mu)
+        assert jnp.allclose(result, expected, atol=1e-10)
+
+    def test_gamma_cdf_matches_scipy(self):
+        f = Gamma()
+        y = jnp.array([1.0, 2.0, 3.0, 0.5])
+        mu = jnp.array([2.0, 2.0, 2.0, 1.0])
+        disp = 0.5
+        result = f.cdf(y, mu, disp)
+        expected = scipy.stats.gamma.cdf(y, a=1.0 / disp, scale=mu * disp)
+        assert jnp.allclose(result, expected, atol=1e-8)
+
+    def test_nb_cdf_matches_scipy(self):
+        f = NegativeBinomial()
+        y = jnp.array([0.0, 2.0, 5.0, 10.0])
+        mu = jnp.array([2.0, 3.0, 4.0, 8.0])
+        alpha = 0.5
+        r = 1.0 / alpha
+        result = f.cdf(y, mu, aux=alpha)
+        expected = scipy.stats.nbinom.cdf(y, n=r, p=r / (r + mu))
+        assert jnp.allclose(result, expected, atol=1e-7)
+
+    @pytest.mark.parametrize("FamilyCls", [Gaussian, Poisson, Binomial, NegativeBinomial, Gamma])
+    def test_cdf_shape_n(self, FamilyCls):
+        n = 8
+        f = FamilyCls()
+        y = jnp.ones(n) * 1.0
+        mu = jnp.ones(n) * 1.0
+        kwargs = {"aux": 0.5} if FamilyCls is NegativeBinomial else {}
+        if FamilyCls is Gamma:
+            kwargs = {"disp": 1.0}
+        result = f.cdf(y, mu, **kwargs)
+        assert result.shape == (n,)
+
+
+class TestDevianceContribs:
+    def test_gaussian_deviance_contribs_matches_formula(self):
+        f = Gaussian()
+        y = jnp.array([1.0, 2.0, 3.0])
+        mu = jnp.array([1.5, 1.8, 2.5])
+        result = f.deviance_contribs(y, mu)
+        expected = (y - mu) ** 2
+        assert jnp.allclose(result, expected, atol=1e-12)
+
+    def test_gaussian_deviance_sum_equals_rss(self):
+        y = jnp.array([1.2, 0.8, 2.1, 1.5, 0.9])
+        mu = jnp.array([1.0, 1.0, 2.0, 1.5, 1.0])
+        f = Gaussian()
+        rss = jnp.sum((y - mu) ** 2)
+        assert jnp.allclose(jnp.sum(f.deviance_contribs(y, mu)), rss, atol=1e-10)
+
+    def test_poisson_deviance_zero_y_is_finite(self):
+        f = Poisson()
+        y = jnp.array([0.0, 1.0, 2.0])
+        mu = jnp.array([0.5, 1.0, 1.5])
+        result = f.deviance_contribs(y, mu)
+        assert jnp.all(jnp.isfinite(result))
+        assert jnp.allclose(result[0], 1.0, atol=1e-10)
+
+    def test_poisson_deviance_contribs_formula(self):
+        y = jnp.array([0.0, 1.0, 3.0, 5.0, 2.0])
+        mu = jnp.array([0.5, 1.5, 2.0, 4.5, 2.5])
+        f = Poisson()
+        result = f.deviance_contribs(y, mu)
+        log_term = jnp.where(y > 0, y * jnp.log(y / mu), 0.0)
+        expected = 2.0 * (log_term - (y - mu))
+        assert jnp.allclose(result, expected, atol=1e-10)
+
+    def test_poisson_deviance_contribs_extreme_inputs_remain_finite(self):
+        f = Poisson()
+        y = jnp.array([1e200], dtype=jnp.float64)
+        mu = jnp.array([1e-200], dtype=jnp.float64)
+        result = f.deviance_contribs(y, mu)
+        mu_ = jnp.clip(mu, *f._bounds)
+        expected = 2.0 * (xlogy(y, y) - xlogy(y, mu_) - (y - mu_))
+        assert jnp.all(jnp.isfinite(result))
+        assert jnp.allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+    @pytest.mark.parametrize("FamilyCls", [Gaussian, Poisson, Binomial, NegativeBinomial, Gamma])
+    def test_deviance_contribs_shape_n(self, FamilyCls):
+        n = 8
+        f = FamilyCls()
+        y = jnp.ones(n) * 1.0
+        mu = jnp.ones(n) * 1.0
+        kwargs = {"aux": 0.5} if FamilyCls is NegativeBinomial else {}
+        if FamilyCls is Gamma:
+            kwargs = {"disp": 1.0}
+        result = f.deviance_contribs(y, mu, **kwargs)
+        assert result.shape == (n,)
+
+    @pytest.mark.parametrize("FamilyCls", [Gaussian, Poisson])
+    def test_deviance_contribs_nonnegative_gaussian_poisson(self, FamilyCls):
+        f = FamilyCls()
+        y = jnp.array([1.0, 2.0, 0.5])
+        mu = jnp.array([1.0, 2.0, 0.5])
+        result = f.deviance_contribs(y, mu)
+        assert jnp.all(result >= 0)
+        assert jnp.allclose(result, 0.0, atol=1e-10)
+
+    def test_binomial_deviance_contribs_extreme_inputs_remain_finite(self):
+        f = Binomial()
+        y = jnp.array([1.0], dtype=jnp.float64)
+        mu = jnp.array([1e-320], dtype=jnp.float64)
+        result = f.deviance_contribs(y, mu)
+        mu_ = jnp.clip(mu, *f._bounds)
+        expected = 2.0 * (xlogy(y, y) - xlogy(y, mu_) + xlogy(1.0 - y, 1.0 - y) - xlogy(1.0 - y, 1.0 - mu_))
+        assert jnp.all(jnp.isfinite(result))
+        assert jnp.allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+    def test_nb_deviance_zero_y_finite(self):
+        f = NegativeBinomial()
+        y = jnp.array([0.0, 1.0, 3.0])
+        mu = jnp.array([0.5, 1.5, 2.5])
+        result = f.deviance_contribs(y, mu, aux=0.5)
+        assert jnp.all(jnp.isfinite(result))
+
+    def test_nb_deviance_contribs_extreme_inputs_remain_finite(self):
+        f = NegativeBinomial()
+        y = jnp.array([1e50], dtype=jnp.float64)
+        mu = jnp.array([1e-50], dtype=jnp.float64)
+        alpha = 0.5
+        r = 1.0 / alpha
+        result = f.deviance_contribs(y, mu, aux=alpha)
+        mu_ = jnp.clip(mu, *f._bounds)
+        expected = 2.0 * (r * (jnp.log1p(mu_ / r) - jnp.log1p(y / r)) + xlogy(y, y) - xlogy(y, mu_))
+        assert jnp.all(jnp.isfinite(result))
+        assert jnp.allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+    @pytest.mark.parametrize("FamilyCls", [Binomial, Gamma])
+    def test_deviance_contribs_nonnegative_binomial_gamma(self, FamilyCls):
+        f = FamilyCls()
+        if isinstance(f, Gamma):
+            y = jnp.array([1.0, 2.0, 3.0])
+            mu = jnp.array([1.0, 2.0, 3.0])
+        else:
+            y = jnp.array([0.0, 1.0])
+            mu = jnp.array([0.5, 0.5])
+        result = f.deviance_contribs(y, mu)
+        assert jnp.all(result >= 0)
 
 
 # ---------------------------------------------------------------------------
