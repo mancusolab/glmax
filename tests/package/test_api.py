@@ -157,6 +157,14 @@ def test_infer_signature_matches_canonical_surface() -> None:
     assert sig.parameters["inferrer"].default is not None
 
 
+def test_check_signature_matches_canonical_surface() -> None:
+    sig = inspect.signature(glmax.check)
+    assert list(sig.parameters) == ["fitted", "diagnostic"]
+    assert sig.parameters["fitted"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert sig.parameters["diagnostic"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert sig.parameters["diagnostic"].default is not inspect.Signature.empty
+
+
 def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     expected = _make_fit_result()
     seen: dict[str, object] = {}

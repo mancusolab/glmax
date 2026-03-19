@@ -21,7 +21,7 @@ data  = GLMData(
 fitted = glmax.fit(model, data)
 mu_hat = glmax.predict(model, fitted.params, data)
 result = glmax.infer(fitted)
-pearson, deviance, quantile, gof, influence = glmax.check(fitted)
+pearson = glmax.check(fitted)
 ```
 
 Each verb takes and returns explicit nouns. No hidden state is threaded between calls.

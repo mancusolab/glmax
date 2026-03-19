@@ -26,7 +26,6 @@ from .data import GLMData as GLMData
 from .diagnostics import (
     AbstractDiagnostic as AbstractDiagnostic,
     check as check,
-    DEFAULT_DIAGNOSTICS as DEFAULT_DIAGNOSTICS,
     DevianceResidual as DevianceResidual,
     GofStats as GofStats,
     GoodnessOfFit as GoodnessOfFit,

@@ -19,7 +19,6 @@ T = TypeVar("T")
 
 __all__ = [
     "AbstractDiagnostic",
-    "DEFAULT_DIAGNOSTICS",
     "DevianceResidual",
     "GoodnessOfFit",
     "GofStats",
@@ -270,40 +269,48 @@ class Influence(AbstractDiagnostic[InfluenceStats], strict=True):
         return InfluenceStats(leverage=leverage, cooks_distance=cooks_distance)
 
 
-DEFAULT_DIAGNOSTICS: tuple[AbstractDiagnostic, ...] = (
-    PearsonResidual(),
-    DevianceResidual(),
-    QuantileResidual(),
-    GoodnessOfFit(),
-    Influence(),
-)
-
-
 @eqx.filter_jit
 def check(
     fitted: FittedGLM,
-    diagnostics: tuple[AbstractDiagnostic, ...] = DEFAULT_DIAGNOSTICS,
-) -> tuple:
-    r"""Assess model fit and return a tuple of diagnostic results.
+    diagnostic: AbstractDiagnostic[T] = GoodnessOfFit(),
+) -> T:
+    r"""Assess model fit with one diagnostic and return its typed result.
 
-    The canonical `check` grammar verb. Accepts any tuple of
-    `AbstractDiagnostic` instances and returns a positionally-matched tuple
-    of results - each element `T` corresponding to `diagnostic.diagnose(fitted)`.
+    The canonical `check` grammar verb. Accepts one concrete
+    `AbstractDiagnostic[T]` instance and returns the corresponding result
+    `T = diagnostic.diagnose(fitted)`.
 
     Decorated with `eqx.filter_jit`; JIT-compiles on first call and caches
     subsequent calls with the same structure.
 
+    !!! example "Compute multiple diagnostics with `tree_map`"
+        ```python
+        import jax.tree_util as jtu
+        import glmax
+
+        diagnostics = (
+            glmax.PearsonResidual(),
+            glmax.DevianceResidual(),
+            glmax.GoodnessOfFit(),
+        )
+
+        results = jtu.tree_map(
+            lambda diagnostic: glmax.check(fitted, diagnostic=diagnostic),
+            diagnostics,
+            is_leaf=lambda node: isinstance(node, glmax.AbstractDiagnostic),
+        )
+        pearson, deviance, gof = results
+        ```
+
     **Arguments:**
 
     - `fitted`: `FittedGLM` noun produced by `fit(...)`.
-    - `diagnostics`: tuple of `AbstractDiagnostic` instances to apply.
-      Defaults to `DEFAULT_DIAGNOSTICS` which computes all five built-in
-      diagnostics.
+    - `diagnostic`: `AbstractDiagnostic[T]` to apply. Defaults to
+      `PearsonResidual()`.
 
     **Returns:**
 
-    Tuple of diagnostic results, one per entry in `diagnostics`, in the
-    same positional order.
+    One diagnostic result of type `T`.
 
     **Raises:**
 
@@ -311,4 +318,9 @@ def check(
     """
     if not isinstance(fitted, FittedGLM):
         raise TypeError(f"check(...) expects `fitted` to be a FittedGLM instance, got {type(fitted).__name__!r}.")
-    return tuple(d.diagnose(fitted) for d in diagnostics)
+    if not isinstance(diagnostic, AbstractDiagnostic):
+        raise TypeError(
+            f"check(...) expects `diagnostic` to be an AbstractDiagnostic instance, got {type(diagnostic).__name__!r}."
+        )
+
+    return diagnostic.diagnose(fitted)

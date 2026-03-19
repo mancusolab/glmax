@@ -58,7 +58,7 @@ pred = glmax.predict(model, params, data)
 infer_result = glmax.infer(fitted)
 # Route through an explicit inferrer when needed.
 score_result = glmax.infer(fitted, inferrer=glmax.ScoreTest())
-pearson, deviance, quantile, gof, influence = glmax.check(fitted)
+pearson = glmax.check(fitted)
 ```
 
 ## Testing

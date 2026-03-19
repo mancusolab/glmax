@@ -8,10 +8,12 @@ import pytest
 
 import equinox as eqx
 import jax.numpy as jnp
+import jax.tree_util as jtu
 
 import glmax
 
 from glmax import (
+    AbstractDiagnostic,
     DEFAULT_DIAGNOSTICS,
     FitResult,
     FittedGLM,
@@ -78,7 +80,12 @@ def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
     fitted = glmax.fit(model, data)
     prediction = glmax.predict(model, fitted.params, data)
     inferred = glmax.infer(fitted)
-    diagnostics = glmax.check(fitted)
+    pearson = glmax.check(fitted)
+    diagnostics = jtu.tree_map(
+        lambda diagnostic: glmax.check(fitted, diagnostic=diagnostic),
+        DEFAULT_DIAGNOSTICS,
+        is_leaf=lambda node: isinstance(node, AbstractDiagnostic),
+    )
 
     assert isinstance(fitted, current_fitted_glm_type)
     _assert_canonical_params_for_family(family, fitted.params)
@@ -86,6 +93,7 @@ def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
     assert isinstance(inferred, InferenceResult)
     _assert_canonical_params_for_family(family, inferred.params)
     assert inferred.se.shape == fitted.params.beta.shape
+    assert pearson.shape == y.shape
     assert isinstance(diagnostics, tuple)
     assert len(diagnostics) == len(DEFAULT_DIAGNOSTICS)
     pearson, deviance, quantile, gof, influence = diagnostics
