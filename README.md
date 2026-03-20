@@ -25,8 +25,9 @@ The package-root also exports inference strategy and stderr types:
 - `aux` stores optional family-specific state. Negative Binomial stores its
   `alpha` here while canonical `disp` remains `1.0`.
 
-See [docs/index.md](docs/index.md) and the [API reference](docs/api/nouns.md)
-for the public contract, and the [family guide](docs/api/family.md) for the
+See [docs/index.md](docs/index.md) for the workflow overview, the
+[specify API](docs/api/specify/index.md) for model construction, and the
+[Families & Links guide](docs/api/specify/families-and-links.md) for the
 family-specific `disp`/`aux` split.
 
 ## Installation

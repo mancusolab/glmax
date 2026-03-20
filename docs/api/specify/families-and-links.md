@@ -1,21 +1,17 @@
-# Families & Links
+# Families And Links
 
-Families determine how the shared `Params(beta, disp, aux)` carrier is
-interpreted.
+The `specify` step chooses a response family and its link function. This is
+where the statistical meaning of `Params(beta, disp, aux)` is determined:
+different families interpret `disp` and `aux` differently, but the workflow
+continues to pass the same explicit nouns between verbs.
 
-## Family Parameter Semantics
+---
 
-| Family | `disp` | `aux` |
-| --- | --- | --- |
-| `Gaussian` | EDM dispersion / variance parameter | ignored |
-| `Gamma` | EDM dispersion | ignored |
-| `Poisson` | canonical `1.0` | ignored |
-| `Binomial` | canonical `1.0` | ignored |
-| `NegativeBinomial` | canonical `1.0` | stores auxiliary `alpha` |
+`ExponentialDispersionFamily` defines the common methods that fitting,
+prediction, diagnostics, and inference rely on. Concrete families plug into
+the grammar through this contract.
 
-## Families
-
-??? abstract "glmax.ExponentialDispersionFamily"
+??? abstract "`glmax.ExponentialDispersionFamily`"
 
     ::: glmax.ExponentialDispersionFamily
         options:
@@ -30,7 +26,7 @@ interpreted.
                 - update_nuisance
                 - init_nuisance
 
----
+## Concrete Families
 
 ::: glmax.Gaussian
     options:
@@ -65,12 +61,13 @@ interpreted.
         members:
             - __init__
 
----
+## Link Contract
 
+Links connect the mean response $\mu$ to the linear predictor $\eta$. The
+abstract link contract documents the forward link, inverse link, and their
+derivatives so the family layer and GLM kernels can work against one interface.
 
-## Links
-
-??? abstract "glmax.AbstractLink"
+??? abstract "`glmax.AbstractLink`"
 
     ::: glmax.AbstractLink
         options:
@@ -80,7 +77,7 @@ interpreted.
                 - deriv
                 - inverse_deriv
 
----
+## Concrete Links
 
 ::: glmax.IdentityLink
     options:
@@ -110,7 +107,6 @@ interpreted.
 
 ---
 
-
 ::: glmax.PowerLink
     options:
         members:
@@ -122,3 +118,4 @@ interpreted.
     options:
         members:
             - __init__
+

@@ -38,15 +38,14 @@ and `infer`.
 
 ## API surface
 
-**Verbs** — [`specify`](api/verbs.md), [`fit`](api/verbs.md), [`predict`](api/verbs.md), [`infer`](api/verbs.md), [`check`](api/verbs.md)
+**Workflow** — [`specify`](api/specify/index.md), [`fit`](api/fit/index.md), [`predict`](api/predict.md), [`infer`](api/infer/index.md), [`check`](api/check.md)
 
-**Nouns** — [`GLMData`](api/nouns.md), [`GLM`](api/nouns.md), [`Params`](api/nouns.md), [`FitResult`](api/nouns.md), [`FittedGLM`](api/nouns.md), [`InferenceResult`](api/nouns.md), [`AbstractDiagnostic`](api/nouns.md), [`GofStats`](api/nouns.md), [`InfluenceStats`](api/nouns.md)
+**Specification** — [`Families & Links`](api/specify/families-and-links.md)
 
-**Fitting** — [`AbstractFitter`](api/fitters.md), [`IRLSFitter`](api/fitters.md), [`AbstractLinearSolver`](api/fitters.md), [`CholeskySolver`](api/fitters.md), [`QRSolver`](api/fitters.md), [`CGSolver`](api/fitters.md)
+**Advanced Fitting** — [`Strategies & Solvers`](api/fit/strategies.md)
 
-**Inference** — [`AbstractTest`](api/inference.md), [`WaldTest`](api/inference.md), [`ScoreTest`](api/inference.md), [`AbstractStdErrEstimator`](api/inference.md), [`FisherInfoError`](api/inference.md), [`HuberError`](api/inference.md)
+**Advanced Inference** — [`Strategies & Standard Errors`](api/infer/strategies.md)
 
-**Families** — [`Gaussian`](api/family.md), [`Poisson`](api/family.md), [`Binomial`](api/family.md), [`NegativeBinomial`](api/family.md), [`Gamma`](api/family.md)
-
-Advanced fitter and solver details live on the API pages, but the primary user
-workflow remains the top-level grammar API shown above.
+The API is organized around the workflow rather than around catch-all noun and
+verb inventories. Each verb page explains the role that step plays in the
+grammar, then documents the function and the nouns it introduces.
