@@ -9,7 +9,7 @@ import lineax as lx
 from jax import Array, numpy as jnp
 
 from ..data import GLMData
-from ..glm import GLM
+from ..family import ExponentialDispersionFamily
 
 
 class Params(NamedTuple):
@@ -186,27 +186,28 @@ class FitResult(eqx.Module, strict=True):
 class FittedGLM(eqx.Module, strict=True):
     r"""Canonical fitted-model noun produced by `fit(...)`.
 
-    Binds a [`glmax.GLM`][] specification with its [`glmax.FitResult`][] and
-    forwards the most commonly accessed fit artifacts as properties. Pass
-    [`glmax.FittedGLM`][] directly to [`glmax.infer`][] and [`glmax.check`][].
+    Binds an [`glmax.ExponentialDispersionFamily`][] with its
+    [`glmax.FitResult`][] and forwards the most commonly accessed fit artifacts
+    as properties. Pass [`glmax.FittedGLM`][] directly to [`glmax.infer`][]
+    and [`glmax.check`][].
 
     Common artifacts are available as forwarding properties: `params`, `beta`,
     `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`,
     `objective_delta`, `score_residual`.
     """
 
-    model: GLM
+    family: ExponentialDispersionFamily
     result: FitResult
 
-    def __init__(self, model: GLM, result: FitResult) -> None:
+    def __init__(self, family: ExponentialDispersionFamily, result: FitResult) -> None:
         r"""Construct a [`glmax.FittedGLM`][] noun.
 
         **Arguments:**
 
-        - `model`: [`glmax.GLM`][] specification used during fitting.
+        - `family`: [`glmax.ExponentialDispersionFamily`][] used during fitting.
         - `result`: [`glmax.FitResult`][] produced by the fitter strategy.
         """
-        self.model = model
+        self.family = family
         self.result = result
 
     @property
@@ -258,8 +259,8 @@ class FittedGLM(eqx.Module, strict=True):
         return self.result.score_residual
 
     def __check_init__(self) -> None:
-        if not isinstance(self.model, GLM):
-            raise TypeError("FittedGLM.model must be a GLM instance.")
+        if not isinstance(self.family, ExponentialDispersionFamily):
+            raise TypeError("FittedGLM.family must be an ExponentialDispersionFamily instance.")
         if not isinstance(self.result, FitResult):
             raise TypeError("FittedGLM.result must be a FitResult instance.")
 
@@ -274,15 +275,15 @@ class AbstractFitter(eqx.Module, strict=True):
     solver: eqx.AbstractVar[lx.AbstractLinearSolver]
 
     @abstractmethod
-    def __call__(self, model: GLM, data: GLMData, init: Params | None = None) -> FitResult:
-        r"""Fit `model` against `data` and return a `FitResult`.
+    def __call__(self, family: ExponentialDispersionFamily, data: GLMData, init: Params | None = None) -> FitResult:
+        r"""Fit `family` against `data` and return a `FitResult`.
 
         Concrete fitters return the full fit contract, not just the fitted
         coefficient vector.
 
         **Arguments:**
 
-        - `model`: [`glmax.GLM`][] specification noun.
+        - `family`: [`glmax.ExponentialDispersionFamily`][] instance.
         - `data`: [`glmax.GLMData`][] noun.
         - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
           the family default.

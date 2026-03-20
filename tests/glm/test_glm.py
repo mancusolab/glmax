@@ -3,7 +3,6 @@
 from typing import ClassVar
 
 import numpy as np
-import pytest
 import statsmodels.api as sm
 
 import jax.nn
@@ -194,8 +193,7 @@ def test_poisson(getkey):
     sm_state = sm_poi.fit()
 
     # solve using glmax functions
-    glmax_poi = glmax.GLM(family=Poisson())
-    glm_state = glmax.fit(glmax_poi, X, y)
+    glm_state = glmax.fit(Poisson(), X, y)
     infer_state = glmax.infer(glm_state)
 
     _assert_array_eq(glm_state.params.beta, sm_state.params, atol=1e-3)
@@ -216,8 +214,7 @@ def test_normal(getkey):
     sm_state = sm_norm.fit()
 
     # solve using glmax functions
-    glmax_normal = glmax.GLM(family=Gaussian())
-    glm_state = glmax.fit(glmax_normal, X, y)
+    glm_state = glmax.fit(Gaussian(), X, y)
     infer_state = glmax.infer(glm_state)
 
     _assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
@@ -238,8 +235,7 @@ def test_logit(getkey):
     sm_state = sm_logit.fit()
 
     # solve using glmax functions
-    glmax_logit = glmax.GLM(family=Binomial())
-    glm_state = glmax.fit(glmax_logit, X, y)
+    glm_state = glmax.fit(Binomial(), X, y)
     infer_state = glmax.infer(glm_state)
 
     _assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
@@ -255,8 +251,7 @@ def test_NegativeBinomial(getkey):
     # Simulate NegativeBinomial regression data
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
 
-    jaxqtl_nb = glmax.GLM(family=NegativeBinomial())
-    glm_state = glmax.fit(jaxqtl_nb, X, y)
+    glm_state = glmax.fit(NegativeBinomial(), X, y)
     infer_state = glmax.infer(glm_state)
     assert glm_state.params._fields == ("beta", "disp", "aux")
     assert jnp.allclose(glm_state.params.disp, jnp.array(1.0))
@@ -273,219 +268,3 @@ def test_NegativeBinomial(getkey):
     _assert_array_eq(glm_state.params.beta, sm_beta, rtol=6e-3)
     _assert_array_eq(infer_state.se, sm_se, rtol=5e-3)
     _assert_array_eq(infer_state.p, sm_p, rtol=4e-2)
-
-
-# ---------------------------------------------------------------------------
-# New GLM-method unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_glm_mean_delegates_to_family_link_inverse() -> None:
-    """GLM.mean(eta) equals IdentityLink inverse for Gaussian."""
-    from glmax.family.links import IdentityLink
-
-    model = glmax.GLM(family=Gaussian())
-    eta = jnp.array([0.0, 1.0])
-    result = model.mean(eta)
-    expected = IdentityLink().inverse(eta)
-    assert jnp.allclose(result, expected)
-
-
-def test_glm_log_prob_is_negative_negloglikelihood() -> None:
-    """GLM.log_prob = -negloglikelihood."""
-    model = glmax.GLM(family=Gaussian())
-    y = jnp.array([1.0, 2.0, 3.0])
-    eta = jnp.array([1.1, 1.9, 3.1])
-    disp = 0.5
-
-    log_prob = model.log_prob(y, eta, disp)
-    nll = model.family.negloglikelihood(y, eta, disp)
-
-    assert jnp.allclose(log_prob, -nll)
-
-
-def test_glm_working_weights_returns_triple() -> None:
-    """GLM.working_weights returns (mu, g', w) tuple of correct shapes."""
-    model = glmax.GLM(family=Gaussian())
-    eta = jnp.array([0.5, 1.0, 1.5, 2.0])
-    disp = 1.0
-
-    result = model.working_weights(eta, disp)
-
-    assert len(result) == 3
-    mu, g_deriv, w = result
-    assert mu.shape == eta.shape
-    assert g_deriv.shape == eta.shape
-    assert w.shape == eta.shape
-
-
-def test_glm_link_deriv_matches_family() -> None:
-    """GLM.link_deriv(mu) matches family.glink.deriv(mu)."""
-    model = glmax.GLM(family=Gaussian())
-    mu = jnp.array([0.5, 1.0, 2.0])
-
-    result = model.link_deriv(mu)
-    expected = model.family.glink.deriv(mu)
-
-    assert jnp.allclose(result, expected)
-
-
-def test_glm_init_eta_matches_family() -> None:
-    """GLM.init_eta(y) matches family.init_eta(y)."""
-    model = glmax.GLM(family=Gaussian())
-    y = jnp.array([1.0, 2.0, 3.0, 4.0])
-
-    result = model.init_eta(y)
-    expected = model.family.init_eta(y)
-
-    assert jnp.allclose(result, expected)
-
-
-def test_glm_sample_delegates() -> None:
-    """GLM.sample(key, eta, disp) matches family.sample(key, eta, disp)."""
-    import jax.random as jr
-
-    model = glmax.GLM(family=Gaussian())
-    key = jr.PRNGKey(42)
-    eta = jnp.array([0.0, 1.0, 2.0])
-    disp = 1.0
-
-    result = model.sample(key, eta, disp)
-    expected = model.family.sample(key, eta, disp)
-
-    assert jnp.allclose(result, expected)
-
-
-def test_glm_negative_binomial_log_prob_forwards_aux() -> None:
-    model = glmax.GLM(family=NegativeBinomial())
-    y = jnp.array([0.0, 2.0, 5.0])
-    eta = jnp.log(jnp.array([1.5, 2.5, 4.0]))
-
-    result = model.log_prob(y, eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
-    expected = -model.family.negloglikelihood(y, eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
-
-    assert jnp.allclose(result, expected)
-    assert jnp.allclose(result, model.log_prob(y, eta, disp=jnp.array(9.0), aux=jnp.array(0.4)))
-    assert not jnp.allclose(result, model.log_prob(y, eta, disp=jnp.array(1.0), aux=jnp.array(0.2)))
-
-
-def test_glm_negative_binomial_working_weights_forward_aux() -> None:
-    model = glmax.GLM(family=NegativeBinomial())
-    eta = jnp.log(jnp.array([1.5, 2.5, 4.0]))
-
-    result = model.working_weights(eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
-    expected_mu, _, expected_weight = model.family.calc_weight(eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
-    expected = (expected_mu, model.link_deriv(expected_mu), expected_weight)
-    ignored_disp = model.working_weights(eta, disp=jnp.array(9.0), aux=jnp.array(0.4))
-    changed_aux = model.working_weights(eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
-
-    for actual, truth in zip(result, expected, strict=True):
-        assert jnp.allclose(actual, truth)
-    for actual, truth in zip(result, ignored_disp, strict=True):
-        assert jnp.allclose(actual, truth)
-    assert any(not jnp.allclose(actual, changed) for actual, changed in zip(result, changed_aux, strict=True))
-
-
-def test_glm_negative_binomial_sample_forwards_aux() -> None:
-    key = rdm.PRNGKey(7)
-    model = glmax.GLM(family=NegativeBinomial())
-    eta = jnp.log(jnp.array([1.5, 2.5, 4.0]))
-
-    result = model.sample(key, eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
-    expected = model.family.sample(key, eta, disp=jnp.array(1.0), aux=jnp.array(0.4))
-    ignored_disp = model.sample(key, eta, disp=jnp.array(9.0), aux=jnp.array(0.4))
-    changed_aux = model.sample(key, eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
-
-    assert jnp.array_equal(result, expected)
-    assert jnp.array_equal(result, ignored_disp)
-    assert not jnp.array_equal(result, changed_aux)
-
-
-def test_glm_requires_aux_aware_family_signatures_when_aux_is_passed() -> None:
-    model = glmax.GLM(family=_MissingAuxLogProbFamily())
-    y = jnp.array([0.0, 1.0, 2.0])
-    eta = jnp.array([0.2, 0.5, 0.8])
-
-    with pytest.raises(TypeError, match="aux"):
-        model.log_prob(y, eta, disp=jnp.array(1.5), aux=jnp.array(0.4))
-
-
-def test_glm_forwards_aux_to_family_methods() -> None:
-    model = glmax.GLM(family=_AuxiliaryWarmStartFamily())
-    X = jnp.array([[1.0], [1.0], [1.0]])
-    y = jnp.array([0.0, 1.0, 2.0])
-    eta = jnp.array([0.2, 0.5, 0.8])
-    disp = jnp.array(1.5)
-    aux = jnp.array(0.4)
-    step_size = jnp.array(0.7)
-    key = rdm.PRNGKey(5)
-
-    log_prob = model.log_prob(y, eta, disp=disp, aux=aux)
-    sample = model.sample(key, eta, disp=disp, aux=aux)
-    mu, g_deriv, weight = model.working_weights(eta, disp=disp, aux=aux)
-    new_disp, new_aux = model.update_nuisance(X, y, eta, disp=disp, step_size=step_size, aux=aux)
-
-    expected_log_prob = -model.family.negloglikelihood(y, eta, disp=disp, aux=aux)
-    expected_sample = model.family.sample(key, eta, disp=disp, aux=aux)
-    expected_mu = model.mean(eta)
-    expected_variance = model.family.variance(expected_mu, disp=disp, aux=aux)
-    expected_g_deriv = model.link_deriv(expected_mu)
-    expected_weight = 1.0 / (expected_variance * expected_g_deriv**2)
-    expected_new_disp, expected_new_aux = model.family.update_nuisance(
-        X, y, eta, disp=disp, step_size=step_size, aux=aux
-    )
-
-    assert jnp.allclose(log_prob, expected_log_prob)
-    assert jnp.allclose(sample, expected_sample)
-    assert jnp.allclose(mu, expected_mu)
-    assert jnp.allclose(g_deriv, expected_g_deriv)
-    assert jnp.allclose(weight, expected_weight)
-    assert jnp.allclose(new_disp, expected_new_disp)
-    assert (new_aux is None) == (expected_new_aux is None)
-
-
-def test_glm_docstrings_describe_split_disp_aux_contract() -> None:
-    assert glmax.GLM.__doc__ is not None
-    assert "(disp, aux)" in glmax.GLM.__doc__
-
-    for method in (
-        glmax.GLM.log_prob,
-        glmax.GLM.sample,
-        glmax.GLM.working_weights,
-    ):
-        assert method.__doc__ is not None
-        assert "`disp`" in method.__doc__
-        assert "`aux`" in method.__doc__
-
-
-def test_glm_init_nuisance_returns_family_defaults() -> None:
-    """GLM.init_nuisance() returns (1.0, None) for non-aux families and (1.0, array) for NB."""
-    assert glmax.GLM(family=Gaussian()).init_nuisance() == (jnp.asarray(1.0), None)
-    assert glmax.GLM(family=Poisson()).init_nuisance() == (jnp.asarray(1.0), None)
-    nb_disp, nb_aux = glmax.GLM(family=NegativeBinomial()).init_nuisance()
-    assert jnp.allclose(nb_disp, jnp.asarray(1.0))
-    assert nb_aux is not None
-    assert float(nb_aux) > 0.0
-
-
-@pytest.mark.parametrize(
-    ("family", "y", "eta"),
-    [
-        (Poisson(), jnp.array([0.0, 1.0, 2.0]), jnp.log(jnp.array([1.2, 2.0, 3.5]))),
-        (Binomial(), jnp.array([0.0, 1.0, 1.0]), jnp.array([-0.8, 0.3, 1.1])),
-    ],
-)
-def test_glm_methods_ignore_aux_for_families_without_aux_state(family, y, eta) -> None:
-    model = glmax.GLM(family=family)
-    key = rdm.PRNGKey(9)
-    baseline_log_prob = model.log_prob(y, eta, disp=jnp.array(1.0), aux=None)
-    with_aux_log_prob = model.log_prob(y, eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
-    baseline_weight = model.working_weights(eta, disp=jnp.array(1.0), aux=None)
-    with_aux_weight = model.working_weights(eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
-    baseline_sample = model.sample(key, eta, disp=jnp.array(1.0), aux=None)
-    with_aux_sample = model.sample(key, eta, disp=jnp.array(1.0), aux=jnp.array(0.2))
-
-    assert jnp.allclose(with_aux_log_prob, baseline_log_prob)
-    for actual, truth in zip(with_aux_weight, baseline_weight, strict=True):
-        assert jnp.allclose(actual, truth)
-    assert jnp.array_equal(with_aux_sample, baseline_sample)

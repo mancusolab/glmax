@@ -12,9 +12,8 @@ from jax.scipy.stats import norm
 from jaxtyping import ArrayLike
 
 from .._fit import FittedGLM
-from ..family.dist import Gaussian
+from ..family.dist import ExponentialDispersionFamily, Gaussian
 from ..family.utils import t_cdf
-from ..glm import GLM
 from .stderr import _validated_fitted_dispersion, AbstractStdErrEstimator
 from .types import InferenceResult
 
@@ -85,7 +84,7 @@ class WaldTest(AbstractTest, strict=True):
         se = jnp.sqrt(jnp.diag(covariance))
         stat = beta / se
         df = int(fit_result.eta.shape[0] - beta.shape[0])
-        p = _wald_test(stat, df, fitted.model)
+        p = _wald_test(stat, df, fitted.family)
 
         return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
 
@@ -137,7 +136,7 @@ class ScoreTest(AbstractTest, strict=True):
         return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
 
 
-def _wald_test(statistic: ArrayLike, df: int, model: GLM) -> Array:
+def _wald_test(statistic: ArrayLike, df: int, family: ExponentialDispersionFamily) -> Array:
     r"""Two-sided Wald test p-values.
 
     Uses a $t_{df}$ distribution for Gaussian families and
@@ -150,12 +149,12 @@ def _wald_test(statistic: ArrayLike, df: int, model: GLM) -> Array:
 
     - `statistic`: test statistic vector, shape `(p,)`.
     - `df`: residual degrees of freedom $n - p$.
-    - `model`: fitted [`glmax.GLM`][] instance.
+    - `family`: fitted [`glmax.ExponentialDispersionFamily`][] instance.
 
     **Returns:**
 
     Two-sided p-values, shape `(p,)`.
     """
-    if isinstance(model.family, Gaussian):
+    if isinstance(family, Gaussian):
         return 2 * t_cdf(-jnp.abs(statistic), df)
     return 2 * norm.sf(jnp.abs(statistic))

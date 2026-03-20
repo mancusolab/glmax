@@ -719,6 +719,6 @@ class TestGamma:
         n, p = 50, 3
         X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key_X, (n, p - 1))], axis=1)
         y = jr.gamma(key_y, 2.0, shape=(n,))
-        result = glmax.fit(glmax.GLM(family=Gamma()), X, y)
+        result = glmax.fit(Gamma(), X, y)
         assert jnp.all(jnp.isfinite(result.params.beta))
         assert jnp.isfinite(result.params.disp)

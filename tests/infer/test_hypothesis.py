@@ -19,38 +19,33 @@ from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 def _make_fitted(family=None):
     if family is None:
         family = Gaussian()
-    model = glmax.GLM(family=family)
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.2])
-    return glmax.fit(model, X, y)
+    return glmax.fit(family, X, y)
 
 
 def _make_poisson_fitted():
-    model = glmax.GLM(family=Poisson())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.0, 1.0, 1.0, 2.0])
-    return glmax.fit(model, X, y)
+    return glmax.fit(Poisson(), X, y)
 
 
 def _make_binomial_fitted():
-    model = glmax.GLM(family=Binomial())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.0, 1.0, 1.0, 0.0])
-    return glmax.fit(model, X, y)
+    return glmax.fit(Binomial(), X, y)
 
 
 def _make_negative_binomial_fitted():
-    model = glmax.GLM(family=NegativeBinomial())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.0, 1.0, 2.0, 4.0])
-    return glmax.fit(model, X, y)
+    return glmax.fit(NegativeBinomial(), X, y)
 
 
 def _make_perfect_fit_gaussian_fitted():
-    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([1.0, 2.0, 3.0, 4.0])
-    return glmax.fit(model, X, y)
+    return glmax.fit(Gaussian(), X, y)
 
 
 def _expected_score_stat(fitted):
@@ -230,7 +225,7 @@ def test_score_test_rejects_degenerate_fisher_diag() -> None:
 
 def test_wald_test_uses_t_distribution_for_gaussian() -> None:
     statistic = jnp.array([2.0, -1.5, 0.0])
-    p = _wald_test(statistic, df=50, model=glmax.GLM(family=Gaussian()))
+    p = _wald_test(statistic, df=50, family=Gaussian())
 
     assert p.shape == (3,)
     assert bool(jnp.all(p > 0))
@@ -241,7 +236,7 @@ def test_wald_test_uses_t_distribution_for_gaussian() -> None:
 
 def test_wald_test_uses_normal_for_non_gaussian() -> None:
     statistic = jnp.array([1.96])
-    p_poisson = _wald_test(statistic, df=100, model=glmax.GLM(family=Poisson()))
+    p_poisson = _wald_test(statistic, df=100, family=Poisson())
     # 2 * norm.sf(1.96) ≈ 0.05
     assert bool(jnp.abs(p_poisson[0] - 0.05) < 0.005)
 
@@ -249,13 +244,12 @@ def test_wald_test_uses_normal_for_non_gaussian() -> None:
 @pytest.mark.parametrize("family", [Gaussian(), Poisson()])
 def test_wald_test_jit_safe(family):
     """_wald_test is JIT-safe for Gaussian and Poisson."""
-    model = glmax.GLM(family=family)
     stat = jnp.array([2.0, -1.5, 0.5])
 
     import equinox as eqx
 
     def _jit_wald(stat):
-        return _wald_test(stat, 50, model)
+        return _wald_test(stat, 50, family)
 
     p_jit = eqx.filter_jit(_jit_wald)(stat)
 

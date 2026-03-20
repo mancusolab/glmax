@@ -21,12 +21,11 @@ from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
     ],
 )
 def test_predict_generates_stable_shape_for_supported_families(family, y) -> None:
-    model = glmax.GLM(family=family)
     X = jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]])
-    fit_result = glmax.fit(model, X, y)
+    fit_result = glmax.fit(family, X, y)
 
-    pred1 = glmax.predict(model, fit_result.params, X)
-    pred2 = glmax.predict(model, fit_result.params, X)
+    pred1 = glmax.predict(family, fit_result.params, X)
+    pred2 = glmax.predict(family, fit_result.params, X)
 
     assert pred1.shape == y.shape
     assert jnp.all(jnp.isfinite(pred1))
@@ -57,8 +56,7 @@ def test_predict_generates_stable_shape_for_supported_families(family, y) -> Non
     ],
 )
 def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> None:
-    model = glmax.GLM(family=family)
-    fit_result = glmax.fit(model, X, y)
+    fit_result = glmax.fit(family, X, y)
     assert fit_result.params._fields == ("beta", "disp", "aux")
     assert fit_result.params.aux is None
     if isinstance(family, Gaussian):
@@ -68,51 +66,50 @@ def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> Non
     params_with_aux = Params(beta=fit_result.params.beta, disp=fit_result.params.disp, aux=jnp.array(0.25))
 
     assert jnp.allclose(
-        glmax.predict(model, params_with_aux, X),
-        glmax.predict(model, fit_result.params, X),
+        glmax.predict(family, params_with_aux, X),
+        glmax.predict(family, fit_result.params, X),
     )
 
 
 def test_predict_boundary_rejects_invalid_nouns() -> None:
-    model = glmax.GLM(family=Gaussian())
+    family = Gaussian()
     X = jnp.array([[0.0], [1.0], [2.0]])
     params = Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0.2))
 
-    with pytest.raises(TypeError, match="GLM"):
+    with pytest.raises(TypeError, match="ExponentialDispersionFamily"):
         glmax.predict(object(), params, X)
 
     with pytest.raises(TypeError, match="Params"):
-        glmax.predict(model, jnp.array([1.0]), X)
+        glmax.predict(family, jnp.array([1.0]), X)
 
 
 def test_predict_rejects_beta_shape_mismatch() -> None:
-    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[0.0], [1.0], [2.0]])
     bad_params = Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0), aux=None)
 
     with pytest.raises(ValueError, match="Params.beta"):
-        glmax.predict(model, bad_params, X)
+        glmax.predict(Gaussian(), bad_params, X)
 
 
 def test_predict_rejects_non_numeric_or_non_scalar_params() -> None:
-    model = glmax.GLM(family=Gaussian())
+    family = Gaussian()
     X = jnp.array([[0.0], [1.0], [2.0]])
 
     with pytest.raises(TypeError, match="Params.beta must be numeric"):
-        glmax.predict(model, Params(beta=["bad"], disp=jnp.array(0.0), aux=None), X)
+        glmax.predict(family, Params(beta=["bad"], disp=jnp.array(0.0), aux=None), X)
 
     with pytest.raises(TypeError, match="Params.disp must be numeric"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad", aux=None), X)
+        glmax.predict(family, Params(beta=jnp.array([1.0]), disp="bad", aux=None), X)
 
     with pytest.raises(TypeError, match="Params.aux must be numeric"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux="bad"), X)
+        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux="bad"), X)
 
     with pytest.raises(TypeError, match="Params.aux must have an inexact dtype"):
         glmax.predict(
-            model,
+            family,
             Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0, dtype=jnp.int32)),
             X,
         )
 
     with pytest.raises(ValueError, match="Params.aux must be a scalar"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), X)
+        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), X)

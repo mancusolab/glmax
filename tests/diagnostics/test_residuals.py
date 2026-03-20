@@ -9,9 +9,10 @@ import jax.numpy as jnp
 import glmax
 import glmax.diagnostics
 
-from glmax import FitResult, FittedGLM, GLM, Params
+from glmax import FitResult, FittedGLM, Params
 from glmax.diagnostics import AbstractDiagnostic
 from glmax.family import Binomial, Poisson
+from glmax.family.dist import ExponentialDispersionFamily
 
 
 class _ConcreteOK(AbstractDiagnostic[jnp.ndarray], strict=True):
@@ -19,11 +20,10 @@ class _ConcreteOK(AbstractDiagnostic[jnp.ndarray], strict=True):
         return fitted.y
 
 
-def _make_fitted(family, y, mu, disp=1.0, aux=None):
+def _make_fitted(family: ExponentialDispersionFamily, y, mu, disp=1.0, aux=None):
     X = jnp.ones((y.shape[0], 1))
     beta = jnp.array([0.0])
     params = Params(beta=beta, disp=jnp.asarray(disp), aux=None if aux is None else jnp.asarray(aux))
-    model = GLM(family=family)
     result = FitResult(
         params=params,
         X=X,
@@ -37,7 +37,7 @@ def _make_fitted(family, y, mu, disp=1.0, aux=None):
         objective_delta=jnp.asarray(0.0),
         score_residual=jnp.zeros_like(y),
     )
-    return FittedGLM(model=model, result=result)
+    return FittedGLM(family=family, result=result)
 
 
 def test_abstract_diagnostic_cannot_be_instantiated_directly():

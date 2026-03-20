@@ -45,7 +45,7 @@ class TestGofStats:
 
     def test_gof_pearson_chi2_equals_formula(self):
         fitted, _, _ = fit_gaussian()
-        family = fitted.model.family
+        family = fitted.family
         y, mu = fitted.y, fitted.mu
         disp, aux = fitted.params.disp, fitted.params.aux
         v = family.variance(mu, disp, aux=aux)

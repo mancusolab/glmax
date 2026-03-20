@@ -44,7 +44,7 @@ def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
 
 
 def unchecked_fitted(base: FittedGLM, **overrides: object) -> FittedGLM:
-    values = {"model": base.model, "result": base.result}
+    values = {"family": base.family, "result": base.result}
     values.update(overrides)
 
     fitted = object.__new__(FittedGLM)
@@ -81,10 +81,9 @@ def _assert_canonical_params_for_family(family, params: Params) -> None:
 )
 def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
     current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
-    model = glmax.GLM(family=family)
 
-    fitted = glmax.fit(model, X, y)
-    prediction = glmax.predict(model, fitted.params, X)
+    fitted = glmax.fit(family, X, y)
+    prediction = glmax.predict(family, fitted.params, X)
     inferred = glmax.infer(fitted)
     default_diagnostic = glmax.check(fitted)
     diagnostics = jtu.tree_map(
@@ -111,16 +110,16 @@ def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
 
 
 def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
-    model = glmax.GLM(family=Gaussian())
+    family = Gaussian()
     X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
     y = jnp.array([0.1, 1.2, 1.8, 3.1])
-    fitted = glmax.fit(model, X, y)
+    fitted = glmax.fit(family, X, y)
 
-    with pytest.raises(TypeError, match="GLM"):
+    with pytest.raises(TypeError, match="ExponentialDispersionFamily"):
         glmax.fit(object(), X, y)
 
     with pytest.raises(TypeError, match="Params"):
-        glmax.predict(model, jnp.array([1.0]), X)
+        glmax.predict(family, jnp.array([1.0]), X)
 
     with pytest.raises(TypeError, match="FittedGLM"):
         glmax.infer(object())
@@ -141,10 +140,10 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
     assert bool(jnp.isnan(inferred.stat).any() or jnp.isnan(inferred.p).any())
 
     with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
-        glmax.predict(model, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0), aux=None), X)
+        glmax.predict(family, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0), aux=None), X)
 
     with pytest.raises(ValueError, match="Params.aux must be a scalar"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.2, 0.3])), X)
+        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.2, 0.3])), X)
 
     with pytest.raises(eqx.EquinoxRuntimeError, match="fitted.params.disp"):
         glmax.infer(

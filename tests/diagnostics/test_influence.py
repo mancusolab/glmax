@@ -52,7 +52,7 @@ class TestInfluenceStats:
 
     def test_cooks_distance_matches_formula(self):
         fitted, _, _ = fit_gaussian()
-        family = fitted.model.family
+        family = fitted.family
         y, mu = fitted.y, fitted.mu
         disp, aux = fitted.params.disp, fitted.params.aux
         _, p = fitted.X.shape

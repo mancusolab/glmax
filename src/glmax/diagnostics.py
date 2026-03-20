@@ -84,7 +84,7 @@ class PearsonResidual(AbstractDiagnostic[Array], strict=True):
 
         Pearson residuals, shape `(n,)`.
         """
-        family = fitted.model.family
+        family = fitted.family
         mu = fitted.mu
         v = family.variance(mu, fitted.params.disp, aux=fitted.params.aux)
         v = jnp.clip(jnp.asarray(v), min=jnp.finfo(float).tiny)
@@ -113,7 +113,7 @@ class DevianceResidual(AbstractDiagnostic[Array], strict=True):
 
         Deviance residuals, shape `(n,)`.
         """
-        family = fitted.model.family
+        family = fitted.family
         y = fitted.y
         mu = fitted.mu
         d = family.deviance_contribs(y, mu, fitted.params.disp, aux=fitted.params.aux)
@@ -154,7 +154,7 @@ class QuantileResidual(AbstractDiagnostic[Array], strict=True):
 
         Quantile residuals, shape `(n,)`.
         """
-        family = fitted.model.family
+        family = fitted.family
         y = fitted.y
         mu = fitted.mu
         disp = fitted.params.disp
@@ -219,7 +219,7 @@ class GoodnessOfFit(AbstractDiagnostic[GofStats], strict=True):
 
         `GofStats` with scalar array fields.
         """
-        family = fitted.model.family
+        family = fitted.family
         y = fitted.y
         mu = fitted.mu
         eta = fitted.eta
@@ -234,7 +234,7 @@ class GoodnessOfFit(AbstractDiagnostic[GofStats], strict=True):
         p_f = jnp.asarray(p, dtype=jnp.float64)
         df_resid = n_f - p_f
         ll_disp = jnp.clip(deviance / n_f, min=jnp.finfo(float).tiny) if isinstance(family, Gaussian) else disp
-        ll = fitted.model.log_prob(y, eta, ll_disp, aux=aux)
+        ll = -fitted.family.negloglikelihood(y, eta, ll_disp, aux=aux)
         aic = -2.0 * ll + 2.0 * p_f
         bic = -2.0 * ll + p_f * jnp.log(n_f)
 
@@ -302,7 +302,7 @@ class Influence(AbstractDiagnostic[InfluenceStats], strict=True):
         Z = jscla.solve_triangular(L, Xw.T, lower=True)
         leverage = jnp.sum(Z**2, axis=0)
 
-        v = fitted.model.family.variance(mu, disp, aux=aux)
+        v = fitted.family.variance(mu, disp, aux=aux)
         r_pearson = (y - mu) / jnp.sqrt(v)
         p_f = jnp.asarray(p, dtype=jnp.float64)
         cooks_distance = r_pearson**2 * leverage / (p_f * (1.0 - leverage) ** 2)

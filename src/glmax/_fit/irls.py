@@ -11,7 +11,7 @@ from jax import Array, lax
 from jaxtyping import ArrayLike, ScalarLike
 
 from ..data import GLMData
-from ..glm import GLM
+from ..family import ExponentialDispersionFamily
 from .types import AbstractFitter, FitResult, Params
 
 
@@ -31,7 +31,7 @@ class _IRLSState(NamedTuple):
 def _irls(
     X: ArrayLike,
     y: ArrayLike,
-    model: GLM,
+    family: ExponentialDispersionFamily,
     solver: lx.AbstractLinearSolver,
     eta: ArrayLike,
     max_iter: int = 1000,
@@ -52,7 +52,7 @@ def _irls(
         likelihood_o, diff, num_iter, _beta_o, eta_o, disp_o, aux_o = val
 
         # compute means, weights, and gradients
-        mu_k, g_deriv_k, weight = model.working_weights(eta_o, disp_o, aux_o)
+        mu_k, g_deriv_k, weight = family.calc_weight(eta_o, disp_o, aux_o)
         r = eta_o + g_deriv_k * (y - mu_k) * step_size - offset_eta
 
         # prepare for lineax and solve
@@ -65,10 +65,10 @@ def _irls(
         eta_n = X @ beta + offset_eta
 
         # update any nuisance params (disp, overdisp)
-        disp_n, aux_n = model.update_nuisance(X, y, eta_n, disp_o, step_size, aux_o)
+        disp_n, aux_n = family.update_nuisance(X, y, eta_n, disp_o, step_size, aux=aux_o)
 
         # re-evaluate
-        likelihood_n = -model.log_prob(y, eta_n, disp_n, aux_n)
+        likelihood_n = family.negloglikelihood(y, eta_n, disp_n, aux_n)
         diff = likelihood_n - likelihood_o
 
         return likelihood_n, diff, num_iter + 1, beta, eta_n, disp_n, aux_n
@@ -80,7 +80,7 @@ def _irls(
 
     init_beta = jnp.zeros((p,))
     init_eta = eta + offset_eta
-    init_likelihood = -model.log_prob(y, init_eta, disp_init, aux_init)
+    init_likelihood = family.negloglikelihood(y, init_eta, disp_init, aux_init)
     init_tuple = (init_likelihood, jnp.inf, 0, init_beta, init_eta, disp_init, aux_init)
 
     objective, objective_delta, num_iters, beta, eta, disp, aux = lax.while_loop(cond_fun, body_fun, init_tuple)
@@ -112,7 +112,7 @@ class IRLSFitter(AbstractFitter, strict=True):
 
     def __call__(
         self,
-        model: GLM,
+        family: ExponentialDispersionFamily,
         data: GLMData,
         init: Params | None = None,
         max_iter: int = 1000,
@@ -127,7 +127,7 @@ class IRLSFitter(AbstractFitter, strict=True):
 
         **Arguments:**
 
-        - `model`: [`glmax.GLM`][] instance.
+        - `family`: [`glmax.ExponentialDispersionFamily`][] instance.
         - `data`: internal [`glmax.data.GLMData`][] carrying validated arrays.
         - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
           the family default.
@@ -146,7 +146,7 @@ class IRLSFitter(AbstractFitter, strict=True):
             raise ValueError("GLMData.weights is not supported yet.")
         X, y, offset, _ = data.canonical_arrays()
 
-        default_disp, default_aux = model.init_nuisance()
+        default_disp, default_aux = family.init_nuisance()
         if init is not None:
             disp_init = jnp.asarray(init.disp)
             aux_init = jnp.asarray(init.aux) if init.aux is not None else default_aux
@@ -154,12 +154,12 @@ class IRLSFitter(AbstractFitter, strict=True):
         else:
             disp_init = default_disp
             aux_init = default_aux
-            init_eta = model.init_eta(y)
+            init_eta = family.init_eta(y)
 
         state = _irls(
             X,
             y,
-            model,
+            family,
             self.solver,
             init_eta,
             max_iter,
@@ -172,7 +172,7 @@ class IRLSFitter(AbstractFitter, strict=True):
         beta, n_iter, converged, disp, aux, objective, objective_delta = state
 
         eta = X @ beta + offset
-        mu, link_deriv, weight = model.working_weights(eta, disp, aux)
+        mu, link_deriv, weight = family.calc_weight(eta, disp, aux)
         score_residual = (y - mu) * link_deriv
         beta = jnp.ravel(beta)
 

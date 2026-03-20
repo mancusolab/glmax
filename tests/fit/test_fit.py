@@ -169,22 +169,22 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     class RecordingFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
 
-        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
-            seen["model"] = model
+        def __call__(self, family: ExponentialDispersionFamily, data: GLMData, init: Params | None = None) -> FitResult:
+            seen["family"] = family
             seen["data"] = data
             seen["init"] = init
             return expected
 
-    model = glmax.GLM()
+    family = Gaussian()
     X = jnp.ones((2, 1))
     y = jnp.ones(2)
     init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0), aux=None)
 
-    result = glmax.fit(model, X, y, init=init, fitter=RecordingFitter())
+    result = glmax.fit(family, X, y, init=init, fitter=RecordingFitter())
 
     assert isinstance(result, current_fitted_glm_type)
     assert bool(eqx.tree_equal(result.result, expected))
-    assert isinstance(seen["model"], glmax.GLM)
+    assert isinstance(seen["family"], ExponentialDispersionFamily)
     assert isinstance(seen["data"], GLMData)
     assert isinstance(seen["init"], Params)
     assert seen["init"]._fields == ("beta", "disp", "aux")
@@ -194,16 +194,16 @@ def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
     class BadFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
 
-        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> object:
-            del model, data, init
+        def __call__(self, family: ExponentialDispersionFamily, data: GLMData, init: Params | None = None) -> object:
+            del family, data, init
             return object()
 
-    model = glmax.GLM()
+    family = Gaussian()
     X = jnp.ones((2, 1))
     y = jnp.ones(2)
 
     with pytest.raises(TypeError, match="FitResult"):
-        glmax.fit(model, X, y, fitter=BadFitter())
+        glmax.fit(family, X, y, fitter=BadFitter())
 
 
 _DEFAULT_X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
@@ -324,7 +324,7 @@ def _assert_canonical_params_for_family(family, params: Params) -> None:
 
 
 def _statsmodels_result_for_fitted(fitted: FittedGLM):
-    family = fitted.model.family
+    family = fitted.family
     glink = family.glink
     scale = float(np.asarray(fitted.params.disp))
     aux = None if fitted.params.aux is None else float(np.asarray(fitted.params.aux))
@@ -377,7 +377,7 @@ def _statsmodels_result_for_fitted(fitted: FittedGLM):
 
 
 def _statsmodels_expected_pvalues(fitted: FittedGLM, sm_result) -> np.ndarray:
-    if isinstance(fitted.model.family, Gaussian):
+    if isinstance(fitted.family, Gaussian):
         df = fitted.X.shape[0] - fitted.params.beta.shape[0]
         return np.asarray(2.0 * t_cdf(-jnp.abs(jnp.asarray(sm_result.tvalues)), df))
     return np.asarray(sm_result.pvalues)
@@ -395,9 +395,8 @@ def _statsmodels_expected_pvalues(fitted: FittedGLM, sm_result) -> np.ndarray:
 )
 def test_default_fitter_returns_canonical_fitresult_for_supported_families(family, X, y) -> None:
     current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
-    model = glmax.GLM(family=family)
 
-    result = glmax.fit(model, X, y)
+    result = glmax.fit(family, X, y)
 
     assert isinstance(result, current_fitted_glm_type)
     assert result.params.beta.shape == (1,)
@@ -410,9 +409,7 @@ def test_default_fitter_returns_canonical_fitresult_for_supported_families(famil
 
 @pytest.mark.parametrize(("family", "X", "y"), _VALID_LINK_COMBINATION_CASES)
 def test_fit_and_infer_succeed_across_all_supported_family_link_combinations(family, X, y) -> None:
-    model = glmax.GLM(family=family)
-
-    fitted = glmax.fit(model, X, y)
+    fitted = glmax.fit(family, X, y)
     inferred = glmax.infer(fitted)
 
     assert isinstance(fitted, FittedGLM)
@@ -452,7 +449,7 @@ def test_fit_and_infer_succeed_across_all_supported_family_link_combinations(fam
 
 @pytest.mark.parametrize(("family", "X", "y"), _VALID_LINK_COMBINATION_CASES)
 def test_fit_and_infer_match_statsmodels_across_all_supported_family_link_combinations(family, X, y) -> None:
-    fitted = glmax.fit(glmax.GLM(family=family), X, y)
+    fitted = glmax.fit(family, X, y)
     inferred = glmax.infer(fitted)
     sm_result = _statsmodels_result_for_fitted(fitted)
     sm_p = _statsmodels_expected_pvalues(fitted, sm_result)
@@ -464,11 +461,11 @@ def test_fit_and_infer_match_statsmodels_across_all_supported_family_link_combin
 
 
 def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
-    with pytest.raises(TypeError, match="GLM"):
+    with pytest.raises(TypeError, match="ExponentialDispersionFamily"):
         glmax.fit(object(), jnp.ones((3, 1)), jnp.ones(3))
 
     with pytest.raises(TypeError, match="Params"):
-        glmax.fit(glmax.GLM(), jnp.ones((3, 1)), jnp.ones(3), init=jnp.zeros(1))
+        glmax.fit(Gaussian(), jnp.ones((3, 1)), jnp.ones(3), init=jnp.zeros(1))
 
 
 @pytest.mark.parametrize(
@@ -526,18 +523,18 @@ def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
     class RecordingFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
 
-        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
-            del model, data
+        def __call__(self, family: ExponentialDispersionFamily, data: GLMData, init: Params | None = None) -> FitResult:
+            del family, data
             seen["called"] = True
             seen["init"] = init
             return _make_fit_result()
 
-    model = glmax.GLM()
+    family = Gaussian()
     X = jnp.ones((3, 1))
     y = jnp.ones(3)
 
     with pytest.raises(error_type, match=match):
-        glmax.fit(model, X, y, init=bad_init, fitter=RecordingFitter())
+        glmax.fit(family, X, y, init=bad_init, fitter=RecordingFitter())
 
     assert not seen["called"]
 
@@ -549,8 +546,8 @@ def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter(fam
     class RecordingFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
 
-        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
-            del model, data
+        def __call__(self, family: ExponentialDispersionFamily, data: GLMData, init: Params | None = None) -> FitResult:
+            del family, data
             seen["called"] = True
             assert init is not None
             return FitResult(
@@ -567,12 +564,11 @@ def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter(fam
                 score_residual=jnp.array([0.0, 0.0]),
             )
 
-    model = glmax.GLM(family=family)
     X = jnp.ones((3, 1))
     y = jnp.ones(3)
     init = Params(beta=jnp.zeros(1), disp=jnp.array(1.0), aux=jnp.array(0.2))
 
-    result = glmax.fit(model, X, y, init=init, fitter=RecordingFitter())
+    result = glmax.fit(family, X, y, init=init, fitter=RecordingFitter())
 
     assert isinstance(result, FittedGLM)
     assert seen["called"]
@@ -588,11 +584,10 @@ def test_fitter_is_abstract_equinox_model() -> None:
 
 
 def test_canonical_fit_supports_non_default_solver_path() -> None:
-    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.8, 1.7, 2.1, 2.9])
 
-    result = glmax.fit(model, X, y, fitter=IRLSFitter(solver=lx.QR()))
+    result = glmax.fit(Gaussian(), X, y, fitter=IRLSFitter(solver=lx.QR()))
 
     assert isinstance(result, FittedGLM)
     assert result.params.beta.shape == (2,)
@@ -601,14 +596,13 @@ def test_canonical_fit_supports_non_default_solver_path() -> None:
 
 
 def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
-    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]])
     y = jnp.array([1.0, 0.0, 1.0])
     offset = jnp.array([0.2, 0.1, 0.3])
     init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7), aux=None)
 
-    result_1 = glmax.fit(model, X, y, offset=offset, init=init)
-    result_2 = glmax.fit(model, X, y, offset=offset, init=init)
+    result_1 = glmax.fit(Gaussian(), X, y, offset=offset, init=init)
+    result_2 = glmax.fit(Gaussian(), X, y, offset=offset, init=init)
 
     assert isinstance(result_1, FittedGLM)
     assert jnp.allclose(result_1.beta, result_2.beta)
@@ -618,13 +612,13 @@ def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
 
 
 def test_irls_fitter_canonicalizes_supported_warm_start_params() -> None:
-    model = glmax.GLM(family=_CanonicalWarmStartFamily())
+    family = _CanonicalWarmStartFamily()
     data = GLMData(X=jnp.array([[1.0], [2.0], [3.0], [4.0]]), y=jnp.array([1.2, 1.9, 3.1, 4.0]))
     raw_init = Params(beta=jnp.array([0.1]), disp=jnp.array(0.7), aux=jnp.array(0.1))
     canonical_init = Params(beta=jnp.array([0.1]), disp=jnp.array(1.0), aux=jnp.array(0.25))
 
-    raw_result = IRLSFitter()(model, data, init=raw_init)
-    canonical_result = IRLSFitter()(model, data, init=canonical_init)
+    raw_result = IRLSFitter()(family, data, init=raw_init)
+    canonical_result = IRLSFitter()(family, data, init=canonical_init)
 
     assert jnp.allclose(raw_result.params.disp, canonical_result.params.disp)
     assert jnp.allclose(raw_result.params.aux, canonical_result.params.aux)
@@ -632,16 +626,16 @@ def test_irls_fitter_canonicalizes_supported_warm_start_params() -> None:
 
 
 def test_public_fit_matches_single_canonicalization_reference_for_non_idempotent_warm_starts() -> None:
-    model = glmax.GLM(family=_NonIdempotentCanonicalWarmStartFamily())
+    family = _NonIdempotentCanonicalWarmStartFamily()
     data = GLMData(X=jnp.array([[1.0], [2.0], [3.0], [4.0]]), y=jnp.array([1.2, 1.9, 3.1, 4.0]))
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.0])
     seed = Params(beta=jnp.array([0.1]), disp=jnp.array(0.7), aux=jnp.array(2.0))
 
-    expected = IRLSFitter()(model, data, init=seed)
-    first = glmax.fit(model, X, y, init=seed)
+    expected = IRLSFitter()(family, data, init=seed)
+    first = glmax.fit(family, X, y, init=seed)
     inferred = glmax.infer(first)
-    second = glmax.fit(model, X, y, init=first.params)
+    second = glmax.fit(family, X, y, init=first.params)
 
     assert jnp.allclose(first.glm_wt, expected.glm_wt)
     assert jnp.allclose(first.objective, expected.objective)
@@ -654,11 +648,10 @@ def test_public_fit_matches_single_canonicalization_reference_for_non_idempotent
 
 
 def test_default_fitter_initializes_aux_for_aux_aware_families() -> None:
-    model = glmax.GLM(family=_AuxSensitiveIRLSFamily())
     X = jnp.array([[1.0], [1.0], [1.0]])
     y = jnp.array([1.0, 2.0, 3.0])
 
-    result = glmax.fit(model, X, y)
+    result = glmax.fit(_AuxSensitiveIRLSFamily(), X, y)
 
     assert isinstance(result, FittedGLM)
     assert jnp.allclose(result.params.disp, jnp.array(1.0))
@@ -667,13 +660,13 @@ def test_default_fitter_initializes_aux_for_aux_aware_families() -> None:
 
 
 def test_irls_fitter_threads_aux_through_kernel_state() -> None:
-    model = glmax.GLM(family=_AuxSensitiveIRLSFamily())
+    family = _AuxSensitiveIRLSFamily()
     data = GLMData(X=jnp.array([[1.0], [1.0], [1.0]]), y=jnp.array([1.0, 2.0, 3.0]))
     small_aux = Params(beta=jnp.array([0.0]), disp=jnp.array(1.0), aux=jnp.array(0.5))
     large_aux = Params(beta=jnp.array([0.0]), disp=jnp.array(1.0), aux=jnp.array(2.0))
 
-    small_fit = IRLSFitter()(model, data, init=small_aux)
-    large_fit = IRLSFitter()(model, data, init=large_aux)
+    small_fit = IRLSFitter()(family, data, init=small_aux)
+    large_fit = IRLSFitter()(family, data, init=large_aux)
 
     assert jnp.allclose(small_fit.params.aux, small_aux.aux)
     assert jnp.allclose(large_fit.params.aux, large_aux.aux)
@@ -682,10 +675,10 @@ def test_irls_fitter_threads_aux_through_kernel_state() -> None:
 
 
 def test_negative_binomial_fit_glm_weights_match_final_auxiliary_parameter() -> None:
-    model = glmax.GLM(family=NegativeBinomial())
+    family = NegativeBinomial()
 
-    fitted = glmax.fit(model, _DEFAULT_X, jnp.array([0.0, 1.0, 2.0, 4.0]))
-    _, _, expected_weight = model.working_weights(fitted.eta, fitted.params.disp, fitted.params.aux)
+    fitted = glmax.fit(family, _DEFAULT_X, jnp.array([0.0, 1.0, 2.0, 4.0]))
+    _, _, expected_weight = family.calc_weight(fitted.eta, fitted.params.disp, fitted.params.aux)
 
     assert fitted.params.aux is not None
     assert jnp.allclose(fitted.glm_wt, expected_weight, rtol=1e-6, atol=1e-7)
@@ -697,7 +690,7 @@ def test_default_fitter_validates_init_beta_shape() -> None:
     bad_init = Params(beta=jnp.ones((2, 1)), disp=jnp.array(0.0), aux=None)
 
     with pytest.raises(ValueError, match="Params.beta"):
-        glmax.fit(glmax.GLM(), X, y, init=bad_init)
+        glmax.fit(Gaussian(), X, y, init=bad_init)
 
 
 @pytest.mark.parametrize(
@@ -711,7 +704,7 @@ def test_default_fitter_validates_init_beta_shape() -> None:
 )
 def test_all_families_succeed_with_default_fitter(family, y) -> None:
     X = jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]])
-    result = glmax.fit(glmax.GLM(family=family), X, y)
+    result = glmax.fit(family, X, y)
 
     assert isinstance(result, FittedGLM)
     assert isinstance(result.params, Params)
@@ -722,14 +715,13 @@ def test_all_families_succeed_with_default_fitter(family, y) -> None:
 
 
 def test_single_feature_beta_shape_roundtrip() -> None:
-    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.0])
 
-    first = glmax.fit(model, X, y)
+    first = glmax.fit(Gaussian(), X, y)
     assert first.beta.shape == (1,)
 
-    second = glmax.fit(model, X, y, init=first.params)
+    second = glmax.fit(Gaussian(), X, y, init=first.params)
     assert second.beta.shape == (1,)
     assert jnp.allclose(second.params.disp, first.params.disp)
     assert second.params.aux is None
@@ -740,4 +732,4 @@ def test_unsupported_weights_rejected() -> None:
     y = jnp.array([0.2, 0.9, 2.2, 2.8])
 
     with pytest.raises(ValueError, match="weights"):
-        glmax.fit(glmax.GLM(), X, y, weights=jnp.ones(4))
+        glmax.fit(Gaussian(), X, y, weights=jnp.ones(4))

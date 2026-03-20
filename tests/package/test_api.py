@@ -32,6 +32,7 @@ from glmax import (
 from glmax._fit import IRLSFitter
 from glmax.data import GLMData
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
+from glmax.family.dist import ExponentialDispersionFamily
 
 
 WORKTREE_ROOT = Path(__file__).resolve().parents[2]
@@ -106,8 +107,8 @@ def test_pytest_imports_glmax_from_worktree_src() -> None:
 
 def test_fit_signature_matches_canonical_surface() -> None:
     sig = inspect.signature(glmax.fit)
-    assert list(sig.parameters) == ["model", "X", "y", "offset", "weights", "init", "fitter"]
-    assert sig.parameters["model"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert list(sig.parameters) == ["family", "X", "y", "offset", "weights", "init", "fitter"]
+    assert sig.parameters["family"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["X"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["y"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["offset"].kind is inspect.Parameter.KEYWORD_ONLY
@@ -140,35 +141,35 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     class DummyFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
 
-        def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
-            seen["model"] = model
+        def __call__(self, family: ExponentialDispersionFamily, data: GLMData, init: Params | None = None) -> FitResult:
+            seen["family"] = family
             seen["data"] = data
             seen["init"] = init
             return expected
 
-    model = glmax.GLM()
+    family = Gaussian()
     X = jnp.ones((2, 1))
     y = jnp.ones(2)
     init = Params(beta=jnp.zeros(1), disp=jnp.array(0.0), aux=None)
 
-    result = glmax.fit(model, X, y, init=init, fitter=DummyFitter())
+    result = glmax.fit(family, X, y, init=init, fitter=DummyFitter())
 
     assert isinstance(result, FittedGLM)
-    assert bool(eqx.tree_equal(result.model, model))
+    assert bool(eqx.tree_equal(result.family, family))
     assert bool(eqx.tree_equal(result.result, expected))
-    assert isinstance(seen["model"], glmax.GLM)
+    assert isinstance(seen["family"], ExponentialDispersionFamily)
     assert isinstance(seen["data"], GLMData)
     assert isinstance(seen["init"], Params)
     assert seen["init"]._fields == ("beta", "disp", "aux")
 
 
 def test_fit_rejects_non_fitter_with_deterministic_error() -> None:
-    model = glmax.GLM()
+    family = Gaussian()
     X = jnp.ones((2, 1))
     y = jnp.ones(2)
 
     with pytest.raises(TypeError, match=r"expects `fitter` to be an AbstractFitter instance"):
-        glmax.fit(model, X, y, fitter="not-a-fitter")
+        glmax.fit(family, X, y, fitter="not-a-fitter")
 
 
 def test_contract_dataclasses_are_pytrees() -> None:
@@ -192,11 +193,11 @@ def test_contract_dataclasses_are_pytrees() -> None:
 
 
 def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
-    model = glmax.GLM(family=Gaussian())
+    family = Gaussian()
     X = jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.8, 1.7, 2.1, 2.9])
 
-    result = glmax.fit(model, X, y, fitter=IRLSFitter(solver=lx.QR()))
+    result = glmax.fit(family, X, y, fitter=IRLSFitter(solver=lx.QR()))
 
     assert isinstance(result, FittedGLM)
     assert result.params.beta.shape == (2,)
@@ -215,7 +216,7 @@ def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
     ],
 )
 def test_canonical_fit_succeeds_for_supported_families(family, X, y) -> None:
-    result = glmax.fit(glmax.GLM(family=family), X, y)
+    result = glmax.fit(family, X, y)
 
     assert isinstance(result, FittedGLM)
     assert isinstance(result.params, Params)
@@ -226,36 +227,36 @@ def test_canonical_fit_succeeds_for_supported_families(family, X, y) -> None:
 
 
 def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
-    model = glmax.GLM(family=Gaussian())
+    family = Gaussian()
     X = jnp.array([[0.0], [1.0], [2.0]])
 
     with pytest.raises(ValueError, match="Params.beta"):
-        glmax.predict(model, Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0), aux=None), X)
+        glmax.predict(family, Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0), aux=None), X)
 
     with pytest.raises(TypeError, match="Params.beta must be numeric"):
-        glmax.predict(model, Params(beta=["bad"], disp=jnp.array(0.0), aux=None), X)
+        glmax.predict(family, Params(beta=["bad"], disp=jnp.array(0.0), aux=None), X)
 
     with pytest.raises(TypeError, match="Params.disp must be numeric"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp="bad", aux=None), X)
+        glmax.predict(family, Params(beta=jnp.array([1.0]), disp="bad", aux=None), X)
 
     with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
-        glmax.predict(model, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0), aux=None), X)
+        glmax.predict(family, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0), aux=None), X)
 
     with pytest.raises(TypeError, match="Params.disp must have an inexact dtype"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32), aux=None), X)
+        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32), aux=None), X)
 
     with pytest.raises(TypeError, match="Params.aux must be numeric"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux="bad"), X)
+        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux="bad"), X)
 
     with pytest.raises(TypeError, match="Params.aux must have an inexact dtype"):
         glmax.predict(
-            model,
+            family,
             Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0, dtype=jnp.int32)),
             X,
         )
 
     with pytest.raises(ValueError, match="Params.aux must be a scalar"):
-        glmax.predict(model, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), X)
+        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), X)
 
 
 @pytest.mark.parametrize(
@@ -268,11 +269,10 @@ def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
     ],
 )
 def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> None:
-    model = glmax.GLM(family=family)
     params = Params(beta=jnp.array([1.0]), disp=jnp.array(1.0), aux=jnp.array(0.25))
     canonical_params = Params(beta=jnp.array([1.0]), disp=jnp.array(1.0), aux=None)
 
-    assert jnp.allclose(glmax.predict(model, params, X), glmax.predict(model, canonical_params, X))
+    assert jnp.allclose(glmax.predict(family, params, X), glmax.predict(family, canonical_params, X))
 
 
 def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:
@@ -318,18 +318,18 @@ def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None
         def init_nuisance(self):
             return jnp.asarray(1.0), jnp.asarray(0.25)
 
-    model = glmax.GLM(family=_CanonicalWarmStartFamily())
+    family = _CanonicalWarmStartFamily()
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.0])
     seed = Params(beta=jnp.zeros(1), disp=jnp.array(0.7), aux=jnp.array(0.1))
 
-    first = glmax.fit(model, X, y, init=seed)
+    first = glmax.fit(family, X, y, init=seed)
     assert first.beta.shape == (1,)
     assert jnp.allclose(first.params.disp, jnp.array(1.0))
     assert jnp.allclose(first.params.aux, jnp.array(0.25))
 
     inferred = glmax.infer(first)
-    second = glmax.fit(model, X, y, init=first.params)
+    second = glmax.fit(family, X, y, init=first.params)
     assert second.beta.shape == (1,)
     assert jnp.allclose(inferred.params.disp, first.params.disp)
     assert jnp.allclose(inferred.params.aux, first.params.aux)

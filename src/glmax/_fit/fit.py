@@ -7,7 +7,7 @@ from jax import Array, numpy as jnp
 from jaxtyping import ArrayLike
 
 from ..data import GLMData
-from ..glm import GLM
+from ..family import ExponentialDispersionFamily
 from .irls import IRLSFitter
 from .types import (
     _canonicalize_init,
@@ -27,8 +27,8 @@ def _validated_params(params: Params, n_features: int) -> Params:
     return Params(beta=beta, disp=disp, aux=aux)
 
 
-def _normalize_init_aux(model: GLM, params: Params) -> Params:
-    _, default_aux = model.init_nuisance()
+def _normalize_init_aux(family: ExponentialDispersionFamily, params: Params) -> Params:
+    _, default_aux = family.init_nuisance()
     if default_aux is None and params.aux is not None:
         return Params(beta=params.beta, disp=params.disp, aux=None)
     return params
@@ -36,7 +36,7 @@ def _normalize_init_aux(model: GLM, params: Params) -> Params:
 
 @eqx.filter_jit
 def fit(
-    model: GLM,
+    family: ExponentialDispersionFamily,
     X: ArrayLike,
     y: ArrayLike,
     *,
@@ -49,12 +49,12 @@ def fit(
 
     This is the canonical `fit` grammar verb. It is `@eqx.filter_jit`-wrapped;
     the fitter strategy is treated as static structure under JIT. The returned
-    value is a [`glmax.FittedGLM`][] noun that binds the model specification
-    and the full [`glmax.FitResult`][] contract.
+    value is a [`glmax.FittedGLM`][] noun that binds the family and the full
+    [`glmax.FitResult`][] contract.
 
     **Arguments:**
 
-    - `model`: [`glmax.GLM`][] instance.
+    - `family`: [`glmax.ExponentialDispersionFamily`][] instance.
     - `X`: covariate matrix, shape `(n, p)`.
     - `y`: response vector, shape `(n,)`.
     - `offset`: optional offset vector added to the linear predictor.
@@ -66,18 +66,18 @@ def fit(
 
     **Returns:**
 
-    [`glmax.FittedGLM`][] noun binding the model and the
+    [`glmax.FittedGLM`][] noun binding the family and the
     [`glmax.FitResult`][] contract.
 
     **Raises:**
 
-    - `TypeError`: if `model`, `init`, or `fitter` have wrong types,
+    - `TypeError`: if `family`, `init`, or `fitter` have wrong types,
       or if the fitter does not return a `FitResult`.
     - `ValueError`: if `weights` is set (not yet supported).
     """
 
-    if not isinstance(model, GLM):
-        raise TypeError("fit(...) expects `model` to be a GLM instance.")
+    if not isinstance(family, ExponentialDispersionFamily):
+        raise TypeError("fit(...) expects `family` to be an ExponentialDispersionFamily instance.")
     if init is not None and not isinstance(init, Params):
         raise TypeError("fit(...) expects `init` to be a Params instance or None.")
     if not isinstance(fitter, AbstractFitter):
@@ -88,25 +88,25 @@ def fit(
     if init is not None:
         init = _validated_params(init, data.X.shape[1])
         if not isinstance(fitter, IRLSFitter):
-            init = _normalize_init_aux(model, init)
+            init = _normalize_init_aux(family, init)
 
-    result = fitter(model, data, init)
+    result = fitter(family, data, init)
 
     if not isinstance(result, FitResult):
         raise TypeError("fit(...) expects `fitter` to return a FitResult instance.")
 
-    return FittedGLM(model=model, result=result)
+    return FittedGLM(family=family, result=result)
 
 
 @eqx.filter_jit
 def predict(
-    model: GLM,
+    family: ExponentialDispersionFamily,
     params: Params,
     X: ArrayLike,
     *,
     offset: ArrayLike | None = None,
 ) -> Array:
-    r"""Apply a fitted model to new data and return predicted means.
+    r"""Apply a fitted family to new data and return predicted means.
 
     This is the canonical `predict` grammar verb. It is `@eqx.filter_jit`-wrapped.
     Prediction computes $\hat{\mu} = g^{-1}(X \hat{\beta} + o)$, where $X$ is
@@ -115,7 +115,7 @@ def predict(
 
     **Arguments:**
 
-    - `model`: [`glmax.GLM`][] specification noun.
+    - `family`: [`glmax.ExponentialDispersionFamily`][] instance.
     - `params`: fitted [`glmax.Params`][] (for example `fitted.params` from
       [`glmax.fit`][]).
     - `X`: covariate matrix, shape `(n, p)`.
@@ -128,17 +128,17 @@ def predict(
 
     **Raises:**
 
-    - `TypeError`: if `model`, `params`, or `X` have wrong types.
+    - `TypeError`: if `family`, `params`, or `X` have wrong types.
     """
 
-    if not isinstance(model, GLM):
-        raise TypeError("predict(...) expects `model` to be a GLM instance.")
+    if not isinstance(family, ExponentialDispersionFamily):
+        raise TypeError("predict(...) expects `family` to be an ExponentialDispersionFamily instance.")
     if not isinstance(params, Params):
         raise TypeError("predict(...) expects `params` to be a Params instance.")
 
     X_array = jnp.asarray(X)
     offset_array = jnp.zeros(X_array.shape[0]) if offset is None else jnp.asarray(offset)
-    params = _normalize_init_aux(model, _validated_params(params, X_array.shape[1]))
+    params = _normalize_init_aux(family, _validated_params(params, X_array.shape[1]))
 
     eta = X_array @ params.beta + offset_array
-    return model.mean(eta)
+    return family.glink.inverse(eta)

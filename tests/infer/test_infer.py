@@ -26,7 +26,7 @@ def unchecked_fit_result(base, **overrides: object):
 
 
 def unchecked_fitted(base: FittedGLM, **overrides: object) -> FittedGLM:
-    values = {"model": base.model, "result": base.result}
+    values = {"family": base.family, "result": base.result}
     values.update(overrides)
 
     fitted = object.__new__(type(base))
@@ -36,18 +36,16 @@ def unchecked_fitted(base: FittedGLM, **overrides: object) -> FittedGLM:
 
 
 def _make_fitted():
-    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.2])
-    fitted = glmax.fit(model, X, y)
+    fitted = glmax.fit(Gaussian(), X, y)
     return fitted
 
 
 def _make_negative_binomial_fitted():
-    model = glmax.GLM(family=NegativeBinomial())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.0, 1.0, 2.0, 4.0])
-    return glmax.fit(model, X, y)
+    return glmax.fit(NegativeBinomial(), X, y)
 
 
 def test_infer_returns_inference_result_without_refitting() -> None:
