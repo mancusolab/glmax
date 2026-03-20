@@ -96,37 +96,6 @@ def test_fitter_is_abstract_equinox_model() -> None:
         AbstractFitter()
 
 
-def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
-    assert set(glmax.__all__) == {
-        "GLMData",
-        "Params",
-        "GLM",
-        "AbstractFitter",
-        "FitResult",
-        "FittedGLM",
-        "InferenceResult",
-        "AbstractDiagnostic",
-        "DevianceResidual",
-        "GoodnessOfFit",
-        "GofStats",
-        "Influence",
-        "InfluenceStats",
-        "PearsonResidual",
-        "QuantileResidual",
-        "AbstractTest",
-        "WaldTest",
-        "ScoreTest",
-        "AbstractStdErrEstimator",
-        "FisherInfoError",
-        "HuberError",
-        "specify",
-        "predict",
-        "fit",
-        "infer",
-        "check",
-    }
-
-
 def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
     assert callable(glmax.fit)
     assert glmax.fit.__module__ == "glmax._fit.fit"

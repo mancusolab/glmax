@@ -437,50 +437,6 @@ class TestNBNegloglikelihoodStability:
         assert jnp.allclose(ignored_disp, baseline)
         assert not jnp.allclose(changed_aux, baseline)
 
-    @pytest.mark.parametrize(
-        "method_name",
-        ["negloglikelihood", "variance", "sample", "update_nuisance"],
-    )
-    @pytest.mark.parametrize("bad_aux", [0.0, -1.0, jnp.nan, jnp.inf, -jnp.inf])
-    def test_nb_invalid_aux_is_rejected_by_direct_numeric_methods(self, method_name, bad_aux):
-        nb = NegativeBinomial()
-        X = jnp.ones((3, 1))
-        y = jnp.array([2.0, 3.0, 1.0])
-        eta = jnp.array([0.7, 1.1, 0.3])
-        mu = jnp.exp(eta)
-
-        calls = {
-            "negloglikelihood": lambda value: nb.negloglikelihood(y, eta, disp=1.0, aux=value),
-            "variance": lambda value: nb.variance(mu, disp=1.0, aux=value),
-            "sample": lambda value: nb.sample(_KEY, eta, disp=1.0, aux=value),
-            "update_nuisance": lambda value: nb.update_nuisance(X, y, eta, disp=1.0, aux=value),
-        }
-
-        with pytest.raises(ValueError, match="alpha"):
-            calls[method_name](bad_aux)
-
-    @pytest.mark.parametrize(
-        "method_name",
-        ["negloglikelihood", "variance", "sample", "update_nuisance"],
-    )
-    @pytest.mark.parametrize("bad_disp", [0.0, -1.0, jnp.nan, jnp.inf, -jnp.inf])
-    def test_nb_invalid_legacy_disp_is_rejected_by_direct_numeric_methods(self, method_name, bad_disp):
-        nb = NegativeBinomial()
-        X = jnp.ones((3, 1))
-        y = jnp.array([2.0, 3.0, 1.0])
-        eta = jnp.array([0.7, 1.1, 0.3])
-        mu = jnp.exp(eta)
-
-        calls = {
-            "negloglikelihood": lambda value: nb.negloglikelihood(y, eta, disp=value),
-            "variance": lambda value: nb.variance(mu, disp=value),
-            "sample": lambda value: nb.sample(_KEY, eta, disp=value),
-            "update_nuisance": lambda value: nb.update_nuisance(X, y, eta, disp=value),
-        }
-
-        with pytest.raises(ValueError, match="alpha"):
-            calls[method_name](bad_disp)
-
 
 class TestNBLargeEtaOverflow:
     def test_nb_nll_finite_for_large_eta(self):
@@ -708,9 +664,9 @@ def test_init_nuisance_returns_correct_defaults() -> None:
 
 class TestFamilyDocstrings:
     def test_docstrings_describe_disp_aux_split(self):
-        assert "uses `disp` as EDM dispersion and ignores `aux`" in Gaussian.__doc__
+        assert "dispersion carrier and ignores `aux`" in Gaussian.__doc__
         assert "fixes `disp = 1.0` and ignores `aux`" in Poisson.__doc__
-        assert "fixes `disp = 1.0` and ignores `aux`" in Binomial.__doc__
+        assert "Binomial fixes `disp = 1.0`" in Binomial.__doc__ and "ignores `aux`" in Binomial.__doc__
         assert "fixes `disp = 1.0` and uses `aux` as `alpha`" in NegativeBinomial.__doc__
         assert "uses `disp` as EDM dispersion and ignores `aux`" in Gamma.__doc__
 

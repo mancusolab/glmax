@@ -1,6 +1,10 @@
 # glmax
 
-`glmax` provides generalized linear modeling with a grammar-first API built
+!!! warning
+
+    THIS PROJECT IS STILL IN ALPHA AND SUBJEC TO CHANGE DRAMATICALLY; USE AT YOUR OWN RISK**
+
+ `glmax` provides generalized linear modeling with a grammar-first API built
 around explicit nouns and top-level verbs.
 
 The canonical workflow is:

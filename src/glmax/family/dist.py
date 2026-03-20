@@ -1,5 +1,4 @@
 # pattern: Functional Core
-import math
 
 from abc import abstractmethod
 from typing import ClassVar, TYPE_CHECKING
@@ -21,28 +20,6 @@ if TYPE_CHECKING:
     from typing import ClassVar as AbstractClassVar
 else:
     from equinox import AbstractClassVar
-
-
-def _validate_positive_finite_scalar(name: str, value: ScalarLike) -> Array:
-    scalar = jnp.asarray(value)
-    if scalar.ndim > 0 and scalar.size != 1:
-        raise ValueError(f"{name} must be a scalar.")
-
-    try:
-        python_scalar = float(scalar)
-    except TypeError:
-        # Traced callers cannot branch on Python scalars; keep the value
-        # numerically valid and let boundary callers handle deterministic errors.
-        return jnp.clip(scalar, min=jnp.finfo(jnp.float64).tiny)
-
-    if not math.isfinite(python_scalar) or python_scalar <= 0.0:
-        raise ValueError(f"{name} must be positive and finite, got {python_scalar}.")
-    return scalar
-
-
-def _nb_alpha_from_split(disp: ScalarLike, aux: ScalarLike | None) -> Array:
-    alpha = aux if aux is not None else disp
-    return _validate_positive_finite_scalar("NegativeBinomial alpha", alpha)
 
 
 class ExponentialDispersionFamily(eqx.Module):
@@ -780,7 +757,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         Scalar negative log-likelihood.
         """
-        alpha = _nb_alpha_from_split(disp, aux)
+        alpha = aux
         log_r = -jnp.log(alpha)
         r = jnp.exp(log_r)
         # Compute log_mu in log-domain directly (glink is LogLink: inverse = exp(eta)).
@@ -794,7 +771,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         return -jnp.sum(term1 + term2)
 
     def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
-        alpha = _nb_alpha_from_split(disp, aux)
+        alpha = aux
         return mu + alpha * (mu**2)
 
     def sample(
@@ -823,7 +800,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         """
         key1, key2 = rdm.split(key)
         mu = self.glink.inverse(eta)
-        alpha = _nb_alpha_from_split(disp, aux)
+        alpha = aux
         r = 1.0 / alpha
         # jax.random.gamma samples Gamma(a=r, scale=1); multiply by mu/r to get Gamma(a=r, scale=mu/r)
         gamma_sample = rdm.gamma(key1, r, shape=mu.shape) * (mu / r)
@@ -849,7 +826,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         """
 
         def _ll(alpha):
-            return self.negloglikelihood(y, eta, alpha)
+            return self.negloglikelihood(y, eta, aux=alpha)
 
         _alpha_score = jax.grad(_ll)
         _alpha_hess = jax.hessian(_ll)
@@ -878,7 +855,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         def _ll(log_alpha_):
             alpha_ = jnp.exp(log_alpha_)
-            return self.negloglikelihood(y, eta, alpha_)
+            return self.negloglikelihood(y, eta, aux=alpha_)
 
         _alpha_score = jax.grad(_ll)
         _alpha_hess = jax.hessian(_ll)
@@ -915,7 +892,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         `(1.0, new_alpha)`.
         """
-        alpha = _nb_alpha_from_split(disp, aux)
+        alpha = aux
         log_alpha = jnp.log(alpha)
         score, hess = self.log_alpha_score_and_hessian(X, y, eta, log_alpha)
         log_alpha_n = jnp.clip(
@@ -958,7 +935,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         CDF values, shape `(n,)`.
         """
-        alpha = _nb_alpha_from_split(disp, aux)
+        alpha = aux
         r = 1.0 / alpha
         mu_ = jnp.asarray(mu)
         p_fail = r / (r + mu_)
@@ -984,7 +961,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         Non-negative deviance contributions, shape `(n,)`.
         """
-        alpha = _nb_alpha_from_split(disp, aux)
+        alpha = aux
         r = 1.0 / alpha
         y_ = jnp.asarray(y)
         mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
