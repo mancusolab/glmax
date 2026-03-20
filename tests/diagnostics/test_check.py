@@ -7,7 +7,6 @@ import jax.numpy as jnp
 
 import glmax
 
-from glmax import GLMData
 from glmax.diagnostics import (
     DevianceResidual,
     GofStats,
@@ -20,11 +19,9 @@ from glmax.family import Gaussian
 
 def _make_fitted():
     model = glmax.specify(family=Gaussian())
-    data = GLMData(
-        X=jnp.array([[1.0], [2.0], [3.0], [4.0]]),
-        y=jnp.array([1.2, 1.9, 3.1, 4.2]),
-    )
-    return glmax.fit(model, data)
+    X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
+    y = jnp.array([1.2, 1.9, 3.1, 4.2])
+    return glmax.fit(model, X, y)
 
 
 def test_check_default_returns_pearson_residual():

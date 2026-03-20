@@ -27,7 +27,6 @@ from ._infer import (
     ScoreTest as ScoreTest,
     WaldTest as WaldTest,
 )
-from .data import GLMData as GLMData
 from .diagnostics import (
     AbstractDiagnostic as AbstractDiagnostic,
     check as check,

@@ -9,7 +9,6 @@ import jax.random as jr
 
 import glmax
 
-from glmax import GLMData
 from glmax._infer.stderr import FisherInfoError, HuberError
 from glmax.family import Gaussian
 
@@ -52,7 +51,7 @@ def test_fisher_info_error_jit_safe_and_finite():
     X, y = _make_gaussian_xy()
     family = Gaussian()
     model = glmax.specify(family=family)
-    result = glmax.fit(model, GLMData(X=X, y=y))
+    result = glmax.fit(model, X, y)
 
     estimator = FisherInfoError()
 
@@ -61,9 +60,9 @@ def test_fisher_info_error_jit_safe_and_finite():
 
     cov_jit = eqx.filter_jit(_jit_fisher)(result)
 
-    assert bool(
-        jnp.all(jnp.isfinite(cov_jit))
-    ), f"JIT FisherInfoError covariance must be finite; got diag={jnp.diag(cov_jit)}"
+    assert bool(jnp.all(jnp.isfinite(cov_jit))), (
+        f"JIT FisherInfoError covariance must be finite; got diag={jnp.diag(cov_jit)}"
+    )
 
 
 def test_fisher_info_error_scales_by_phi():
@@ -76,8 +75,7 @@ def test_fisher_info_error_scales_by_phi():
     y = X @ true_beta + jr.normal(jr.PRNGKey(1), (n,)) * sigma
 
     model = glmax.specify(family=Gaussian())
-    data = GLMData(X=X, y=y)
-    result = glmax.fit(model, data)
+    result = glmax.fit(model, X, y)
 
     phi = result.params.disp
     w_pure = result.glm_wt * phi
@@ -96,7 +94,7 @@ def test_fisher_info_error_scales_by_phi():
 def test_huber_error_finite_and_symmetric() -> None:
     X, y = _make_gaussian_xy()
     model = glmax.specify(family=Gaussian())
-    result = glmax.fit(model, GLMData(X=X, y=y))
+    result = glmax.fit(model, X, y)
 
     cov = HuberError()(result)
 
@@ -113,7 +111,7 @@ def test_huber_error_finite_and_symmetric() -> None:
 )
 def test_stderr_estimators_reject_nonpositive_fitted_dispersion(estimator) -> None:
     X, y = _make_gaussian_xy()
-    fitted = glmax.fit(glmax.specify(family=Gaussian()), GLMData(X=X, y=y))
+    fitted = glmax.fit(glmax.specify(family=Gaussian()), X, y)
     invalid_fitted = _with_dispersion(fitted, 0.0)
 
     with pytest.raises(ValueError, match="fitted.params.disp"):
@@ -122,7 +120,7 @@ def test_stderr_estimators_reject_nonpositive_fitted_dispersion(estimator) -> No
 
 def test_huber_error_uses_fitted_dispersion_as_phi_source_of_truth() -> None:
     X, y = _make_gaussian_xy(seed=11)
-    fitted = glmax.fit(glmax.specify(family=Gaussian()), GLMData(X=X, y=y))
+    fitted = glmax.fit(glmax.specify(family=Gaussian()), X, y)
     scaled_fitted = _with_dispersion(fitted, jnp.asarray(fitted.params.disp) * 3.0)
 
     cov = HuberError()(scaled_fitted)
@@ -136,7 +134,7 @@ def test_huber_error_uses_fitted_dispersion_as_phi_source_of_truth() -> None:
 
 def test_fisher_info_error_uses_fitted_dispersion_as_phi_source_of_truth() -> None:
     X, y = _make_gaussian_xy(seed=13)
-    fitted = glmax.fit(glmax.specify(family=Gaussian()), GLMData(X=X, y=y))
+    fitted = glmax.fit(glmax.specify(family=Gaussian()), X, y)
 
     cov = FisherInfoError()(fitted)
     expected_cov = _expected_fisher_covariance(fitted)
@@ -156,7 +154,7 @@ def test_gaussian_se_equals_ols_formula() -> None:
     y = X @ true_beta + jr.normal(jr.PRNGKey(8), (n,)) * sigma
 
     model = glmax.specify(family=Gaussian())
-    result = glmax.fit(model, GLMData(X=X, y=y))
+    result = glmax.fit(model, X, y)
     inference = glmax.infer(result)
 
     phi = result.params.disp
@@ -165,9 +163,9 @@ def test_gaussian_se_equals_ols_formula() -> None:
     expected_cov = phi * jla.inv(information)
     expected_se = jnp.sqrt(jnp.diag(expected_cov))
 
-    assert jnp.allclose(
-        inference.se, expected_se, atol=1e-5
-    ), f"SE mismatch: got {inference.se}, expected {expected_se}"
+    assert jnp.allclose(inference.se, expected_se, atol=1e-5), (
+        f"SE mismatch: got {inference.se}, expected {expected_se}"
+    )
 
 
 def test_gaussian_se_positive_and_finite() -> None:
@@ -178,7 +176,7 @@ def test_gaussian_se_positive_and_finite() -> None:
     y = X @ true_beta + jr.normal(jr.PRNGKey(1), (n,)) * 0.5
 
     model = glmax.specify(family=Gaussian())
-    fitted = glmax.fit(model, GLMData(X=X, y=y))
+    fitted = glmax.fit(model, X, y)
     result = glmax.infer(fitted)
 
     assert bool(jnp.all(result.se > 0)), "SEs must be positive"
@@ -191,6 +189,6 @@ def test_gaussian_dispersion_positive_after_irls() -> None:
     X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key, (n, p - 1))], axis=1)
     y = X @ jnp.ones(p) + jr.normal(jr.PRNGKey(1), (n,)) * 0.1
 
-    result = glmax.fit(glmax.specify(), GLMData(X=X, y=y))
+    result = glmax.fit(glmax.specify(), X, y)
 
     assert float(result.params.disp) > 0, f"Gaussian disp must be > 0, got {result.params.disp}"

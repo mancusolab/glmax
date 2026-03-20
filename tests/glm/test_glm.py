@@ -12,7 +12,6 @@ import jax.random as rdm
 
 import glmax
 
-from glmax import GLMData
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
 from glmax.family.links import IdentityLink
@@ -196,7 +195,7 @@ def test_poisson(getkey):
 
     # solve using glmax functions
     glmax_poi = glmax.specify(family=Poisson())
-    glm_state = glmax.fit(glmax_poi, GLMData(X=X, y=y))
+    glm_state = glmax.fit(glmax_poi, X, y)
     infer_state = glmax.infer(glm_state)
 
     _assert_array_eq(glm_state.params.beta, sm_state.params, atol=1e-3)
@@ -218,7 +217,7 @@ def test_normal(getkey):
 
     # solve using glmax functions
     glmax_normal = glmax.specify(family=Gaussian())
-    glm_state = glmax.fit(glmax_normal, GLMData(X=X, y=y))
+    glm_state = glmax.fit(glmax_normal, X, y)
     infer_state = glmax.infer(glm_state)
 
     _assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
@@ -240,7 +239,7 @@ def test_logit(getkey):
 
     # solve using glmax functions
     glmax_logit = glmax.specify(family=Binomial())
-    glm_state = glmax.fit(glmax_logit, GLMData(X=X, y=y))
+    glm_state = glmax.fit(glmax_logit, X, y)
     infer_state = glmax.infer(glm_state)
 
     _assert_array_eq(glm_state.params.beta, sm_state.params, rtol=1e-3)
@@ -257,7 +256,7 @@ def test_NegativeBinomial(getkey):
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
 
     jaxqtl_nb = glmax.specify(family=NegativeBinomial())
-    glm_state = glmax.fit(jaxqtl_nb, GLMData(X=X, y=y))
+    glm_state = glmax.fit(jaxqtl_nb, X, y)
     infer_state = glmax.infer(glm_state)
     assert glm_state.params._fields == ("beta", "disp", "aux")
     assert jnp.allclose(glm_state.params.disp, jnp.array(1.0))

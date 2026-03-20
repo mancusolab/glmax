@@ -9,7 +9,7 @@ from jax.scipy.stats import norm
 
 import glmax
 
-from glmax import GLMData, InferenceResult
+from glmax import InferenceResult
 from glmax._infer.hyptest import _wald_test, AbstractTest, ScoreTest, WaldTest
 from glmax._infer.infer import infer as legacy_infer
 from glmax._infer.stderr import AbstractStdErrEstimator, FisherInfoError
@@ -20,47 +20,37 @@ def _make_fitted(family=None):
     if family is None:
         family = Gaussian()
     model = glmax.specify(family=family)
-    data = GLMData(
-        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
-        y=jnp.array([1.2, 1.9, 3.1, 4.2]),
-    )
-    return glmax.fit(model, data)
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+    y = jnp.array([1.2, 1.9, 3.1, 4.2])
+    return glmax.fit(model, X, y)
 
 
 def _make_poisson_fitted():
     model = glmax.specify(family=Poisson())
-    data = GLMData(
-        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
-        y=jnp.array([0.0, 1.0, 1.0, 2.0]),
-    )
-    return glmax.fit(model, data)
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+    y = jnp.array([0.0, 1.0, 1.0, 2.0])
+    return glmax.fit(model, X, y)
 
 
 def _make_binomial_fitted():
     model = glmax.specify(family=Binomial())
-    data = GLMData(
-        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
-        y=jnp.array([0.0, 1.0, 1.0, 0.0]),
-    )
-    return glmax.fit(model, data)
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+    y = jnp.array([0.0, 1.0, 1.0, 0.0])
+    return glmax.fit(model, X, y)
 
 
 def _make_negative_binomial_fitted():
     model = glmax.specify(family=NegativeBinomial())
-    data = GLMData(
-        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
-        y=jnp.array([0.0, 1.0, 2.0, 4.0]),
-    )
-    return glmax.fit(model, data)
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+    y = jnp.array([0.0, 1.0, 2.0, 4.0])
+    return glmax.fit(model, X, y)
 
 
 def _make_perfect_fit_gaussian_fitted():
     model = glmax.specify(family=Gaussian())
-    data = GLMData(
-        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
-        y=jnp.array([1.0, 2.0, 3.0, 4.0]),
-    )
-    return glmax.fit(model, data)
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+    y = jnp.array([1.0, 2.0, 3.0, 4.0])
+    return glmax.fit(model, X, y)
 
 
 def _expected_score_stat(fitted):
@@ -269,6 +259,6 @@ def test_wald_test_jit_safe(family):
 
     p_jit = eqx.filter_jit(_jit_wald)(stat)
 
-    assert bool(
-        jnp.all(jnp.isfinite(p_jit))
-    ), f"JIT wald_test p-values must be finite for {type(family).__name__}; got {p_jit}"
+    assert bool(jnp.all(jnp.isfinite(p_jit))), (
+        f"JIT wald_test p-values must be finite for {type(family).__name__}; got {p_jit}"
+    )

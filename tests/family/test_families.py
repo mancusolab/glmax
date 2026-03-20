@@ -23,7 +23,6 @@ from jax.scipy.special import xlogy
 
 import glmax
 
-from glmax import GLMData
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
 
@@ -720,6 +719,6 @@ class TestGamma:
         n, p = 50, 3
         X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key_X, (n, p - 1))], axis=1)
         y = jr.gamma(key_y, 2.0, shape=(n,))
-        result = glmax.fit(glmax.specify(family=Gamma()), GLMData(X=X, y=y))
+        result = glmax.fit(glmax.specify(family=Gamma()), X, y)
         assert jnp.all(jnp.isfinite(result.params.beta))
         assert jnp.isfinite(result.params.disp)

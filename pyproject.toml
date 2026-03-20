@@ -96,8 +96,8 @@ dependencies = [
 line-length = 120
 
 [tool.ruff.lint]
-fixable = ["I001", "F401", "SIM", "UP"]
-select = ["E", "F", "I001", "SIM", "UP"]
+fixable = ["I001", "F401", "UP"]
+select = ["E", "F", "I001", "UP"]
 ignore = ["E402", "E721", "E731", "E741", "F722"]
 
 [tool.ruff.lint.isort]

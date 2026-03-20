@@ -8,6 +8,18 @@ from jax import Array
 from jaxtyping import ArrayLike
 
 
+def _require_finite_jit_safe(name: str, array: Array) -> Array:
+    """Embed a runtime finiteness check into the array using eqx.error_if.
+
+    Works both inside and outside JIT. Returns the checked array.
+    """
+    return eqx.error_if(
+        array,
+        ~jnp.all(jnp.isfinite(array)),
+        f"GLMData.{name} must contain only finite values.",
+    )
+
+
 __all__ = ["GLMData"]
 
 
@@ -39,8 +51,7 @@ def _canonicalize_numeric_vector(name: str, value: ArrayLike, n_samples: int) ->
     else:
         raise ValueError(f"GLMData.{name} must be scalar-broadcastable or length n.")
 
-    _require_finite(name, vector)
-    return vector
+    return _require_finite_jit_safe(name, vector)
 
 
 class GLMData(eqx.Module, strict=True):
@@ -101,8 +112,8 @@ class GLMData(eqx.Module, strict=True):
         if weights is not None:
             canonical_weights = _canonicalize_numeric_vector("weights", weights, n_samples)
 
-        self.X = X
-        self.y = y
+        self.X = _require_finite_jit_safe("X", X)
+        self.y = _require_finite_jit_safe("y", y)
         self.offset = canonical_offset
         self.weights = canonical_weights
 
@@ -113,9 +124,6 @@ class GLMData(eqx.Module, strict=True):
             raise ValueError("GLMData.y must be rank-1 with shape (n,).")
         if self.X.shape[0] != self.y.shape[0]:
             raise ValueError("GLMData.X and GLMData.y must share the sample dimension n.")
-
-        _require_finite("X", self.X)
-        _require_finite("y", self.y)
 
     @property
     def n_samples(self) -> int:

@@ -9,7 +9,7 @@ import jax.numpy as jnp
 
 import glmax
 
-from glmax import FittedGLM, GLMData, InferenceResult
+from glmax import FittedGLM, InferenceResult
 from glmax._infer.hyptest import ScoreTest, WaldTest
 from glmax._infer.stderr import AbstractStdErrEstimator, HuberError
 from glmax.family import Gaussian, NegativeBinomial
@@ -37,21 +37,17 @@ def unchecked_fitted(base: FittedGLM, **overrides: object) -> FittedGLM:
 
 def _make_fitted():
     model = glmax.specify(family=Gaussian())
-    data = GLMData(
-        X=jnp.array([[1.0], [2.0], [3.0], [4.0]]),
-        y=jnp.array([1.2, 1.9, 3.1, 4.2]),
-    )
-    fitted = glmax.fit(model, data)
+    X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
+    y = jnp.array([1.2, 1.9, 3.1, 4.2])
+    fitted = glmax.fit(model, X, y)
     return fitted
 
 
 def _make_negative_binomial_fitted():
     model = glmax.specify(family=NegativeBinomial())
-    data = GLMData(
-        X=jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]),
-        y=jnp.array([0.0, 1.0, 2.0, 4.0]),
-    )
-    return glmax.fit(model, data)
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+    y = jnp.array([0.0, 1.0, 2.0, 4.0])
+    return glmax.fit(model, X, y)
 
 
 def test_infer_returns_inference_result_without_refitting() -> None:
