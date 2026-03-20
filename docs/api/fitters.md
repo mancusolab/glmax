@@ -7,25 +7,23 @@ fitted = glmax.fit(model, data)
 ```
 
 This page documents the advanced strategy objects behind that verb. These
-helpers live under `glmax._fit` because they are secondary to the grammar-first
-package-root API.
-
-## Public Entry Point
-
-::: glmax.fit
+helpers live under `glmax` because they are secondary to the
+grammar-first package-root API.
 
 ## Fitter Strategies
 
-::: glmax.AbstractFitter
+??? abstract "glmax.AbstractFitter"
 
-::: glmax._fit.IRLSFitter
+    ::: glmax.AbstractFitter
+
+::: glmax.IRLSFitter
 
 ## Linear Solvers
 
-::: glmax._fit.AbstractLinearSolver
+::: glmax.AbstractLinearSolver
 
-::: glmax._fit.CholeskySolver
+::: glmax.CholeskySolver
 
-::: glmax._fit.QRSolver
+::: glmax.QRSolver
 
-::: glmax._fit.CGSolver
+::: glmax.CGSolver

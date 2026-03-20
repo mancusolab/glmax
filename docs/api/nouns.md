@@ -43,9 +43,29 @@ carrier is `Params(beta, disp, aux)`.
 
 ::: glmax.AbstractDiagnostic
 
+## `PearsonResidual`
+
+::: glmax.PearsonResidual
+
+## `DevianceResidual`
+
+::: glmax.DevianceResidual
+
+## `QuantileResidual`
+
+::: glmax.QuantileResidual
+
+## `GoodnessOfFit`
+
+::: glmax.GoodnessOfFit
+
 ## `GofStats`
 
 ::: glmax.GofStats
+
+## `Influence`
+
+::: glmax.Influence
 
 ## `InfluenceStats`
 

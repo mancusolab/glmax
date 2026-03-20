@@ -15,28 +15,110 @@ interpreted.
 
 ## Families
 
-::: glmax.family.Gaussian
+??? abstract "glmax.ExponentialDispersionFamily"
 
-::: glmax.family.Gamma
+    ::: glmax.ExponentialDispersionFamily
+        options:
+            members:
+                - negloglikelihood
+                - variance
+                - cdf
+                - deviance_contribs
+                - sample
+                - calc_weight
+                - init_eta
+                - update_nuisance
+                - init_nuisance
 
-::: glmax.family.Poisson
+---
 
-::: glmax.family.Binomial
+::: glmax.Gaussian
+    options:
+        members:
+            - __init__
 
-::: glmax.family.NegativeBinomial
+---
+
+::: glmax.Gamma
+    options:
+        members:
+            - __init__
+
+---
+
+::: glmax.Poisson
+    options:
+        members:
+            - __init__
+
+---
+
+::: glmax.Binomial
+    options:
+        members:
+            - __init__
+
+---
+
+::: glmax.NegativeBinomial
+    options:
+        members:
+            - __init__
+
+---
+
 
 ## Links
 
-::: glmax.family.AbstractLink
+??? abstract "glmax.AbstractLink"
 
-::: glmax.family.IdentityLink
+    ::: glmax.AbstractLink
+        options:
+            members:
+                - __call__
+                - inverse
+                - deriv
+                - inverse_deriv
 
-::: glmax.family.LogLink
+---
 
-::: glmax.family.LogitLink
+::: glmax.IdentityLink
+    options:
+        members:
+            - __init__
 
-::: glmax.family.InverseLink
+---
 
-::: glmax.family.NBLink
+::: glmax.LogLink
+    options:
+        members:
+            - __init__
 
-::: glmax.family.PowerLink
+---
+
+::: glmax.LogitLink
+    options:
+        members:
+            - __init__
+
+---
+
+::: glmax.InverseLink
+    options:
+        members:
+            - __init__
+
+---
+
+
+::: glmax.PowerLink
+    options:
+        members:
+            - __init__
+
+---
+
+::: glmax.NBLink
+    options:
+        members:
+            - __init__

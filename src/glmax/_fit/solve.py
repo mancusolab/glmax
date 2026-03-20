@@ -10,13 +10,12 @@ import jax.numpy as jnp
 import lineax as lx
 
 from jax import Array
-from jax.typing import ArrayLike
 
 
 # from jaxtyping import Array, ArrayLike
 
 
-SolverState: TypeAlias = tuple[lx.AbstractLinearOperator, ArrayLike]
+SolverState: TypeAlias = tuple[lx.AbstractLinearOperator, Array]
 
 
 class AbstractLinearSolver(eqx.Module, strict=True):
@@ -31,10 +30,10 @@ class AbstractLinearSolver(eqx.Module, strict=True):
     solver: eqx.AbstractVar[lx.AbstractLinearSolver]
 
     @abstractmethod
-    def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
+    def init(self, X: Array, r: Array, weights: Array) -> SolverState:
         pass
 
-    def __call__(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> Array:
+    def __call__(self, X: Array, r: Array, weights: Array) -> Array:
         r"""Solve one weighted least-squares linear system.
 
         This solves the weighted least-squares problem induced by design
@@ -79,7 +78,7 @@ class QRSolver(AbstractLinearSolver, strict=True):
         """
         self.solver = solver
 
-    def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
+    def init(self, X: Array, r: Array, weights: Array) -> SolverState:
         r"""Build weighted QR operator inputs.
 
         This uses $\sqrt{w}$ so the least-squares objective is
@@ -128,7 +127,7 @@ class CholeskySolver(AbstractLinearSolver):
         """
         self.solver = solver
 
-    def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
+    def init(self, X: Array, r: Array, weights: Array) -> SolverState:
         Xw = X * weights[:, jnp.newaxis]
         A = lx.MatrixLinearOperator(Xw.T @ X, tags=lx.positive_semidefinite_tag)
         b = Xw.T @ r
@@ -154,7 +153,7 @@ class CGSolver(AbstractLinearSolver):
         """
         self.solver = solver
 
-    def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
+    def init(self, X: Array, r: Array, weights: Array) -> SolverState:
         w_half = jnp.sqrt(weights)
         w_half_X = X * w_half[:, jnp.newaxis]
 

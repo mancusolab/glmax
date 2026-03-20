@@ -50,7 +50,7 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Abstra
     - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses the
       family default.
     - `fitter`: [`glmax.AbstractFitter`][] strategy. Defaults to
-      [`glmax._fit.irls.IRLSFitter`][].
+      [`glmax.IRLSFitter`][].
 
     **Returns:**
 

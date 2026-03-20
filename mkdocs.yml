@@ -65,8 +65,11 @@ plugins:
     - hippogriffe:
         show_bases: true
         extra_public_objects:
+          - numpy.ndarray
+          - lineax.AbstractLinearOperator
+          - lineax.AbstractLinearSolver
           - jax.Array
-          - glmax.family.ExponentialDispersionFamily
+          - jax.typing.ArrayLike
     - mkdocstrings:
         custom_templates: docs/_templates
         handlers:
