@@ -54,8 +54,7 @@ def fit(
 
     **Arguments:**
 
-    - `model`: [`glmax.GLM`][] specification noun produced by
-      [`glmax.specify`][].
+    - `model`: [`glmax.GLM`][] instance.
     - `X`: covariate matrix, shape `(n, p)`.
     - `y`: response vector, shape `(n,)`.
     - `offset`: optional offset vector added to the linear predictor.

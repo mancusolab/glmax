@@ -81,7 +81,7 @@ def _assert_canonical_params_for_family(family, params: Params) -> None:
 )
 def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
     current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
-    model = glmax.specify(family=family)
+    model = glmax.GLM(family=family)
 
     fitted = glmax.fit(model, X, y)
     prediction = glmax.predict(model, fitted.params, X)
@@ -111,7 +111,7 @@ def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
 
 
 def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
-    model = glmax.specify(family=Gaussian())
+    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
     y = jnp.array([0.1, 1.2, 1.8, 3.1])
     fitted = glmax.fit(model, X, y)

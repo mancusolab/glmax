@@ -15,7 +15,7 @@ class GLM(eqx.Module):
     r"""Generalized Linear Model specification noun.
 
     A [`glmax.GLM`][] holds the family that characterizes a model. It carries
-    no fitted state and is constructed once via [`glmax.specify`][]. The
+    no fitted state. The
     linear solver lives on the [`glmax.AbstractFitter`][] strategy, not on the
     model itself.
 
@@ -238,24 +238,3 @@ class GLM(eqx.Module):
         families without auxiliary state.
         """
         return self.family.init_nuisance()
-
-
-def specify(
-    family: ExponentialDispersionFamily = Gaussian(),
-) -> GLM:
-    r"""Construct a GLM specification.
-
-    This is the canonical factory for [`glmax.GLM`][]. The returned model
-    holds only the family specification; it does not hold fitted
-    coefficients or solver state.
-
-    **Arguments:**
-
-    - `family`: exponential-dispersion family instance. Defaults to
-      [`glmax.Gaussian`][].
-
-    **Returns:**
-
-    A [`glmax.GLM`][] specification noun.
-    """
-    return GLM(family=family)

@@ -19,35 +19,35 @@ from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
 def _make_fitted(family=None):
     if family is None:
         family = Gaussian()
-    model = glmax.specify(family=family)
+    model = glmax.GLM(family=family)
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.2])
     return glmax.fit(model, X, y)
 
 
 def _make_poisson_fitted():
-    model = glmax.specify(family=Poisson())
+    model = glmax.GLM(family=Poisson())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.0, 1.0, 1.0, 2.0])
     return glmax.fit(model, X, y)
 
 
 def _make_binomial_fitted():
-    model = glmax.specify(family=Binomial())
+    model = glmax.GLM(family=Binomial())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.0, 1.0, 1.0, 0.0])
     return glmax.fit(model, X, y)
 
 
 def _make_negative_binomial_fitted():
-    model = glmax.specify(family=NegativeBinomial())
+    model = glmax.GLM(family=NegativeBinomial())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.0, 1.0, 2.0, 4.0])
     return glmax.fit(model, X, y)
 
 
 def _make_perfect_fit_gaussian_fitted():
-    model = glmax.specify(family=Gaussian())
+    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([1.0, 2.0, 3.0, 4.0])
     return glmax.fit(model, X, y)

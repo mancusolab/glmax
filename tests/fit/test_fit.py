@@ -28,7 +28,6 @@ from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
 from glmax.family.links import IdentityLink, InverseLink, LogitLink, LogLink, NBLink, PowerLink
 from glmax.family.utils import t_cdf
-from glmax.glm import specify
 
 
 def _make_fit_result() -> FitResult:
@@ -396,7 +395,7 @@ def _statsmodels_expected_pvalues(fitted: FittedGLM, sm_result) -> np.ndarray:
 )
 def test_default_fitter_returns_canonical_fitresult_for_supported_families(family, X, y) -> None:
     current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
-    model = glmax.specify(family=family)
+    model = glmax.GLM(family=family)
 
     result = glmax.fit(model, X, y)
 
@@ -411,7 +410,7 @@ def test_default_fitter_returns_canonical_fitresult_for_supported_families(famil
 
 @pytest.mark.parametrize(("family", "X", "y"), _VALID_LINK_COMBINATION_CASES)
 def test_fit_and_infer_succeed_across_all_supported_family_link_combinations(family, X, y) -> None:
-    model = glmax.specify(family=family)
+    model = glmax.GLM(family=family)
 
     fitted = glmax.fit(model, X, y)
     inferred = glmax.infer(fitted)
@@ -453,7 +452,7 @@ def test_fit_and_infer_succeed_across_all_supported_family_link_combinations(fam
 
 @pytest.mark.parametrize(("family", "X", "y"), _VALID_LINK_COMBINATION_CASES)
 def test_fit_and_infer_match_statsmodels_across_all_supported_family_link_combinations(family, X, y) -> None:
-    fitted = glmax.fit(glmax.specify(family=family), X, y)
+    fitted = glmax.fit(glmax.GLM(family=family), X, y)
     inferred = glmax.infer(fitted)
     sm_result = _statsmodels_result_for_fitted(fitted)
     sm_p = _statsmodels_expected_pvalues(fitted, sm_result)
@@ -589,7 +588,7 @@ def test_fitter_is_abstract_equinox_model() -> None:
 
 
 def test_canonical_fit_supports_non_default_solver_path() -> None:
-    model = glmax.specify(family=Gaussian())
+    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.8, 1.7, 2.1, 2.9])
 
@@ -742,8 +741,3 @@ def test_unsupported_weights_rejected() -> None:
 
     with pytest.raises(ValueError, match="weights"):
         glmax.fit(glmax.GLM(), X, y, weights=jnp.ones(4))
-
-
-def test_specify_returns_glm_instance() -> None:
-    model = specify()
-    assert isinstance(model, glmax.GLM)

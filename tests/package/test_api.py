@@ -192,7 +192,7 @@ def test_contract_dataclasses_are_pytrees() -> None:
 
 
 def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
-    model = glmax.specify(family=Gaussian())
+    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.8, 1.7, 2.1, 2.9])
 

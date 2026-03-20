@@ -21,7 +21,7 @@ from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
     ],
 )
 def test_predict_generates_stable_shape_for_supported_families(family, y) -> None:
-    model = glmax.specify(family=family)
+    model = glmax.GLM(family=family)
     X = jnp.array([[0.0], [1.0], [2.0], [3.0], [4.0]])
     fit_result = glmax.fit(model, X, y)
 
@@ -57,7 +57,7 @@ def test_predict_generates_stable_shape_for_supported_families(family, y) -> Non
     ],
 )
 def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> None:
-    model = glmax.specify(family=family)
+    model = glmax.GLM(family=family)
     fit_result = glmax.fit(model, X, y)
     assert fit_result.params._fields == ("beta", "disp", "aux")
     assert fit_result.params.aux is None
@@ -74,7 +74,7 @@ def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> Non
 
 
 def test_predict_boundary_rejects_invalid_nouns() -> None:
-    model = glmax.specify(family=Gaussian())
+    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[0.0], [1.0], [2.0]])
     params = Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0.2))
 
@@ -86,7 +86,7 @@ def test_predict_boundary_rejects_invalid_nouns() -> None:
 
 
 def test_predict_rejects_beta_shape_mismatch() -> None:
-    model = glmax.specify(family=Gaussian())
+    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[0.0], [1.0], [2.0]])
     bad_params = Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0), aux=None)
 
@@ -95,7 +95,7 @@ def test_predict_rejects_beta_shape_mismatch() -> None:
 
 
 def test_predict_rejects_non_numeric_or_non_scalar_params() -> None:
-    model = glmax.specify(family=Gaussian())
+    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[0.0], [1.0], [2.0]])
 
     with pytest.raises(TypeError, match="Params.beta must be numeric"):

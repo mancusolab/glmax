@@ -194,7 +194,7 @@ def test_poisson(getkey):
     sm_state = sm_poi.fit()
 
     # solve using glmax functions
-    glmax_poi = glmax.specify(family=Poisson())
+    glmax_poi = glmax.GLM(family=Poisson())
     glm_state = glmax.fit(glmax_poi, X, y)
     infer_state = glmax.infer(glm_state)
 
@@ -216,7 +216,7 @@ def test_normal(getkey):
     sm_state = sm_norm.fit()
 
     # solve using glmax functions
-    glmax_normal = glmax.specify(family=Gaussian())
+    glmax_normal = glmax.GLM(family=Gaussian())
     glm_state = glmax.fit(glmax_normal, X, y)
     infer_state = glmax.infer(glm_state)
 
@@ -238,7 +238,7 @@ def test_logit(getkey):
     sm_state = sm_logit.fit()
 
     # solve using glmax functions
-    glmax_logit = glmax.specify(family=Binomial())
+    glmax_logit = glmax.GLM(family=Binomial())
     glm_state = glmax.fit(glmax_logit, X, y)
     infer_state = glmax.infer(glm_state)
 
@@ -255,7 +255,7 @@ def test_NegativeBinomial(getkey):
     # Simulate NegativeBinomial regression data
     X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
 
-    jaxqtl_nb = glmax.specify(family=NegativeBinomial())
+    jaxqtl_nb = glmax.GLM(family=NegativeBinomial())
     glm_state = glmax.fit(jaxqtl_nb, X, y)
     infer_state = glmax.infer(glm_state)
     assert glm_state.params._fields == ("beta", "disp", "aux")

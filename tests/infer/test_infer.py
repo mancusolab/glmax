@@ -36,7 +36,7 @@ def unchecked_fitted(base: FittedGLM, **overrides: object) -> FittedGLM:
 
 
 def _make_fitted():
-    model = glmax.specify(family=Gaussian())
+    model = glmax.GLM(family=Gaussian())
     X = jnp.array([[1.0], [2.0], [3.0], [4.0]])
     y = jnp.array([1.2, 1.9, 3.1, 4.2])
     fitted = glmax.fit(model, X, y)
@@ -44,7 +44,7 @@ def _make_fitted():
 
 
 def _make_negative_binomial_fitted():
-    model = glmax.specify(family=NegativeBinomial())
+    model = glmax.GLM(family=NegativeBinomial())
     X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.0, 1.0, 2.0, 4.0])
     return glmax.fit(model, X, y)

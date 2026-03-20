@@ -49,7 +49,7 @@ from .family import (
     Poisson as Poisson,
     PowerLink as PowerLink,
 )
-from .glm import GLM as GLM, specify as specify
+from .glm import GLM as GLM
 
 
 jax.config.update("jax_enable_x64", True)  # noqa: E402

@@ -127,9 +127,8 @@ class IRLSFitter(AbstractFitter, strict=True):
 
         **Arguments:**
 
-        - `model`: [`glmax.GLM`][] specification noun.
-        - `data`: [`glmax.GLMData`][] noun. Public sample weights are not yet
-          supported in this fitter.
+        - `model`: [`glmax.GLM`][] instance.
+        - `data`: internal [`glmax.data.GLMData`][] carrying validated arrays.
         - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
           the family default.
         - `max_iter`: maximum number of IRLS iterations (default `1000`).
@@ -140,11 +139,6 @@ class IRLSFitter(AbstractFitter, strict=True):
 
         [`glmax.FitResult`][] with converged parameters, fit artifacts, and
         convergence metadata.
-
-        **Raises:**
-
-        - `TypeError`: if `data` is not a [`glmax.GLMData`][] instance.
-        - `ValueError`: if `data.weights` is set (not yet supported).
         """
         if not isinstance(data, GLMData):
             raise TypeError("fit(...) expects `data` to be a GLMData instance.")
