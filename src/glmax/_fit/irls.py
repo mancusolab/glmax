@@ -5,13 +5,13 @@
 from typing import NamedTuple
 
 import jax.numpy as jnp
+import lineax as lx
 
 from jax import Array, lax
 from jaxtyping import ArrayLike, ScalarLike
 
 from ..data import GLMData
 from ..glm import GLM
-from .solve import AbstractLinearSolver, CholeskySolver
 from .types import AbstractFitter, FitResult, Params
 
 
@@ -32,7 +32,7 @@ def _irls(
     X: ArrayLike,
     y: ArrayLike,
     model: GLM,
-    solver: AbstractLinearSolver,
+    solver: lx.AbstractLinearSolver,
     eta: ArrayLike,
     max_iter: int = 1000,
     tol: float = 1e-3,
@@ -44,16 +44,30 @@ def _irls(
     """IRLS to solve GLM."""
     _, p = X.shape
 
+    Xop = lx.MatrixLinearOperator(X)
+    if not isinstance(solver, (lx.QR, lx.SVD)):
+        solver = lx.Normal(solver)
+
     def body_fun(val: tuple):
         likelihood_o, diff, num_iter, _beta_o, eta_o, disp_o, aux_o = val
 
+        # compute means, weights, and gradients
         mu_k, g_deriv_k, weight = model.working_weights(eta_o, disp_o, aux_o)
         r = eta_o + g_deriv_k * (y - mu_k) * step_size - offset_eta
 
-        beta = solver(X, r, weight)
+        # prepare for lineax and solve
+        Woh = lx.DiagonalLinearOperator(jnp.sqrt(weight))
+        A = Woh @ Xop
+        b = Woh.mv(r)
+        beta = lx.linear_solve(A, b, solver=solver).value
+
+        # update eta
         eta_n = X @ beta + offset_eta
 
+        # update any nuisance params (disp, overdisp)
         disp_n, aux_n = model.update_nuisance(X, y, eta_n, disp_o, step_size, aux_o)
+
+        # re-evaluate
         likelihood_n = -model.log_prob(y, eta_n, disp_n, aux_n)
         diff = likelihood_n - likelihood_o
 
@@ -83,16 +97,16 @@ class IRLSFitter(AbstractFitter, strict=True):
     [`glmax.FitResult`][].
     """
 
-    solver: AbstractLinearSolver
+    solver: lx.AbstractLinearSolver
 
-    def __init__(self, solver: AbstractLinearSolver = CholeskySolver()):
+    def __init__(self, solver: lx.AbstractLinearSolver = lx.Cholesky()):
         r"""Construct an IRLS fitter.
 
         **Arguments:**
 
-        - `solver`: [`glmax._fit.solve.AbstractLinearSolver`][] used for each
-          IRLS weighted least-squares step. Defaults to
-          [`glmax._fit.solve.CholeskySolver`][].
+        - `solver`: `lineax` solver used for each IRLS weighted least-squares
+          step. Defaults to `lx.Cholesky()`. Any `lx.AbstractLinearSolver`
+          that handles symmetric positive-semidefinite systems works here.
         """
         self.solver = solver
 

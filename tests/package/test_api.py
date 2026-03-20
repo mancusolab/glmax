@@ -10,6 +10,7 @@ import equinox as eqx
 import jax.nn
 import jax.numpy as jnp
 import jax.tree_util as jtu
+import lineax as lx
 
 import glmax
 
@@ -29,7 +30,6 @@ from glmax import (
     QuantileResidual,
 )
 from glmax._fit import IRLSFitter
-from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
 from glmax.data import GLMData
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 
@@ -138,7 +138,7 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     seen: dict[str, object] = {}
 
     class DummyFitter(AbstractFitter, strict=True):
-        solver: AbstractLinearSolver = CholeskySolver()
+        solver: lx.AbstractLinearSolver = lx.Cholesky()
 
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             seen["model"] = model
@@ -196,7 +196,7 @@ def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
     X = jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.8, 1.7, 2.1, 2.9])
 
-    result = glmax.fit(model, X, y, fitter=IRLSFitter(solver=QRSolver()))
+    result = glmax.fit(model, X, y, fitter=IRLSFitter(solver=lx.QR()))
 
     assert isinstance(result, FittedGLM)
     assert result.params.beta.shape == (2,)

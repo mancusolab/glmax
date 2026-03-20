@@ -17,12 +17,12 @@ import equinox as eqx
 import jax.nn
 import jax.numpy as jnp
 import jax.random as jr
+import lineax as lx
 
 import glmax
 
 from glmax import AbstractFitter, FitResult, FittedGLM, InferenceResult, Params
 from glmax._fit import IRLSFitter
-from glmax._fit.solve import AbstractLinearSolver, CholeskySolver, QRSolver
 from glmax.data import GLMData
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
@@ -168,7 +168,7 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
     current_fitted_glm_type = importlib.import_module("glmax._fit").FittedGLM
 
     class RecordingFitter(AbstractFitter, strict=True):
-        solver: AbstractLinearSolver = CholeskySolver()
+        solver: lx.AbstractLinearSolver = lx.Cholesky()
 
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             seen["model"] = model
@@ -193,7 +193,7 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
 
 def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
     class BadFitter(AbstractFitter, strict=True):
-        solver: AbstractLinearSolver = CholeskySolver()
+        solver: lx.AbstractLinearSolver = lx.Cholesky()
 
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> object:
             del model, data, init
@@ -525,7 +525,7 @@ def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
     seen = {"called": False}
 
     class RecordingFitter(AbstractFitter, strict=True):
-        solver: AbstractLinearSolver = CholeskySolver()
+        solver: lx.AbstractLinearSolver = lx.Cholesky()
 
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             del model, data
@@ -548,7 +548,7 @@ def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter(fam
     seen = {"called": False}
 
     class RecordingFitter(AbstractFitter, strict=True):
-        solver: AbstractLinearSolver = CholeskySolver()
+        solver: lx.AbstractLinearSolver = lx.Cholesky()
 
         def __call__(self, model: glmax.GLM, data: GLMData, init: Params | None = None) -> FitResult:
             del model, data
@@ -593,7 +593,7 @@ def test_canonical_fit_supports_non_default_solver_path() -> None:
     X = jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]])
     y = jnp.array([0.8, 1.7, 2.1, 2.9])
 
-    result = glmax.fit(model, X, y, fitter=IRLSFitter(solver=QRSolver()))
+    result = glmax.fit(model, X, y, fitter=IRLSFitter(solver=lx.QR()))
 
     assert isinstance(result, FittedGLM)
     assert result.params.beta.shape == (2,)

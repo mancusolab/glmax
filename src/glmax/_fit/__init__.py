@@ -1,17 +1,10 @@
-"""Internal fit kernels and solver adapters."""
+"""Internal fit kernels."""
 
 from .fit import (
     fit as fit,
     predict as predict,
 )
 from .irls import IRLSFitter as IRLSFitter
-from .solve import (
-    AbstractLinearSolver as AbstractLinearSolver,
-    CGSolver as CGSolver,
-    CholeskySolver as CholeskySolver,
-    QRSolver as QRSolver,
-    SolverState as SolverState,
-)
 from .types import (
     AbstractFitter as AbstractFitter,
     FitResult as FitResult,
@@ -28,9 +21,4 @@ __all__ = [
     "IRLSFitter",
     "fit",
     "predict",
-    "AbstractLinearSolver",
-    "SolverState",
-    "QRSolver",
-    "CholeskySolver",
-    "CGSolver",
 ]

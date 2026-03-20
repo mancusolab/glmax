@@ -6,16 +6,12 @@ import jax
 
 from ._fit import (
     AbstractFitter as AbstractFitter,
-    AbstractLinearSolver as AbstractLinearSolver,
-    CGSolver as CGSolver,
-    CholeskySolver as CholeskySolver,
     fit as fit,
     FitResult as FitResult,
     FittedGLM as FittedGLM,
     IRLSFitter as IRLSFitter,
     Params as Params,
     predict as predict,
-    QRSolver as QRSolver,
 )
 from ._infer import (
     AbstractStdErrEstimator as AbstractStdErrEstimator,
