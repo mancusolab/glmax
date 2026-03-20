@@ -26,9 +26,8 @@ class AbstractTest(eqx.Module, strict=True):
     r"""Abstract base for inference strategies used by `infer(fitted, inferrer=...)`.
 
     Subclasses implement `__call__` to compute test statistics and p-values
-    from a `FittedGLM`. The `stderr` estimator is passed in so strategies can
-    choose whether to use it (e.g. `WaldTest` always calls it; `ScoreTest`
-    ignores it and sets `se` to NaN).
+    from a [`glmax.FittedGLM`][]. The `stderr` estimator is passed in so
+    strategies can choose whether to use it.
     """
 
     @abstractmethod
@@ -39,25 +38,34 @@ class AbstractTest(eqx.Module, strict=True):
     ) -> InferenceResult:
         r"""Compute inferential summaries from a fitted GLM.
 
+        Concrete strategies may use the injected covariance estimator or
+        ignore it if the statistic is computed directly from fit artifacts.
+
         **Arguments:**
 
-        - `fitted`: `FittedGLM` from `fit(...)`.
-        - `stderr`: standard-error estimator; concrete strategies call it only if needed.
+        - `fitted`: fitted [`glmax.FittedGLM`][] noun.
+        - `stderr`: [`glmax.AbstractStdErrEstimator`][]; concrete strategies
+          call it only if needed.
 
         **Returns:**
 
-        `InferenceResult` with fields `(params, se, stat, p)`.
+        [`glmax.InferenceResult`][] with fields `(params, se, stat, p)`.
         """
 
 
 class WaldTest(AbstractTest, strict=True):
     r"""Wald (z/t) coefficient hypothesis test.
 
-    Computes per-coefficient test statistics $z_j = \hat\beta_j / \mathrm{SE}(\hat\beta_j)$
-    and two-sided p-values. Uses a $t_{n-p}$ reference distribution for Gaussian
-    models and $\mathcal{N}(0,1)$ for all others.
+    Computes per-coefficient test statistics
+    $z_j = \hat{\beta}_j / \operatorname{SE}(\hat{\beta}_j)$ and two-sided
+    p-values. Here $\hat{\beta}_j$ is the fitted coefficient for term $j$ and
+    $\operatorname{SE}(\hat{\beta}_j)$ is its estimated standard error. Uses a
+    $t_{n-p}$ reference distribution for Gaussian models and
+    $\mathcal{N}(0, 1)$ for all others, where $n$ is the number of
+    observations and $p$ is the number of coefficients.
 
-    Standard errors are obtained from the injected `AbstractStdErrEstimator`.
+    Standard errors are obtained from the injected
+    [`glmax.AbstractStdErrEstimator`][].
     """
 
     def __call__(
@@ -92,8 +100,8 @@ class ScoreTest(AbstractTest, strict=True):
     score test.
 
     `se` is set to NaN because no standard error carrier is exposed. Callers
-    relying on `InferenceResult.se` downstream must handle NaN when using this
-    inferrer.
+    relying on [`glmax.InferenceResult`][].`se` downstream must handle NaN
+    when using this inferrer.
     """
 
     def __call__(
@@ -132,14 +140,17 @@ class ScoreTest(AbstractTest, strict=True):
 def _wald_test(statistic: ArrayLike, df: int, model: GLM) -> Array:
     r"""Two-sided Wald test p-values.
 
-    Uses a $t_{df}$ distribution for Gaussian families and $\mathcal{N}(0, 1)$
-    for all others.
+    Uses a $t_{df}$ distribution for Gaussian families and
+    $\mathcal{N}(0, 1)$ for all others. Here `df` is the residual degrees of
+    freedom. The statistic vector is typically
+    $\hat{\beta} / \operatorname{SE}(\hat{\beta})$, where $\hat{\beta}$ is
+    the fitted coefficient vector.
 
     **Arguments:**
 
-    - `statistic`: test statistics $\hat\beta / \mathrm{SE}(\hat\beta)$, shape `(p,)`.
+    - `statistic`: test statistic vector, shape `(p,)`.
     - `df`: residual degrees of freedom $n - p$.
-    - `model`: fitted `GLM` instance.
+    - `model`: fitted [`glmax.GLM`][] instance.
 
     **Returns:**
 

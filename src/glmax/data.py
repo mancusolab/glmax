@@ -46,7 +46,9 @@ def _canonicalize_numeric_vector(name: str, value: ArrayLike, n_samples: int) ->
 class GLMData(eqx.Module, strict=True):
     r"""Canonical data noun for GLM workflows.
 
-    Wraps the design matrix, response vector, and optional nuisance arrays.
+    Wraps the design matrix $X \in \mathbb{R}^{n \times p}$, response vector
+    $y \in \mathbb{R}^n$, and optional per-sample arrays. Here $n$ is the
+    number of observations and $p$ is the number of regression coefficients.
     All inputs are validated and canonicalized at construction time.
     """
 
@@ -62,12 +64,24 @@ class GLMData(eqx.Module, strict=True):
         offset: ArrayLike | None = None,
         weights: ArrayLike | None = None,
     ) -> None:
-        r"""**Arguments:**
-        - `X`: covariate matrix, shape `(n, p)`. Must be rank-2, finite, numeric.
-        - `y`: response vector, shape `(n,)`. Must be rank-1, finite, numeric.
-        - `offset`: optional additive offset in $\eta = X\beta + \text{offset}$,
-          shape `(n,)` or broadcastable scalar.
-        - `weights`: optional per-sample weights (reserved; not yet supported by `fit`).
+        r"""Construct a validated [`glmax.GLMData`][] instance.
+
+        The offset enters the linear predictor as
+        $\eta = X \beta + o$, where $\eta$ is the linear predictor,
+        $X$ is the design matrix, $\beta$ is the coefficient vector,
+        and $o$ is the offset vector.
+
+        **Arguments:**
+
+        - `X`: covariate matrix $X$, shape `(n, p)`. Must be rank-2, finite,
+          and numeric.
+        - `y`: response vector $y$, shape `(n,)`. Must be rank-1, finite,
+          and numeric.
+        - `offset`: optional offset vector $o$, shape `(n,)`, or a scalar that
+          broadcasts across observations.
+        - `weights`: optional per-sample weight vector, shape `(n,)`, or a
+          scalar that broadcasts across observations. This field is stored on
+          the noun, but public `fit` support remains reserved.
 
         **Raises:**
 

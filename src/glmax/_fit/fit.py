@@ -38,18 +38,24 @@ def fit(model: GLM, data: GLMData, init: Params | None = None, *, fitter: Abstra
     r"""Fit a GLM to observed data and return a fitted noun.
 
     This is the canonical `fit` grammar verb. It is `@eqx.filter_jit`-wrapped;
-    the fitter strategy is treated as static structure under JIT.
+    the fitter strategy is treated as static structure under JIT. The returned
+    value is a [`glmax.FittedGLM`][] noun that binds the model specification
+    and the full [`glmax.FitResult`][] contract.
 
     **Arguments:**
 
-    - `model`: `GLM` specification noun produced by `specify(...)`.
-    - `data`: `GLMData` noun carrying `X` and `y` (and optional `offset`).
-    - `init`: optional `Params` for warm-starting; `None` uses the family default.
-    - `fitter`: `AbstractFitter` strategy (default: `IRLSFitter()`).
+    - `model`: [`glmax.GLM`][] specification noun produced by
+      [`glmax.specify`][].
+    - `data`: [`glmax.GLMData`][] noun carrying $X$ and $y$.
+    - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses the
+      family default.
+    - `fitter`: [`glmax.AbstractFitter`][] strategy. Defaults to
+      [`glmax._fit.irls.IRLSFitter`][].
 
     **Returns:**
 
-    `FittedGLM` noun binding the model and the `FitResult` contract.
+    [`glmax.FittedGLM`][] noun binding the model and the
+    [`glmax.FitResult`][] contract.
 
     **Raises:**
 
@@ -84,16 +90,22 @@ def predict(model: GLM, params: Params, data: GLMData) -> Array:
     r"""Apply a fitted model to new data and return predicted means.
 
     This is the canonical `predict` grammar verb. It is `@eqx.filter_jit`-wrapped.
+    Prediction computes $\hat{\mu} = g^{-1}(X \hat{\beta} + o)$, where $X$ is
+    the design matrix, $\hat{\beta}$ is the fitted coefficient vector, $o$ is
+    the optional offset, and $g$ is the link function.
 
     **Arguments:**
 
-    - `model`: `GLM` specification noun.
-    - `params`: fitted `Params` (e.g. `fitted.params` from `fit(...)`).
-    - `data`: `GLMData` noun carrying covariates `X` (and optional `offset`).
+    - `model`: [`glmax.GLM`][] specification noun.
+    - `params`: fitted [`glmax.Params`][] (for example `fitted.params` from
+      [`glmax.fit`][]).
+    - `data`: [`glmax.GLMData`][] noun carrying the covariate matrix $X$ and
+      optional offset $o$.
 
     **Returns:**
 
-    Predicted mean response $\hat\mu = g^{-1}(X\hat\beta + \text{offset})$, shape `(n,)`.
+    Predicted mean response vector
+    $\hat{\mu} = g^{-1}(X \hat{\beta} + o)$, shape `(n,)`.
 
     **Raises:**
 

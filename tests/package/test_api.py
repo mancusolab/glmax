@@ -16,7 +16,6 @@ import glmax
 from glmax import (
     AbstractDiagnostic,
     AbstractFitter,
-    DEFAULT_DIAGNOSTICS,
     DevianceResidual,
     FitResult,
     FittedGLM,
@@ -80,7 +79,6 @@ def test_canonical_contract_imports_exist() -> None:
     assert FittedGLM is not None
     assert InferenceResult is not None
     assert AbstractDiagnostic is not None
-    assert DEFAULT_DIAGNOSTICS is not None
     assert DevianceResidual is not None
     assert GoodnessOfFit is not None
     assert GofStats is not None
@@ -108,7 +106,6 @@ def test_top_level_exports_are_canonical_nouns_and_verbs() -> None:
         "FittedGLM",
         "InferenceResult",
         "AbstractDiagnostic",
-        "DEFAULT_DIAGNOSTICS",
         "DevianceResidual",
         "GoodnessOfFit",
         "GofStats",

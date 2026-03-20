@@ -16,12 +16,20 @@ class AbstractLink(eqx.Module):
     r"""Abstract base for GLM link functions $g: \mu \mapsto \eta$.
 
     A link function connects the mean parameter $\mu = \mathrm{E}(Y | X)$
-    to the linear predictor $\eta = X\beta$ via $\eta = g(\mu)$.
+    to the linear predictor $\eta = X \beta$ via $\eta = g(\mu)$, where
+    $X$ is the design matrix and $\beta$ is the coefficient vector.
+
+    Every concrete link exposes four related maps:
+    $g(\mu)$, its derivative $g'(\mu)$, the inverse link $g^{-1}(\eta)$, and
+    the inverse-link derivative $(g^{-1})'(\eta)$.
     """
 
     @abstractmethod
     def __call__(self, mu: ArrayLike) -> Array:
         r"""Compute $g(\mu) = \eta$.
+
+        Here $\mu$ is the mean-response vector and $\eta$ is the linear
+        predictor.
 
         **Arguments:**
 
@@ -36,6 +44,9 @@ class AbstractLink(eqx.Module):
     def inverse(self, eta: ArrayLike) -> Array:
         r"""Compute $g^{-1}(\eta) = \mu$.
 
+        Here $\eta$ is the linear predictor and $\mu$ is the implied mean
+        response.
+
         **Arguments:**
 
         - `eta`: linear predictor, shape `(n,)`.
@@ -48,6 +59,9 @@ class AbstractLink(eqx.Module):
     @abstractmethod
     def deriv(self, mu: ArrayLike) -> Array:
         r"""Compute $g'(\mu)$.
+
+        The derivative is evaluated elementwise with respect to the mean
+        response $\mu$.
 
         **Arguments:**
 
@@ -62,6 +76,9 @@ class AbstractLink(eqx.Module):
     def inverse_deriv(self, eta: ArrayLike) -> Array:
         r"""Compute $(g^{-1})'(\eta)$.
 
+        The derivative is evaluated elementwise with respect to the linear
+        predictor $\eta$.
+
         **Arguments:**
 
         - `eta`: linear predictor, shape `(n,)`.
@@ -73,12 +90,21 @@ class AbstractLink(eqx.Module):
 
 
 class PowerLink(AbstractLink):
-    r"""Power link $g(\mu) = \mu^p$."""
+    r"""Power link $g(\mu) = \mu^p$.
+
+    Here $\mu$ is the mean response and $p$ is the power exponent.
+    The derivative is $g'(\mu) = p \mu^{p-1}$, the inverse link is
+    $g^{-1}(\eta) = \eta^{1/p}$, and the inverse-link derivative is
+    $(g^{-1})'(\eta) = \eta^{1/p - 1} / p$.
+    """
 
     power: Scalar
 
     def __init__(self, power: float = 1.0) -> None:
-        r"""**Arguments:**
+        r"""Construct a power link.
+
+        **Arguments:**
+
         - `power`: exponent $p$. Default `1.0` (identity link).
         """
         self.power = jnp.asarray(power)
@@ -89,6 +115,8 @@ class PowerLink(AbstractLink):
 
     def __call__(self, mu: ArrayLike) -> Array:
         r"""Compute $g(\mu) = \mu^p$.
+
+        The symbol $p$ denotes the configured power exponent.
 
         **Arguments:**
 
@@ -102,6 +130,8 @@ class PowerLink(AbstractLink):
 
     def inverse(self, eta: ArrayLike) -> Array:
         r"""Compute $g^{-1}(\eta) = \eta^{1/p}$.
+
+        The symbol $p$ denotes the configured power exponent.
 
         **Arguments:**
 
@@ -141,7 +171,12 @@ class PowerLink(AbstractLink):
 
 
 class IdentityLink(AbstractLink):
-    r"""Identity link $g(\mu) = \mu$. The canonical link for the Gaussian family."""
+    r"""Identity link $g(\mu) = \mu$.
+
+    The derivative is $g'(\mu) = 1$, the inverse link is
+    $g^{-1}(\eta) = \eta$, and the inverse-link derivative is
+    $(g^{-1})'(\eta) = 1$. This is the canonical link for the Gaussian family.
+    """
 
     def __call__(self, mu: ArrayLike) -> Array:
         r"""Compute $g(\mu) = \mu$.
@@ -199,11 +234,19 @@ class IdentityLink(AbstractLink):
 class LogitLink(AbstractLink):
     r"""Logit link $g(\mu) = \log(\mu / (1 - \mu))$.
 
-    The canonical link for the Binomial family.
+    The derivative is $g'(\mu) = 1 / (\mu (1 - \mu))$, the inverse link is
+    $g^{-1}(\eta) = \sigma(\eta)$ where $\sigma$ is the logistic sigmoid, and
+    the inverse-link derivative is
+    $(g^{-1})'(\eta) = \sigma(\eta) (1 - \sigma(\eta))$.
+
+    This is the canonical link for the Binomial family.
     """
 
     def __call__(self, mu: ArrayLike) -> Array:
         r"""Compute $g(\mu) = \log(\mu / (1 - \mu))$.
+
+        Here $\mu \in (0, 1)$ is the Bernoulli success probability and
+        $\eta$ is the log-odds.
 
         **Arguments:**
 
@@ -217,6 +260,8 @@ class LogitLink(AbstractLink):
 
     def inverse(self, eta: ArrayLike) -> Array:
         r"""Compute $g^{-1}(\eta) = \sigma(\eta)$, clipped to $(0, 1)$.
+
+        The symbol $\sigma$ denotes the logistic sigmoid function.
 
         **Arguments:**
 
@@ -256,10 +301,19 @@ class LogitLink(AbstractLink):
 
 
 class InverseLink(AbstractLink):
-    r"""Reciprocal link $g(\mu) = 1/\mu$. The canonical link for Gamma models."""
+    r"""Reciprocal link $g(\mu) = 1 / \mu$.
+
+    The derivative is $g'(\mu) = -1 / \mu^2$, the inverse link is
+    $g^{-1}(\eta) = 1 / \eta$, and the inverse-link derivative is
+    $(g^{-1})'(\eta) = -1 / \eta^2$.
+
+    This is the canonical link for Gamma models.
+    """
 
     def __call__(self, mu: ArrayLike) -> Array:
         r"""Compute $g(\mu) = 1/\mu$.
+
+        This link requires strictly positive means $\mu > 0$.
 
         **Arguments:**
 
@@ -273,6 +327,9 @@ class InverseLink(AbstractLink):
 
     def inverse(self, eta: ArrayLike) -> Array:
         r"""Compute $g^{-1}(\eta) = 1/\eta$.
+
+        This inverse uses a tiny-value guard so values near $\eta = 0$ do
+        not produce infinities.
 
         **Arguments:**
 
@@ -319,10 +376,19 @@ class InverseLink(AbstractLink):
 
 
 class LogLink(AbstractLink):
-    r"""Log link $g(\mu) = \log(\mu)$. The canonical link for the Poisson family."""
+    r"""Log link $g(\mu) = \log(\mu)$.
+
+    The derivative is $g'(\mu) = 1 / \mu$, the inverse link is
+    $g^{-1}(\eta) = e^\eta$, and the inverse-link derivative is
+    $(g^{-1})'(\eta) = e^\eta$.
+
+    This is the canonical link for the Poisson family.
+    """
 
     def __call__(self, mu: ArrayLike) -> Array:
         r"""Compute $g(\mu) = \log(\mu)$.
+
+        This link requires strictly positive means $\mu > 0$.
 
         **Arguments:**
 
@@ -375,18 +441,31 @@ class LogLink(AbstractLink):
 
 
 class NBLink(AbstractLink):
-    r"""Negative-binomial link $g(\mu) = \log(\alpha\mu / (1 + \alpha\mu))$."""
+    r"""Negative-binomial link $g(\mu) = \log(\alpha \mu / (1 + \alpha \mu))$.
+
+    Here $\mu$ is the mean response and $\alpha > 0$ is the overdispersion
+    parameter. The derivative is
+    $g'(\mu) = 1 / (\mu (1 + \alpha \mu))$, the inverse link is
+    $g^{-1}(\eta) = 1 / (\alpha \operatorname{expm1}(-\eta))$, and the
+    inverse-link derivative is $(g^{-1})'(\eta)$ computed from that inverse
+    expression.
+    """
 
     alpha: Scalar
 
     def __init__(self, alpha: float = 1.0) -> None:
-        r"""**Arguments:**
+        r"""Construct a Negative Binomial link.
+
+        **Arguments:**
+
         - `alpha`: overdispersion parameter $\alpha > 0$. Default `1.0`.
         """
         self.alpha = jnp.asarray(alpha)
 
     def __call__(self, mu: ArrayLike) -> Array:
-        r"""Compute $g(\mu) = \log(\alpha\mu / (1 + \alpha\mu))$.
+        r"""Compute $g(\mu) = \log(\alpha \mu / (1 + \alpha \mu))$.
+
+        The symbol $\alpha$ denotes the configured overdispersion parameter.
 
         **Arguments:**
 
@@ -403,6 +482,8 @@ class NBLink(AbstractLink):
 
     def inverse(self, eta: ArrayLike) -> Array:
         r"""Compute $g^{-1}(\eta) = 1 / (\alpha \operatorname{expm1}(-\eta))$.
+
+        The symbol $\alpha$ denotes the configured overdispersion parameter.
 
         **Arguments:**
 

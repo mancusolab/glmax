@@ -42,21 +42,26 @@ class AbstractStdErrEstimator(eqx.Module, strict=True):
     r"""Abstract base for covariance estimators used by `infer(fitted, stderr=...)`.
 
     Subclasses implement `__call__` to return a `(p, p)` covariance matrix for
-    $\hat\beta$. The matrix is consumed by `AbstractTest` strategies to compute
-    standard errors and test statistics.
+    $\hat{\beta}$. The matrix is consumed by [`glmax.AbstractTest`][]
+    strategies to compute standard errors and test statistics.
     """
 
     @abstractmethod
     def __call__(self, fitted: "FittedGLM") -> Array:
         r"""Estimate the covariance matrix for `fitted.result.params.beta`.
 
+        The returned matrix estimates
+        $\widehat{\operatorname{Cov}}(\hat{\beta})$, where $\hat{\beta}$ is
+        the fitted coefficient vector.
+
         **Arguments:**
 
-        - `fitted`: `FittedGLM` from `fit(...)`.
+        - `fitted`: fitted [`glmax.FittedGLM`][] noun.
 
         **Returns:**
 
-        Covariance matrix $\hat{\mathrm{Cov}}(\hat\beta)$, shape `(p, p)`.
+        Covariance matrix
+        $\widehat{\operatorname{Cov}}(\hat{\beta})$, shape `(p, p)`.
         """
 
 
@@ -68,11 +73,17 @@ class FisherInfoError(AbstractStdErrEstimator, strict=True):
     """
 
     def __call__(self, fitted: "FittedGLM") -> Array:
-        r"""Compute $\hat{\mathrm{Cov}}(\hat\beta) = \hat\phi \cdot \mathcal{I}(\hat\beta)^{-1}$.
+        r"""Compute a Fisher-information covariance estimate.
+
+        This computes
+        $\widehat{\operatorname{Cov}}(\hat{\beta}) = \hat{\phi}\,
+        \mathcal{I}(\hat{\beta})^{-1}$, where $\hat{\phi}$ is the fitted
+        dispersion and $\mathcal{I}(\hat{\beta})$ is the expected Fisher
+        information evaluated at the fitted coefficients.
 
         **Arguments:**
 
-        - `fitted`: `FittedGLM` from `fit(...)`.
+        - `fitted`: fitted [`glmax.FittedGLM`][] noun.
 
         **Returns:**
 
@@ -97,9 +108,15 @@ class HuberError(AbstractStdErrEstimator, strict=True):
     def __call__(self, fitted: "FittedGLM") -> Array:
         r"""Compute the sandwich covariance matrix.
 
+        This computes the sandwich estimator
+        $\widehat{\operatorname{Cov}}(\hat{\beta}) = B M B$, where
+        $B = \hat{\phi}\,\mathcal{I}^{-1}$ is the bread matrix and
+        $M = X^\top \operatorname{diag}(\hat{s}_i^2) X$ is the meat matrix.
+        Here $\hat{s}_i$ denotes the score contribution for observation $i$.
+
         **Arguments:**
 
-        - `fitted`: `FittedGLM` from `fit(...)`.
+        - `fitted`: fitted [`glmax.FittedGLM`][] noun.
 
         **Returns:**
 

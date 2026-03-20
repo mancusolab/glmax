@@ -49,10 +49,11 @@ class ExponentialDispersionFamily(eqx.Module):
     r"""Abstract base for one-parameter exponential dispersion family distributions.
 
     A GLM models the conditional mean $\mu = \mathrm{E}(Y \mid X)$ via a link
-    function $g$ such that $g(\mu) = \eta = X\beta$.  Subclasses implement the
-    family-specific density, variance function, and split `(disp, aux)` handling.
+    function $g$ such that $g(\mu) = \eta = X \beta$.
 
-    Concrete families: `Gaussian`, `Poisson`, `Binomial`, `NegativeBinomial`, `Gamma`.
+    Subclasses implement the family-specific density, variance function, and split
+    `(disp, aux)` handling, where `disp` stores the dispersion parameter $\phi$ and
+    `aux` stores optional family-specific state $a$.
     """
 
     glink: AbstractVar[AbstractLink]
@@ -73,6 +74,11 @@ class ExponentialDispersionFamily(eqx.Module):
     ) -> Array:
         r"""Compute negative log-likelihood.
 
+        This returns the scalar objective
+        $-\log p(y \mid \eta, \phi, a)$, where $y$ is the response vector,
+        $\eta$ is the linear predictor, $\phi$ is the dispersion scalar,
+        and $a$ is optional auxiliary state.
+
         **Arguments:**
 
         - `y`: observed responses, shape `(n,)`.
@@ -88,6 +94,10 @@ class ExponentialDispersionFamily(eqx.Module):
     @abstractmethod
     def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
         r"""Variance function $V(\mu)$.
+
+        This returns the family-specific variance expression evaluated at
+        the mean response $\mu$. The dispersion scalar $\phi$ is passed via
+        `disp` when the family uses it.
 
         **Arguments:**
 
@@ -109,6 +119,9 @@ class ExponentialDispersionFamily(eqx.Module):
         aux: ScalarLike | None = None,
     ) -> Array:
         r"""Cumulative distribution function for the family.
+
+        This returns $F(y_i \mid \mu_i, \phi, a)$ elementwise, where $F$ is
+        the fitted cumulative distribution function.
 
         **Arguments:**
 
@@ -132,6 +145,9 @@ class ExponentialDispersionFamily(eqx.Module):
     ) -> Array:
         r"""Per-observation deviance contributions for the family.
 
+        The returned vector contains one deviance contribution $d_i$ for
+        each observation $i$.
+
         **Arguments:**
 
         - `y`: observed responses, shape `(n,)`.
@@ -154,6 +170,10 @@ class ExponentialDispersionFamily(eqx.Module):
     ) -> Array:
         r"""Draw samples from the family's distribution.
 
+        Sampling uses the parameterization implied by the link-transformed
+        mean $\mu = g^{-1}(\eta)$ together with the family's dispersion
+        scalar $\phi$ and auxiliary state $a$ when present.
+
         **Arguments:**
 
         - `key`: JAX PRNGKey.
@@ -175,7 +195,10 @@ class ExponentialDispersionFamily(eqx.Module):
         r"""Compute IRLS weights.
 
         Clips $\mu$ to `_bounds` and variance to `(tiny, inf)` before
-        computing $W = \operatorname{diag}(1 / (V(\mu) \cdot [g'(\mu)]^2))$.
+        computing the working weights. This returns $(\mu, g'(\mu), w)$ where
+        $w = 1 / \left(V(\mu) [g'(\mu)]^2\right)$. Here $\mu$ is the mean
+        response, $V(\mu)$ is the family variance function, and $g$ is the
+        link function.
 
         **Arguments:**
 
@@ -212,8 +235,10 @@ class ExponentialDispersionFamily(eqx.Module):
         Returns the updated `(disp, aux)` pair.  The base implementation is a
         no-op identity: it returns `(disp, aux)` unchanged.  Families that
         estimate a nuisance parameter override this method and update whichever
-        slot they own — `disp` for EDM-dispersion families (e.g. Gaussian),
-        `aux` for structural-parameter families (e.g. Negative Binomial).
+        slot they own: `disp` for families with free dispersion $\phi$, and
+        `aux` for structural-parameter families with auxiliary state $a$. The
+        base implementation simply returns the incoming nuisance state
+        unchanged.
 
         **Arguments:**
 
@@ -232,7 +257,9 @@ class ExponentialDispersionFamily(eqx.Module):
         return jnp.asarray(disp), aux
 
     def init_nuisance(self) -> tuple[Array, Array | None]:
-        """Return the default ``(disp, aux)`` pair used to seed the IRLS loop.
+        r"""Return the default ``(disp, aux)`` pair used to seed the IRLS loop.
+
+        This returns the initial nuisance state $(\phi_0, a_0)$.
 
         **Returns:**
 
@@ -247,8 +274,10 @@ class Gaussian(ExponentialDispersionFamily):
     Models a continuous response $y \in \mathbb{R}$ with
     $y \mid \mu \sim \mathcal{N}(\mu, \sigma^2)$.
 
-    The variance function is $V(\mu) = \sigma^2$ and the canonical link
-    is the identity $g(\mu) = \mu$. Gaussian uses `disp` as EDM dispersion and ignores `aux`.
+    The variance function is $V(\mu) = 1$ and the observation variance is
+    $\phi V(\mu) = \phi$, where $\phi = \sigma^2$ is the Gaussian dispersion.
+    The canonical link is the identity $g(\mu) = \mu$. Gaussian uses `disp`
+    as the dispersion carrier and ignores `aux`.
     """
 
     glink: AbstractLink = IdentityLink()
@@ -256,7 +285,10 @@ class Gaussian(ExponentialDispersionFamily):
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
 
     def __init__(self, glink: AbstractLink = IdentityLink()) -> None:
-        r"""**Arguments:**
+        r"""Construct a Gaussian family.
+
+        **Arguments:**
+
         - `glink`: link function (default: `IdentityLink()`).
         """
         self.glink = glink
@@ -270,11 +302,15 @@ class Gaussian(ExponentialDispersionFamily):
     ) -> Array:
         r"""Gaussian negative log-likelihood.
 
+        This evaluates the Gaussian log density with mean
+        $\mu = g^{-1}(\eta)$ and variance $\phi = \sigma^2$.
+
         **Arguments:**
 
         - `y`: observed responses, shape `(n,)`.
         - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: variance $\sigma^2$, scalar.  When `disp <= 0` (e.g. the
+        - `disp`: variance $\phi = \sigma^2$, scalar. When `disp <= 0` (for
+          example the
           IRLS sentinel `0.0` before dispersion estimation is wired in),
           falls back to `1.0` so the objective remains finite and comparable.
         - `aux`: ignored.
@@ -289,17 +325,19 @@ class Gaussian(ExponentialDispersionFamily):
         return -jnp.sum(jaxstats.norm.logpdf(y, mu, jnp.sqrt(safe_disp)))
 
     def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
-        r"""Gaussian variance function $V(\mu) = \sigma^2$.
+        r"""Gaussian variance term $\phi V(\mu) = \phi$.
 
         When `disp <= 0` (e.g. the IRLS sentinel `0.0` on the first step
         before dispersion estimation is available), falls back to `1.0` so
         the first-step weight is unit weight and the WLS step is equivalent
-        to OLS (uniform weights, correct for identity-link Gaussian).
+        to OLS (uniform weights, correct for identity-link Gaussian). For the
+        Gaussian family the unit variance function is $V(\mu) = 1$, so the
+        full variance is $\phi V(\mu) = \phi$.
 
         **Arguments:**
 
         - `mu`: mean, shape `(n,)`.
-        - `disp`: variance $\sigma^2$, scalar.
+        - `disp`: dispersion scalar $\phi = \sigma^2$.
         - `aux`: ignored.
 
         **Returns:**
@@ -321,6 +359,9 @@ class Gaussian(ExponentialDispersionFamily):
     ) -> tuple[Array, Array | None]:
         r"""Compute RSS/df and return as the updated `(disp, aux)` pair.
 
+        This sets $\hat{\phi} = \mathrm{RSS} / (n - p)$, where
+        $\mathrm{RSS} = \sum_i (y_i - \mu_i)^2$.
+
         **Arguments:**
 
         - `X`: design matrix, shape `(n, p)`.
@@ -332,7 +373,7 @@ class Gaussian(ExponentialDispersionFamily):
 
         **Returns:**
 
-        `(hat_sigma_sq, None)` where $\hat{\sigma}^2 = \mathrm{RSS} / (n - p)$.
+        `(\hat{\phi}, None)` where $\hat{\phi} = \mathrm{RSS} / (n - p)$.
         When $n \le p$ (saturated or over-parameterised design), the denominator
         is clamped to 1 to keep the result finite and non-negative.
         """
@@ -350,6 +391,9 @@ class Gaussian(ExponentialDispersionFamily):
         aux: ScalarLike | None = None,
     ) -> Array:
         r"""Sample from $\mathcal{N}(\mu, \sigma^2)$ where $\mu = g^{-1}(\eta)$.
+
+        Here $\mu$ is the mean response and $\sigma^2 = \phi$ is the Gaussian
+        variance.
 
         **Arguments:**
 
@@ -375,6 +419,9 @@ class Gaussian(ExponentialDispersionFamily):
         aux: ScalarLike | None = None,
     ) -> Array:
         r"""Gaussian cumulative distribution function.
+
+        This evaluates the Gaussian CDF with mean $\mu$ and variance
+        $\phi = \sigma^2$.
 
         **Arguments:**
 
@@ -421,8 +468,10 @@ class Binomial(ExponentialDispersionFamily):
     Models a binary response $y \in \{0, 1\}$ with
     $y \mid \mu \sim \mathrm{Bernoulli}(\mu)$, $\mu \in (0, 1)$.
 
-    The variance function is $V(\mu) = \mu(1 - \mu)$ and the canonical link
-    is the logit $g(\mu) = \log(\mu / (1 - \mu))$. Binomial fixes `disp = 1.0` and ignores `aux`.
+    The unit variance function is $V(\mu) = \mu(1 - \mu)$, so the model
+    variance is $\phi V(\mu)$ with fixed $\phi = 1$. The canonical link is
+    the logit $g(\mu) = \log(\mu / (1 - \mu))$. Binomial fixes `disp = 1.0`
+    and ignores `aux`.
     """
 
     glink: AbstractLink = LogitLink()
@@ -434,7 +483,10 @@ class Binomial(ExponentialDispersionFamily):
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, 1.0 - jnp.finfo(float).eps)
 
     def __init__(self, glink: AbstractLink = LogitLink()) -> None:
-        r"""**Arguments:**
+        r"""Construct a Binomial family.
+
+        **Arguments:**
+
         - `glink`: link function (default: `LogitLink()`).
         """
         self.glink = glink
@@ -447,6 +499,9 @@ class Binomial(ExponentialDispersionFamily):
         aux: ScalarLike | None = None,
     ) -> Array:
         r"""Binomial negative log-likelihood.
+
+        This uses the Bernoulli likelihood with success probability
+        $\mu = g^{-1}(\eta)$.
 
         **Arguments:**
 
@@ -548,8 +603,9 @@ class Poisson(ExponentialDispersionFamily):
     Models a non-negative integer response $y \in \{0, 1, 2, \ldots\}$ with
     $y \mid \mu \sim \mathrm{Poisson}(\mu)$, $\mu > 0$.
 
-    The variance function is $V(\mu) = \mu$ and the canonical link
-    is the log $g(\mu) = \log(\mu)$. Poisson fixes `disp = 1.0` and ignores `aux`.
+    The unit variance function is $V(\mu) = \mu$, so the model variance is
+    $\phi V(\mu)$ with fixed $\phi = 1$. The canonical link is
+    $g(\mu) = \log(\mu)$. Poisson fixes `disp = 1.0` and ignores `aux`.
     """
 
     glink: AbstractLink = LogLink()
@@ -557,7 +613,10 @@ class Poisson(ExponentialDispersionFamily):
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
     def __init__(self, glink: AbstractLink = LogLink()) -> None:
-        r"""**Arguments:**
+        r"""Construct a Poisson family.
+
+        **Arguments:**
+
         - `glink`: link function (default: `LogLink()`).
         """
         self.glink = glink
@@ -570,6 +629,8 @@ class Poisson(ExponentialDispersionFamily):
         aux: ScalarLike | None = None,
     ) -> Array:
         r"""Poisson negative log-likelihood.
+
+        This uses the Poisson likelihood with rate $\mu = g^{-1}(\eta)$.
 
         **Arguments:**
 
@@ -665,8 +726,8 @@ class Poisson(ExponentialDispersionFamily):
 class NegativeBinomial(ExponentialDispersionFamily):
     r"""Negative-binomial (NB-2) exponential family for overdispersed count data.
 
-    Models a non-negative integer response via the NB-2 parameterisation
-    $\mathrm{Var}(y \mid \mu) = \mu + \alpha \mu^2$, where $\alpha > 0$ is the
+    Models a non-negative integer response via the NB-2 parameterization
+    $\operatorname{Var}(Y \mid \mu) = \mu + \alpha \mu^2$, where $\alpha > 0$ is the
     overdispersion parameter. Uses a log link by default.
     Negative Binomial fixes `disp = 1.0` and uses `aux` as `alpha`.
 
@@ -681,7 +742,10 @@ class NegativeBinomial(ExponentialDispersionFamily):
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
     def __init__(self, glink: AbstractLink = LogLink()) -> None:
-        r"""**Arguments:**
+        r"""Construct a Negative Binomial family.
+
+        **Arguments:**
+
         - `glink`: link function (default: `LogLink()`).
         """
         self.glink = glink
@@ -696,7 +760,9 @@ class NegativeBinomial(ExponentialDispersionFamily):
         r"""Negative-binomial log-likelihood (numerically stable via `logaddexp`).
 
         Uses $r = 1/\alpha$ and the log-probability parameterization to avoid
-        catastrophic cancellation for large counts.
+        catastrophic cancellation for large counts. Here $\alpha$ is the
+        overdispersion parameter and $r = 1 / \alpha$ is the corresponding
+        count-shape parameter.
 
         **Precondition:** NB uses `aux` as `alpha > 0` and fixes `disp = 1.0`.
         When `aux` is omitted, the legacy `disp` carrier is still accepted
@@ -741,7 +807,8 @@ class NegativeBinomial(ExponentialDispersionFamily):
         r"""Sample from $\mathrm{NB}(r, \mu)$ via Gamma-Poisson mixture.
 
         $\mathrm{NB}(r, \mu)$ is equivalent to $\mathrm{Poisson}(\lambda)$ where
-        $\lambda \sim \mathrm{Gamma}(r, \mu/r)$.
+        $\lambda \sim \mathrm{Gamma}(r, \mu/r)$. Here $r = 1 / \alpha$, where
+        $\alpha$ is the overdispersion parameter.
 
         **Arguments:**
 
@@ -767,6 +834,8 @@ class NegativeBinomial(ExponentialDispersionFamily):
     ) -> tuple[Array, Array]:
         r"""Gradient and Hessian of the negative log-likelihood w.r.t. $\alpha$.
 
+        Here $\alpha > 0$ is the Negative Binomial overdispersion parameter.
+
         **Arguments:**
 
         - `X`: design matrix (unused, kept for API symmetry).
@@ -791,7 +860,9 @@ class NegativeBinomial(ExponentialDispersionFamily):
     ) -> tuple[Array, Array]:
         r"""Gradient and Hessian of the negative log-likelihood w.r.t. $\log\alpha$.
 
-        Differentiates in log-space to ensure $\alpha > 0$ throughout Newton steps.
+        Differentiates in log-space to ensure $\alpha > 0$ throughout Newton
+        steps. Here $\log \alpha$ is the unconstrained parameter used for
+        Newton updates.
 
         **Arguments:**
 
@@ -827,7 +898,9 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         Negative Binomial fixes `disp = 1.0` and updates `aux` (the
         overdispersion $\alpha$) each IRLS iteration via a Newton step in
-        log-space.
+        log-space. The returned pair is $(1.0, \alpha_{\text{new}})$ because
+        Negative Binomial keeps `disp` fixed at `1.0` and stores
+        overdispersion in `aux`.
 
         **Arguments:**
 
@@ -853,7 +926,10 @@ class NegativeBinomial(ExponentialDispersionFamily):
         return jnp.asarray(1.0), jnp.exp(log_alpha_n)
 
     def init_nuisance(self) -> tuple[Array, Array]:
-        """Return the default ``(disp, aux)`` pair for NegativeBinomial.
+        r"""Return the default ``(disp, aux)`` pair for NegativeBinomial.
+
+        The default nuisance state is $(1.0, 0.1)$, where `aux = 0.1`
+        initializes the overdispersion parameter $\alpha$.
 
         **Returns:**
 
@@ -921,7 +997,8 @@ class Gamma(ExponentialDispersionFamily):
     $$f(y \mid \mu, \phi) = \frac{y^{1/\phi - 1} \exp(-y / (\mu\phi))}
     {\Gamma(1/\phi)(\mu\phi)^{1/\phi}}$$
 
-    The mean is $\mu > 0$ and the variance is $\phi \mu^2$.
+    The mean is $\mu > 0$ and the variance is $\phi V(\mu)$ with
+    $V(\mu) = \mu^2$.
 
     The canonical link for Gamma is `InverseLink` ($g(\mu) = 1/\mu$).
     Gamma uses `disp` as EDM dispersion and ignores `aux`.
@@ -932,7 +1009,10 @@ class Gamma(ExponentialDispersionFamily):
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
     def __init__(self, glink: AbstractLink = InverseLink()) -> None:
-        r"""**Arguments:**
+        r"""Construct a Gamma family.
+
+        **Arguments:**
+
         - `glink`: link function (default: `InverseLink()`).
         """
         self.glink = glink
@@ -951,7 +1031,9 @@ class Gamma(ExponentialDispersionFamily):
 
         When `disp <= 0` (e.g. the IRLS sentinel `0.0` before dispersion
         estimation is wired in), falls back to `1.0` so the objective
-        remains finite.
+        remains finite. The Gamma shape-scale parameterization uses
+        $k = 1 / \phi$ and $\theta = \mu \phi$, where $\phi$ is the
+        dispersion scalar.
 
         **Arguments:**
 
@@ -972,12 +1054,13 @@ class Gamma(ExponentialDispersionFamily):
         return -jnp.sum(jaxstats.gamma.logpdf(y, a=k, scale=theta))
 
     def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
-        r"""Gamma variance $V(\mu) = \phi \mu^2$.
+        r"""Gamma variance term $\phi V(\mu) = \phi \mu^2$.
 
         When `disp <= 0` (e.g. the IRLS sentinel `0.0` on the first step
         before dispersion estimation is available), falls back to `1.0` so
-        the first-step weights remain finite (equivalent to unit-variance
-        Gamma weights, correct for the InverseLink canonical form).
+        the first-step weights remain finite. The unit variance function is
+        $V(\mu) = \mu^2$, so the full variance is
+        $\phi V(\mu) = \phi \mu^2$.
 
         **Arguments:**
 
@@ -1001,6 +1084,9 @@ class Gamma(ExponentialDispersionFamily):
         aux: ScalarLike | None = None,
     ) -> Array:
         r"""Sample from $\mathrm{Gamma}(k, \theta)$ where $k = 1/\phi$, $\theta = \mu\phi$.
+
+        Here $k$ is the Gamma shape parameter and $\theta$ is the Gamma scale
+        parameter.
 
         **Arguments:**
 

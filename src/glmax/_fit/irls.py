@@ -78,16 +78,21 @@ def _irls(
 class IRLSFitter(AbstractFitter, strict=True):
     r"""Iteratively Reweighted Least Squares (IRLS) fit strategy.
 
-    The default `AbstractFitter` used by `glmax.fit(...)`. Runs a
-    `lax.while_loop`-based IRLS algorithm and returns a `FitResult`.
+    The default [`glmax.AbstractFitter`][] used by [`glmax.fit`][]. Runs a
+    `lax.while_loop`-based IRLS algorithm and returns a
+    [`glmax.FitResult`][].
     """
 
     solver: AbstractLinearSolver
 
     def __init__(self, solver: AbstractLinearSolver = CholeskySolver()):
-        r"""**Arguments:**
-        - `solver`: `AbstractLinearSolver` for each IRLS weighted least-squares
-          step (default: `CholeskySolver()`).
+        r"""Construct an IRLS fitter.
+
+        **Arguments:**
+
+        - `solver`: [`glmax._fit.solve.AbstractLinearSolver`][] used for each
+          IRLS weighted least-squares step. Defaults to
+          [`glmax._fit.solve.CholeskySolver`][].
         """
         self.solver = solver
 
@@ -102,22 +107,29 @@ class IRLSFitter(AbstractFitter, strict=True):
     ) -> FitResult:
         r"""Run IRLS to convergence and return a `FitResult`.
 
+        IRLS iterates on the linear predictor $\eta$ and nuisance state until
+        the objective change falls below `tol` or the iteration count reaches
+        `max_iter`.
+
         **Arguments:**
 
-        - `model`: `GLM` specification noun.
-        - `data`: `GLMData` noun (weights not yet supported).
-        - `init`: optional `Params` for warm-starting; `None` uses the family default.
+        - `model`: [`glmax.GLM`][] specification noun.
+        - `data`: [`glmax.GLMData`][] noun. Public sample weights are not yet
+          supported in this fitter.
+        - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
+          the family default.
         - `max_iter`: maximum number of IRLS iterations (default `1000`).
         - `tol`: convergence tolerance on the objective change (default `1e-3`).
         - `step_size`: IRLS update step-size multiplier (default `1.0`).
 
         **Returns:**
 
-        `FitResult` with converged parameters, fit artifacts, and convergence metadata.
+        [`glmax.FitResult`][] with converged parameters, fit artifacts, and
+        convergence metadata.
 
         **Raises:**
 
-        - `TypeError`: if `data` is not a `GLMData` instance.
+        - `TypeError`: if `data` is not a [`glmax.GLMData`][] instance.
         - `ValueError`: if `data.weights` is set (not yet supported).
         """
         if not isinstance(data, GLMData):

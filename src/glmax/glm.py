@@ -14,19 +14,26 @@ from .family import ExponentialDispersionFamily, Gaussian
 class GLM(eqx.Module):
     r"""Generalized Linear Model specification noun.
 
-    A `GLM` holds the family that characterises a model. It carries no state
-    (no fitted parameters, no data) and is constructed once via `specify`.
-    The linear solver is part of the `AbstractFitter` strategy, not the model.
+    A [`glmax.GLM`][] holds the family that characterizes a model. It carries
+    no fitted state and is constructed once via [`glmax.specify`][]. The
+    linear solver lives on the [`glmax.AbstractFitter`][] strategy, not on the
+    model itself.
+
     The model boundary exposes the split `(disp, aux)` contract consistently:
-    `disp` is the EDM dispersion scalar, while `aux` carries optional
-    family-specific state such as Negative Binomial `alpha`.
+    $\phi$ is the exponential-dispersion-model dispersion scalar stored in
+    `disp`, while `aux` carries optional family-specific state such as the
+    Negative Binomial overdispersion parameter $\alpha$.
     """
 
     family: ExponentialDispersionFamily
 
     def __init__(self, family: ExponentialDispersionFamily = Gaussian()):
-        r"""**Arguments:**
-        - `family`: `ExponentialFamily` instance (default: `Gaussian()`).
+        r"""Construct a [`glmax.GLM`][] specification.
+
+        **Arguments:**
+
+        - `family`: exponential-dispersion family instance. Defaults to
+          [`glmax.Gaussian`][].
         """
         self.family = family
 
@@ -37,13 +44,17 @@ class GLM(eqx.Module):
     def mean(self, eta: ArrayLike) -> Array:
         r"""Apply the inverse link to obtain fitted means.
 
+        This computes $\mu = g^{-1}(\eta)$, where $\mu$ is the mean
+        response, $\eta$ is the linear predictor, and $g$ is the link
+        function associated with the active family.
+
         **Arguments:**
 
-        - `eta`: linear predictor, shape `(n,)`.
+        - `eta`: linear predictor $\eta$, shape `(n,)`.
 
         **Returns:**
 
-        Mean response $\mu = g^{-1}(\eta)$, shape `(n,)`.
+        Mean response vector $\mu = g^{-1}(\eta)$, shape `(n,)`.
         """
         return self.family.glink.inverse(eta)
 
@@ -54,14 +65,19 @@ class GLM(eqx.Module):
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
-        r"""Evaluate the total log-likelihood $\log p(y \mid \eta, \mathrm{disp}, \mathrm{aux})$.
+        r"""Evaluate the total log-likelihood.
+
+        This returns $\log p(y \mid \eta, \phi, a)$, where $y$ is the observed
+        response, $\eta$ is the linear predictor, $\phi$ is the dispersion
+        parameter, and $a$ is optional family-specific auxiliary state.
 
         **Arguments:**
 
-        - `y`: observed response, shape `(n,)`.
-        - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: EDM dispersion scalar.
-        - `aux`: optional family-specific auxiliary scalar.
+        - `y`: observed response vector $y$, shape `(n,)`.
+        - `eta`: linear predictor vector $\eta$, shape `(n,)`.
+        - `disp`: dispersion scalar $\phi$.
+        - `aux`: optional auxiliary scalar $a$ used by families with extra
+          structural parameters.
 
         **Returns:**
 
@@ -78,12 +94,16 @@ class GLM(eqx.Module):
     ) -> Array:
         r"""Draw random samples from the fitted predictive distribution.
 
+        Sampling is performed from the family distribution parameterized by
+        $\eta$, $\phi$, and optional auxiliary state $a$, where
+        $\mu = g^{-1}(\eta)$ is the implied mean response.
+
         **Arguments:**
 
         - `key`: JAX PRNG key.
-        - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: EDM dispersion scalar.
-        - `aux`: optional family-specific auxiliary scalar.
+        - `eta`: linear predictor vector $\eta$, shape `(n,)`.
+        - `disp`: dispersion scalar $\phi$.
+        - `aux`: optional auxiliary scalar $a$.
 
         **Returns:**
 
@@ -98,9 +118,12 @@ class GLM(eqx.Module):
     def init_eta(self, y: ArrayLike) -> Array:
         r"""Compute the initial linear predictor for IRLS warm-start.
 
+        The returned vector initializes the linear predictor $\eta$ from the
+        observed response vector $y$.
+
         **Arguments:**
 
-        - `y`: observed response, shape `(n,)`.
+        - `y`: observed response vector $y$, shape `(n,)`.
 
         **Returns:**
 
@@ -128,26 +151,34 @@ class GLM(eqx.Module):
     ) -> tuple[Array, Array, Array]:
         r"""Compute IRLS working quantities at the current linear predictor.
 
+        This returns $(\mu, g'(\mu), w)$, where $\mu = g^{-1}(\eta)$ is
+        the mean response, $g'(\mu)$ is the link derivative evaluated at
+        $\mu$, and
+        $w = 1 / \left(\phi V(\mu) [g'(\mu)]^2\right)$ is the GLM working
+        weight. Here $\phi$ is the dispersion scalar and $V(\mu)$ is the
+        unit variance function of the family.
+
         **Arguments:**
 
-        - `eta`: linear predictor, shape `(n,)`.
-        - `disp`: EDM dispersion scalar.
-        - `aux`: optional family-specific auxiliary scalar.
+        - `eta`: linear predictor vector $\eta$, shape `(n,)`.
+        - `disp`: dispersion scalar $\phi$.
+        - `aux`: optional auxiliary scalar $a$.
 
         **Returns:**
 
-        Tuple `(mu, g_deriv, weight)` each of shape `(n,)`, where
-        `g_deriv` is the per-sample link derivative $g'(\mu_i)$ and
-        `weight` is the per-sample GLM working weight $w_i = 1 / (V(\mu_i) [g'(\mu_i)]^2)$.
+        Tuple `(mu, g_deriv, weight)` of arrays with shape `(n,)`.
         """
         return self.family.calc_weight(eta, disp, aux=aux)
 
     def link_deriv(self, mu: ArrayLike) -> Array:
         r"""Evaluate the link derivative $g'(\mu)$.
 
+        The derivative is evaluated elementwise at the mean response $\mu$,
+        where $g$ is the link function.
+
         **Arguments:**
 
-        - `mu`: mean response, shape `(n,)`.
+        - `mu`: mean response vector $\mu$, shape `(n,)`.
 
         **Returns:**
 
@@ -167,19 +198,24 @@ class GLM(eqx.Module):
         r"""Apply one nuisance-parameter update step inside the IRLS loop.
 
         Returns the updated `(disp, aux)` pair.  Families that estimate a
-        nuisance parameter update whichever slot they own — `disp` for
-        EDM-dispersion families (e.g. Gaussian), `aux` for structural-parameter
-        families (e.g. Negative Binomial).  Fixed-dispersion families
-        (Poisson, Binomial) return `(disp, aux)` unchanged.
+        nuisance parameter update whichever slot they own: `disp` for
+        exponential-dispersion-model families with free $\phi$, and `aux` for
+        structural-parameter families such as Negative Binomial with auxiliary
+        parameter $\alpha$. Fixed-dispersion families return `(disp, aux)`
+        unchanged.
+
+        Here $X$ is the design matrix, $y$ is the response vector,
+        $\eta$ is the current linear predictor, $\phi$ is the current
+        dispersion scalar, and $a$ is optional auxiliary state.
 
         **Arguments:**
 
-        - `X`: covariate matrix, shape `(n, p)`.
-        - `y`: observed response, shape `(n,)`.
-        - `eta`: current linear predictor, shape `(n,)`.
-        - `disp`: current EDM dispersion scalar.
+        - `X`: covariate matrix $X$, shape `(n, p)`.
+        - `y`: observed response vector $y$, shape `(n,)`.
+        - `eta`: current linear predictor vector $\eta$, shape `(n,)`.
+        - `disp`: current dispersion scalar $\phi$.
         - `step_size`: IRLS step-size multiplier.
-        - `aux`: optional family-specific auxiliary scalar.
+        - `aux`: optional auxiliary scalar $a$.
 
         **Returns:**
 
@@ -192,6 +228,9 @@ class GLM(eqx.Module):
 
         Delegates to the active family so the caller does not need to distinguish
         between families at the kernel level.
+
+        The returned pair is $(\phi_0, a_0)$, where $\phi_0$ is the
+        initial dispersion value and $a_0$ is the initial auxiliary state.
 
         **Returns:**
 
@@ -206,12 +245,17 @@ def specify(
 ) -> GLM:
     r"""Construct a GLM specification.
 
+    This is the canonical factory for [`glmax.GLM`][]. The returned model
+    holds only the family specification; it does not hold fitted
+    coefficients or solver state.
+
     **Arguments:**
 
-    - `family`: `ExponentialFamily` distribution (default: `Gaussian()`).
+    - `family`: exponential-dispersion family instance. Defaults to
+      [`glmax.Gaussian`][].
 
     **Returns:**
 
-    A `GLM` specification noun.
+    A [`glmax.GLM`][] specification noun.
     """
     return GLM(family=family)

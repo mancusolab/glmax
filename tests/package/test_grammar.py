@@ -14,7 +14,6 @@ import glmax
 
 from glmax import (
     AbstractDiagnostic,
-    DEFAULT_DIAGNOSTICS,
     FitResult,
     FittedGLM,
     GLMData,
@@ -24,6 +23,15 @@ from glmax import (
     Params,
 )
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
+
+
+DIAGNOSTICS = (
+    glmax.PearsonResidual(),
+    glmax.DevianceResidual(),
+    glmax.QuantileResidual(),
+    glmax.GoodnessOfFit(),
+    glmax.Influence(),
+)
 
 
 def unchecked_fit_result(base: FitResult, **overrides: object) -> FitResult:
@@ -80,10 +88,10 @@ def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
     fitted = glmax.fit(model, data)
     prediction = glmax.predict(model, fitted.params, data)
     inferred = glmax.infer(fitted)
-    pearson = glmax.check(fitted)
+    default_diagnostic = glmax.check(fitted)
     diagnostics = jtu.tree_map(
         lambda diagnostic: glmax.check(fitted, diagnostic=diagnostic),
-        DEFAULT_DIAGNOSTICS,
+        DIAGNOSTICS,
         is_leaf=lambda node: isinstance(node, AbstractDiagnostic),
     )
 
@@ -93,9 +101,9 @@ def test_grammar_contract_matrix_across_all_verbs(family, X, y) -> None:
     assert isinstance(inferred, InferenceResult)
     _assert_canonical_params_for_family(family, inferred.params)
     assert inferred.se.shape == fitted.params.beta.shape
-    assert pearson.shape == y.shape
+    assert isinstance(default_diagnostic, GofStats)
     assert isinstance(diagnostics, tuple)
-    assert len(diagnostics) == len(DEFAULT_DIAGNOSTICS)
+    assert len(diagnostics) == len(DIAGNOSTICS)
     pearson, deviance, quantile, gof, influence = diagnostics
     assert pearson.shape == y.shape
     assert deviance.shape == y.shape

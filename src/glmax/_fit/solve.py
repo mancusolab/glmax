@@ -37,11 +37,14 @@ class AbstractLinearSolver(eqx.Module, strict=True):
     def __call__(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> Array:
         r"""Solve one weighted least-squares linear system.
 
+        This solves the weighted least-squares problem induced by design
+        matrix $X$, working response $r$, and non-negative weights $w$.
+
         **Arguments:**
 
-        - `X`: Covariate matrix with shape `(n, p)`.
-        - `r`: Working-response vector with shape `(n,)`.
-        - `weights`: Per-sample non-negative weights with shape `(n,)`.
+        - `X`: covariate matrix $X$, shape `(n, p)`.
+        - `r`: working-response vector $r$, shape `(n,)`.
+        - `weights`: per-sample non-negative weight vector $w$, shape `(n,)`.
 
         **Returns:**
 
@@ -68,7 +71,10 @@ class QRSolver(AbstractLinearSolver, strict=True):
     solver: lx.AbstractLinearSolver
 
     def __init__(self, solver: lx.AbstractLinearSolver = lx.QR()) -> None:
-        r"""**Arguments:**
+        r"""Construct a QR-based solver.
+
+        **Arguments:**
+
         - `solver`: `lineax` solver instance (default: `lx.QR()`).
         """
         self.solver = solver
@@ -76,11 +82,15 @@ class QRSolver(AbstractLinearSolver, strict=True):
     def init(self, X: ArrayLike, r: ArrayLike, weights: ArrayLike) -> SolverState:
         r"""Build weighted QR operator inputs.
 
+        This uses $\sqrt{w}$ so the least-squares objective is
+        $\lVert \sqrt{W}(X \beta - r)\rVert_2^2$, where
+        $W = \operatorname{diag}(w)$.
+
         **Arguments:**
 
-        - `X`: Covariate matrix with shape `(n, p)`.
-        - `r`: Working-response vector with shape `(n,)`.
-        - `weights`: Per-sample weights with shape `(n,)`.
+        - `X`: covariate matrix $X$, shape `(n, p)`.
+        - `r`: working-response vector $r$, shape `(n,)`.
+        - `weights`: per-sample weight vector $w$, shape `(n,)`.
 
         **Returns:**
 
@@ -110,7 +120,10 @@ class CholeskySolver(AbstractLinearSolver):
     solver: lx.AbstractLinearSolver
 
     def __init__(self, solver: lx.AbstractLinearSolver = lx.Cholesky()) -> None:
-        r"""**Arguments:**
+        r"""Construct a Cholesky-based solver.
+
+        **Arguments:**
+
         - `solver`: `lineax` solver instance (default: `lx.Cholesky()`).
         """
         self.solver = solver
@@ -133,7 +146,10 @@ class CGSolver(AbstractLinearSolver):
     solver: lx.AbstractLinearSolver
 
     def __init__(self, solver: lx.AbstractLinearSolver = lx.Normal(lx.CG(atol=1e-5, rtol=1e-5))) -> None:
-        r"""**Arguments:**
+        r"""Construct a conjugate-gradient solver.
+
+        **Arguments:**
+
         - `solver`: `lineax` solver instance (default: `lx.Normal(lx.CG(atol=1e-5, rtol=1e-5))`).
         """
         self.solver = solver

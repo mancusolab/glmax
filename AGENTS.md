@@ -5,14 +5,14 @@
 
 ## Contracts
 - **Exposes**:
-  - Package-root API from `src/glmax/__init__.py`: `GLMData`, `Params`, `GLM`, `AbstractFitter`, `FitResult`, `FittedGLM`, `InferenceResult`, `AbstractDiagnostic`, `DEFAULT_DIAGNOSTICS`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `specify`, `predict`, `fit`, `infer`, `check`.
+  - Package-root API from `src/glmax/__init__.py`: `GLMData`, `Params`, `GLM`, `AbstractFitter`, `FitResult`, `FittedGLM`, `InferenceResult`, `AbstractDiagnostic`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `specify`, `predict`, `fit`, `infer`, `check`.
   - Family and link implementations from `src/glmax/family/__init__.py`.
   - User-facing grammar docs in `README.md`, `docs/index.md`, `docs/api/verbs.md`, `docs/api/nouns.md`, `docs/api/fitters.md`, `docs/api/inference.md`, and `docs/api/family.md`.
 - **Guarantees**:
   - Canonical user workflow is `specify -> fit -> predict -> infer -> check`.
   - `glmax.fit(model, data, init=None, *, fitter=IRLSFitter())` is the curated public fit contract, is `@eqx.filter_jit`-wrapped, and returns `FittedGLM`.
   - `glmax.predict(model, params, data)` is also `@eqx.filter_jit`-wrapped.
-  - `infer(fitted, inferrer=WaldTest(), stderr=FisherInfoError())` and `check(fitted, diagnostics=...)` operate on the fitted noun without refitting.
+  - `infer(fitted, inferrer=WaldTest(), stderr=FisherInfoError())` and `check(fitted, diagnostic=...)` operate on the fitted noun without refitting.
   - `GLM` is a pure specification noun (`family` field only). It has no `.fit` method and no `solver` field. Use `glmax.fit(model, data)`. The solver lives on the fitter strategy.
   - `GLM` exposes a method interface that the fitting and inference kernels program against. User-facing: `mean(eta)`, `log_prob(y, eta, disp, aux=None)`, `sample(key, eta, disp, aux=None)`. Kernel-facing: `init_eta(y)`, `working_weights(eta, disp, aux=None)`, `link_deriv(mu)`, `update_nuisance(X, y, eta, disp, step_size, aux=None) -> (new_disp, new_aux)`, `init_nuisance() -> (default_disp, default_aux)`. All delegate to `self.family`. Do not call `model.family.xxx` from kernels — use `model.xxx`.
   - `Gamma` is a supported family (exported from `glmax.family`). Dispersion estimation for Gamma is deferred.
@@ -23,7 +23,7 @@
   - `FitResult` is the fitter contract and carries `params`, `X`, `y`, `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`, `objective_delta`, and `score_residual`.
   - `FittedGLM` is the public fitted noun and binds `model` plus `result`, forwarding common fit artifacts for ergonomics.
   - `InferenceResult` carries `params`, `se`, `stat`, and `p`; those summaries are produced by `infer(fitted, ...)`, not `fit(...)`.
-  - `check(fitted)` is `@eqx.filter_jit`-wrapped and returns a tuple of diagnostic results in the same positional order as the `diagnostics` tuple argument. The default `DEFAULT_DIAGNOSTICS` computes `(PearsonResidual, DevianceResidual, QuantileResidual, GoodnessOfFit, Influence)`.
+  - `check(fitted, diagnostic=...)` is `@eqx.filter_jit`-wrapped and returns a single typed diagnostic result `T` for the supplied `AbstractDiagnostic[T]`. `check(fitted)` uses the function's default diagnostic without refitting.
   - `AbstractFitter` subclasses must declare a `solver: AbstractLinearSolver` field. `IRLSFitter` defaults to `CholeskySolver()`.
   - `GLMData.weights` is not part of the supported public `fit` or `predict` contract unless docs and tests are updated in the same change.
   - Negative Binomial stores its auxiliary `alpha` in `Params.aux`; canonical `Params.disp` remains the GLM dispersion slot and is `1.0` for Negative Binomial fits.
@@ -38,7 +38,7 @@
   - `src/glmax/_fit/irls.py` owns `IRLSFitter` (the default fitter) and the `_irls` kernel. `_irls` takes `model: GLM` and calls only `model.xxx` methods rather than reaching into `model.family.xxx` directly. Keep user-facing fitting routed through `glmax.fit(...)`; `_irls` is an internal kernel seam.
   - `src/glmax/_fit/solve.py` is the canonical home for linear solver contracts (`AbstractLinearSolver`, `CholeskySolver`, `QRSolver`, `CGSolver`).
   - `src/glmax/_fit/__init__.py` re-exports all fit internals.
-  - `src/glmax/diagnostics.py` owns `AbstractDiagnostic`, the built-in diagnostic strategies/results, `DEFAULT_DIAGNOSTICS`, and `check`.
+  - `src/glmax/diagnostics.py` owns `AbstractDiagnostic`, the built-in diagnostic strategies/results, and `check`.
   - `src/glmax/_infer/infer.py` owns `infer`.
   - `src/glmax/_infer/types.py` owns `InferenceResult`.
   - `src/glmax/_infer/hyptest.py` owns `AbstractTest`, `WaldTest`, `ScoreTest`.

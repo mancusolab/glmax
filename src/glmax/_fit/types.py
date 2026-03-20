@@ -17,15 +17,17 @@ class Params(NamedTuple):
 
     A lightweight immutable container for the fitted coefficient vector,
     dispersion estimate, and optional family-specific auxiliary scalar. Used as
-    the `init` argument to `fit(...)` for warm-starting and forwarded inside
-    `FitResult` and `InferenceResult`.
+    the `init` argument to [`glmax.fit`][] for warm-starting and forwarded
+    inside [`glmax.FitResult`][] and [`glmax.InferenceResult`][]. The tuple
+    stores $(\beta, \phi, a)$, where $\beta$ is the regression coefficient
+    vector, $\phi$ is the GLM dispersion scalar, and $a$ is optional
+    family-specific auxiliary state.
 
     **Arguments:**
 
-    - `beta`: coefficient vector, inexact rank-1 array of shape `(p,)`.
-    - `disp`: dispersion scalar; `1.0` for fixed-dispersion families
-      (Poisson, Binomial); estimated for Gaussian and NegativeBinomial.
-    - `aux`: optional family-specific auxiliary scalar.
+    - `beta`: coefficient vector $\beta$, inexact rank-1 array of shape `(p,)`.
+    - `disp`: dispersion scalar $\phi$.
+    - `aux`: optional auxiliary scalar $a$.
     """
 
     beta: Array
@@ -36,9 +38,9 @@ class Params(NamedTuple):
 class FitResult(eqx.Module, strict=True):
     r"""Canonical fitter output contract.
 
-    Produced by every `AbstractFitter` strategy and consumed by `FittedGLM`,
-    `infer(...)`, and `check(...)`. All fields are validated at construction
-    time via `__check_init__`.
+    Produced by every [`glmax.AbstractFitter`][] strategy and consumed by
+    [`glmax.FittedGLM`][], [`glmax.infer`][], and [`glmax.check`][]. All
+    fields are validated at construction time via `__check_init__`.
     """
 
     params: Params
@@ -67,19 +69,29 @@ class FitResult(eqx.Module, strict=True):
         objective_delta: Array,
         score_residual: Array,
     ) -> None:
-        r"""**Arguments:**
-        - `params`: `Params` holding $\hat\beta$, $\hat\phi$, and optional
-          family-specific auxiliary state.
-        - `X`: covariate matrix, shape `(n, p)`.
-        - `y`: observed response, shape `(n,)`.
-        - `eta`: converged linear predictor $\hat\eta = X\hat\beta$, shape `(n,)`.
-        - `mu`: fitted means $\hat\mu = g^{-1}(\hat\eta)$, shape `(n,)`.
-        - `glm_wt`: GLM working weights at convergence, shape `(n,)`.
+        r"""Construct a validated [`glmax.FitResult`][].
+
+        The fitted state stores $(\hat{\beta}, \hat{\eta}, \hat{\mu})$,
+        where $\hat{\beta}$ is the fitted coefficient vector,
+        $\hat{\eta}$ is the fitted linear predictor, and
+        $\hat{\mu} = g^{-1}(\hat{\eta})$ is the fitted mean response.
+
+        **Arguments:**
+
+        - `params`: [`glmax.Params`][] holding
+          $(\hat{\beta}, \hat{\phi}, \hat{a})$.
+        - `X`: covariate matrix $X$, shape `(n, p)`.
+        - `y`: observed response vector $y$, shape `(n,)`.
+        - `eta`: fitted linear predictor $\hat{\eta}$, shape `(n,)`.
+        - `mu`: fitted mean response $\hat{\mu}$, shape `(n,)`.
+        - `glm_wt`: GLM working weight vector $w$, shape `(n,)`.
         - `converged`: boolean scalar; `True` if IRLS converged within tolerance.
         - `num_iters`: integer scalar; number of IRLS iterations taken.
         - `objective`: final negative log-likelihood scalar.
         - `objective_delta`: change in objective on the last iteration.
-        - `score_residual`: working residual $(y - \hat\mu) g'(\hat\mu)$, shape `(n,)`.
+        - `score_residual`: score-style residual
+          $(y - \hat{\mu}) g'(\hat{\mu})$, shape `(n,)`, where $g$ is the link
+          function.
         """
         self.params = params
         self.X = X
@@ -174,9 +186,9 @@ class FitResult(eqx.Module, strict=True):
 class FittedGLM(eqx.Module, strict=True):
     r"""Canonical fitted-model noun produced by `fit(...)`.
 
-    Binds a `GLM` specification with its `FitResult` and forwards the most
-    commonly accessed fit artifacts as properties. Pass `FittedGLM` directly
-    to `infer(...)` and `check(...)`.
+    Binds a [`glmax.GLM`][] specification with its [`glmax.FitResult`][] and
+    forwards the most commonly accessed fit artifacts as properties. Pass
+    [`glmax.FittedGLM`][] directly to [`glmax.infer`][] and [`glmax.check`][].
 
     Common artifacts are available as forwarding properties: `params`, `beta`,
     `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`,
@@ -187,9 +199,12 @@ class FittedGLM(eqx.Module, strict=True):
     result: FitResult
 
     def __init__(self, model: GLM, result: FitResult) -> None:
-        r"""**Arguments:**
-        - `model`: the `GLM` specification used during fitting.
-        - `result`: the `FitResult` produced by the fitter strategy.
+        r"""Construct a [`glmax.FittedGLM`][] noun.
+
+        **Arguments:**
+
+        - `model`: [`glmax.GLM`][] specification used during fitting.
+        - `result`: [`glmax.FitResult`][] produced by the fitter strategy.
         """
         self.model = model
         self.result = result
@@ -262,15 +277,19 @@ class AbstractFitter(eqx.Module, strict=True):
     def __call__(self, model: GLM, data: GLMData, init: Params | None = None) -> FitResult:
         r"""Fit `model` against `data` and return a `FitResult`.
 
+        Concrete fitters return the full fit contract, not just the fitted
+        coefficient vector.
+
         **Arguments:**
 
-        - `model`: `GLM` specification noun.
-        - `data`: `GLMData` noun.
-        - `init`: optional `Params` for warm-starting; `None` uses the family default.
+        - `model`: [`glmax.GLM`][] specification noun.
+        - `data`: [`glmax.GLMData`][] noun.
+        - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
+          the family default.
 
         **Returns:**
 
-        `FitResult` carrying all fit artifacts.
+        [`glmax.FitResult`][] carrying all fit artifacts.
         """
 
 

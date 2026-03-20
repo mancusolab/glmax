@@ -65,7 +65,6 @@ __all__ = [
     "FittedGLM",
     "InferenceResult",
     "AbstractDiagnostic",
-    "DEFAULT_DIAGNOSTICS",
     "DevianceResidual",
     "GoodnessOfFit",
     "GofStats",
