@@ -10,7 +10,6 @@ import lineax as lx
 from jax import Array, lax
 from jaxtyping import ArrayLike, ScalarLike
 
-from ..data import GLMData
 from ..family import ExponentialDispersionFamily
 from .types import AbstractFitter, FitResult, Params
 
@@ -98,8 +97,15 @@ class IRLSFitter(AbstractFitter, strict=True):
     """
 
     solver: lx.AbstractLinearSolver
+    max_iter: int
+    tol: float
 
-    def __init__(self, solver: lx.AbstractLinearSolver = lx.Cholesky()):
+    def __init__(
+        self,
+        solver: lx.AbstractLinearSolver = lx.Cholesky(),
+        max_iter: int = 1000,
+        tol: float = 1e-3,
+    ):
         r"""Construct an IRLS fitter.
 
         **Arguments:**
@@ -107,32 +113,38 @@ class IRLSFitter(AbstractFitter, strict=True):
         - `solver`: `lineax` solver used for each IRLS weighted least-squares
           step. Defaults to `lx.Cholesky()`. Any `lx.AbstractLinearSolver`
           that handles symmetric positive-semidefinite systems works here.
+        - `max_iter`: maximum number of IRLS iterations. Defaults to `1000`.
+        - `tol`: convergence tolerance on the objective change. Defaults to `1e-3`.
         """
         self.solver = solver
+        self.max_iter = max_iter
+        self.tol = tol
 
-    def __call__(
+    def fit(
         self,
         family: ExponentialDispersionFamily,
-        data: GLMData,
+        X: Array,
+        y: Array,
+        offset: Array,
+        weights: Array | None,
         init: Params | None = None,
-        max_iter: int = 1000,
-        tol: float = 1e-3,
         step_size: float = 1.0,
     ) -> FitResult:
         r"""Run IRLS to convergence and return a `FitResult`.
 
         IRLS iterates on the linear predictor $\eta$ and nuisance state until
-        the objective change falls below `tol` or the iteration count reaches
-        `max_iter`.
+        the objective change falls below `self.tol` or the iteration count
+        reaches `self.max_iter`.
 
         **Arguments:**
 
         - `family`: [`glmax.ExponentialDispersionFamily`][] instance.
-        - `data`: internal [`glmax.data.GLMData`][] carrying validated arrays.
+        - `X`: covariate matrix, shape `(n, p)`.
+        - `y`: response vector, shape `(n,)`.
+        - `offset`: offset vector, shape `(n,)`.
+        - `weights`: optional per-sample weight vector, shape `(n,)`.
         - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
           the family default.
-        - `max_iter`: maximum number of IRLS iterations (default `1000`).
-        - `tol`: convergence tolerance on the objective change (default `1e-3`).
         - `step_size`: IRLS update step-size multiplier (default `1.0`).
 
         **Returns:**
@@ -140,11 +152,8 @@ class IRLSFitter(AbstractFitter, strict=True):
         [`glmax.FitResult`][] with converged parameters, fit artifacts, and
         convergence metadata.
         """
-        if not isinstance(data, GLMData):
-            raise TypeError("fit(...) expects `data` to be a GLMData instance.")
-        if data.weights is not None:
-            raise ValueError("GLMData.weights is not supported yet.")
-        X, y, offset, _ = data.canonical_arrays()
+        if weights is not None:
+            raise ValueError("Per-sample weights are not supported yet.")
 
         default_disp, default_aux = family.init_nuisance()
         if init is not None:
@@ -156,20 +165,20 @@ class IRLSFitter(AbstractFitter, strict=True):
             aux_init = default_aux
             init_eta = family.init_eta(y)
 
-        state = _irls(
+        irls_state = _irls(
             X,
             y,
             family,
             self.solver,
             init_eta,
-            max_iter,
-            tol,
+            self.max_iter,
+            self.tol,
             step_size,
             offset,
             disp_init=disp_init,
             aux_init=aux_init,
         )
-        beta, n_iter, converged, disp, aux, objective, objective_delta = state
+        beta, n_iter, converged, disp, aux, objective, objective_delta = irls_state
 
         eta = X @ beta + offset
         mu, link_deriv, weight = family.calc_weight(eta, disp, aux)

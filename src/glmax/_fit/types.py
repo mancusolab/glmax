@@ -8,7 +8,6 @@ import lineax as lx
 
 from jax import Array, numpy as jnp
 
-from ..data import GLMData
 from ..family import ExponentialDispersionFamily
 
 
@@ -273,10 +272,20 @@ class AbstractFitter(eqx.Module, strict=True):
     """
 
     solver: eqx.AbstractVar[lx.AbstractLinearSolver]
+    max_iter: eqx.AbstractVar[int]
+    tol: eqx.AbstractVar[float]
 
     @abstractmethod
-    def __call__(self, family: ExponentialDispersionFamily, data: GLMData, init: Params | None = None) -> FitResult:
-        r"""Fit `family` against `data` and return a `FitResult`.
+    def fit(
+        self,
+        family: ExponentialDispersionFamily,
+        X: Array,
+        y: Array,
+        offset: Array,
+        weights: Array | None,
+        init: Params | None = None,
+    ) -> FitResult:
+        r"""Fit `family` against data and return a `FitResult`.
 
         Concrete fitters return the full fit contract, not just the fitted
         coefficient vector.
@@ -284,7 +293,10 @@ class AbstractFitter(eqx.Module, strict=True):
         **Arguments:**
 
         - `family`: [`glmax.ExponentialDispersionFamily`][] instance.
-        - `data`: [`glmax.GLMData`][] noun.
+        - `X`: covariate matrix, shape `(n, p)`.
+        - `y`: response vector, shape `(n,)`.
+        - `offset`: offset vector, shape `(n,)`.
+        - `weights`: optional per-sample weight vector, shape `(n,)`.
         - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
           the family default.
 

@@ -12,6 +12,8 @@ import jax.numpy as jnp
 import jax.tree_util as jtu
 import lineax as lx
 
+from jax import Array
+
 import glmax
 
 from glmax import (
@@ -30,7 +32,6 @@ from glmax import (
     QuantileResidual,
 )
 from glmax._fit import IRLSFitter
-from glmax.data import GLMData
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
 
@@ -140,10 +141,21 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
 
     class DummyFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
+        max_iter: int = 1000
+        tol: float = 1e-3
 
-        def __call__(self, family: ExponentialDispersionFamily, data: GLMData, init: Params | None = None) -> FitResult:
+        def fit(
+            self,
+            family: ExponentialDispersionFamily,
+            X: Array,
+            y: Array,
+            offset: Array,
+            weights: Array | None,
+            init: Params | None = None,
+        ) -> FitResult:
             seen["family"] = family
-            seen["data"] = data
+            seen["X"] = X
+            seen["y"] = y
             seen["init"] = init
             return expected
 
@@ -158,7 +170,8 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
     assert bool(eqx.tree_equal(result.family, family))
     assert bool(eqx.tree_equal(result.result, expected))
     assert isinstance(seen["family"], ExponentialDispersionFamily)
-    assert isinstance(seen["data"], GLMData)
+    assert isinstance(seen["X"], jnp.ndarray)
+    assert isinstance(seen["y"], jnp.ndarray)
     assert isinstance(seen["init"], Params)
     assert seen["init"]._fields == ("beta", "disp", "aux")
 

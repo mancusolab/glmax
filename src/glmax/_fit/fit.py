@@ -2,11 +2,13 @@
 
 
 import equinox as eqx
+import jax.numpy as jnp
+import jax.tree_util as jtu
 
-from jax import Array, numpy as jnp
+from jax import Array
 from jaxtyping import ArrayLike
 
-from ..data import GLMData
+from .._misc import inexact_asarray
 from ..family import ExponentialDispersionFamily
 from .irls import IRLSFitter
 from .types import (
@@ -19,19 +21,6 @@ from .types import (
 
 
 __all__ = ["fit", "predict"]
-
-
-def _validated_params(params: Params, n_features: int) -> Params:
-    beta, disp, aux = _canonicalize_init(params, n_features)
-    assert beta is not None and disp is not None
-    return Params(beta=beta, disp=disp, aux=aux)
-
-
-def _normalize_init_aux(family: ExponentialDispersionFamily, params: Params) -> Params:
-    _, default_aux = family.init_nuisance()
-    if default_aux is None and params.aux is not None:
-        return Params(beta=params.beta, disp=params.disp, aux=None)
-    return params
 
 
 @eqx.filter_jit
@@ -83,14 +72,34 @@ def fit(
     if not isinstance(fitter, AbstractFitter):
         raise TypeError("fit(...) expects `fitter` to be an AbstractFitter instance.")
 
-    data = GLMData(X=X, y=y, offset=offset, weights=weights)
+    # ensure things are in inexact numerical space.
+    X, y = jtu.tree_map(inexact_asarray, (X, y))
+    if offset is None:
+        offset = jnp.zeros_like(y)
+    else:
+        offset = inexact_asarray(offset)
+
+    if weights is not None:
+        weights = inexact_asarray(weights)
+
+    if X.ndim != 2:
+        raise ValueError("X must be rank-2 with shape (n, p).")
+    if y.ndim != 1:
+        raise ValueError("y must be rank-1 with shape (n,).")
+    if X.shape[0] != y.shape[0]:
+        raise ValueError("X and y must share the sample dimension n.")
+
+    X = eqx.error_if(X, ~jnp.all(jnp.isfinite(X)), "X must contain only finite values.")
+    y = eqx.error_if(y, ~jnp.all(jnp.isfinite(y)), "y must contain only finite values.")
 
     if init is not None:
-        init = _validated_params(init, data.X.shape[1])
-        if not isinstance(fitter, IRLSFitter):
-            init = _normalize_init_aux(family, init)
+        beta, disp, aux = _canonicalize_init(init, X.shape[1])
+        _, default_aux = family.init_nuisance()
+        if default_aux is None:
+            aux = None
+        init = Params(beta=beta, disp=disp, aux=aux)
 
-    result = fitter(family, data, init)
+    result = fitter.fit(family, X, y, offset, weights, init)
 
     if not isinstance(result, FitResult):
         raise TypeError("fit(...) expects `fitter` to return a FitResult instance.")
@@ -136,9 +145,13 @@ def predict(
     if not isinstance(params, Params):
         raise TypeError("predict(...) expects `params` to be a Params instance.")
 
-    X_array = jnp.asarray(X)
-    offset_array = jnp.zeros(X_array.shape[0]) if offset is None else jnp.asarray(offset)
-    params = _normalize_init_aux(family, _validated_params(params, X_array.shape[1]))
+    X = inexact_asarray(X)
+    if offset is None:
+        offset = jnp.zeros(X.shape[0], dtype=X.dtype)
+    else:
+        offset = inexact_asarray(offset)
 
-    eta = X_array @ params.beta + offset_array
+    beta, _disp, _aux = _canonicalize_init(params, X.shape[1])
+
+    eta = X @ beta + offset
     return family.glink.inverse(eta)
