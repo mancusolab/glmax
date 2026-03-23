@@ -81,7 +81,7 @@ The link is passed directly to the family constructor. See [Families & Links](ap
 
 ## Offsets
 
-Both libraries use `offset=` as a keyword argument. The offset is added to the linear predictor before the inverse link is applied.
+Both libraries use `offset=` as a keyword argument. In statsmodels it goes to `.fit()`; in glmax it goes to `fit()` directly. Either way, the offset is added to the linear predictor before the inverse link is applied.
 
 **statsmodels:**
 
@@ -161,7 +161,7 @@ A few things statsmodels provides that glmax doesn't yet support:
 
 - **`.summary()` formatted tables** — inference results are structured arrays, not formatted text. Use `result.params.beta`, `result.se`, etc. directly.
 - **Dispersion inference** — standard errors on the dispersion parameter for Gaussian and Gamma are on the roadmap.
-- **Per-sample weights** — `weights=` is accepted but not yet implemented.
+- **Per-sample weights** — not yet implemented; passing `weights=` raises `ValueError`.
 
 ---
 

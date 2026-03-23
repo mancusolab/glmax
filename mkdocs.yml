@@ -101,7 +101,7 @@ plugins:
 
 nav:
     - Home: 'index.md'
-    - Overview: 'guide.md'
+    - Getting Started: 'guide.md'
     - JAX Transformations: 'jax-transformations.md'
     - From statsmodels: 'from-statsmodels.md'
     - API:
@@ -114,7 +114,6 @@ nav:
               - 'Strategies & Standard Errors': 'api/infer/strategies.md'
           - 'check': 'api/check.md'
           - 'predict': 'api/predict.md'
-    - Release Notes: 'release-notes.md'
     - Misc:
         - 'authors.md'
         - 'license.md'

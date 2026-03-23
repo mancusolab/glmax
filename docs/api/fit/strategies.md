@@ -8,7 +8,7 @@ fitted_irls   = glmax.fit(family, X, y)
 fitted_newton = glmax.fit(family, X, y, fitter=glmax.NewtonFitter())
 ```
 
-Both strategies return the same `FittedGLM` noun and are `eqx.filter_jit`-compatible.
+Both strategies return the same `FittedGLM` noun and work with JIT compilation and JAX transforms.
 
 ## Fitter strategies
 

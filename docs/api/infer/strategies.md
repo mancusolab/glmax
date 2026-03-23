@@ -1,4 +1,4 @@
-# Inference Strategies And Standard Errors
+# Inference strategies and standard errors
 
 `infer` delegates to an explicit hypothesis-test strategy and, when needed, an
 explicit covariance estimator. This separation keeps the workflow clear about

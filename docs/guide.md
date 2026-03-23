@@ -1,6 +1,9 @@
-# Overview
+# Getting Started
 
-glmax uses four verbs — [`fit`](api/fit/index.md), [`predict`](api/predict.md), [`infer`](api/infer/index.md), and [`check`](api/check.md) — that pass explicit nouns between them. No hidden state is threaded between calls. This page walks through each verb in turn.
+glmax uses four verbs — [`fit`](api/fit/index.md), [`predict`](api/predict.md), [`infer`](api/infer/index.md), and [`check`](api/check.md) — that pass explicit nouns between them. This page walks through each verb in turn.
+
+!!! note "Design philosophy"
+    glmax is built around a simple idea: the API should be a grammar of *verbs* that operate on *nouns*. Verbs are plain functions (`fit`, `predict`, `infer`, `check`). Nouns are immutable containers for results (`FittedGLM`, `InferenceResult`, and so on). Nothing is hidden inside a model object. You can inspect, pass, store, or vmap over any noun directly.
 
 If you're coming from statsmodels, the [From statsmodels](from-statsmodels.md) page maps the two APIs side by side.
 
@@ -30,11 +33,12 @@ fitted.params.beta     # coefficient vector, shape (p,)
 fitted.params.disp     # dispersion φ
 fitted.mu              # fitted means E[y | X], shape (n,)
 fitted.eta             # linear predictor Xβ, shape (n,)
-fitted.converged       # True if IRLS converged within tolerance
+fitted.converged       # True if the fitter converged within tolerance
 fitted.num_iters       # number of iterations taken
 ```
 
-One thing to note: glmax doesn't add an intercept automatically. Include a column of ones in `X` if you want one, as above.
+!!! warning "No automatic intercept"
+    glmax doesn't add an intercept automatically. Include a column of ones in `X` if you want one, as in the example above. This is intentional — it keeps the design matrix explicit and avoids surprises when you're controlling exactly which covariates are included.
 
 ---
 

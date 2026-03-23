@@ -44,7 +44,7 @@ fitted_folds = eqx.filter_vmap(
 
 `fit` is a JAX-differentiable primitive. Both forward-mode (`jax.jvp`) and reverse-mode (`jax.grad`) work.
 
-Under the hood, glmax registers a custom JVP rule based on the [Implicit Function Theorem](https://en.wikipedia.org/wiki/Implicit_function_theorem). At convergence, the score equation $\nabla_\beta \ell = 0$ holds. Differentiating implicitly gives the tangent system $H \, d\hat\beta = -\partial_{\text{data}}(\nabla_\beta \ell) \cdot d(\text{data})$, where $H = X^\top W X$ is the Fisher information at the converged fit. This is cheaper and more stable than differentiating through the IRLS iterations.
+Under the hood, glmax registers a custom JVP rule based on the [Implicit Function Theorem](https://en.wikipedia.org/wiki/Implicit_function_theorem). Rather than differentiating through the solver iterations, glmax computes the tangent analytically: at the MLE the score is zero, and differentiating that condition gives $H \, d\hat\beta = -\partial_{\text{data}}(\nabla_\beta \ell) \cdot d(\text{data})$, where $H = X^\top W X$ is the Fisher information at the converged fit. This avoids accumulating gradients through potentially hundreds of solver steps.
 
 ### Forward-mode: sensitivities of β to data perturbations
 
@@ -77,15 +77,17 @@ def held_out_loglik(y_train, X_train, y_test, X_test):
     mu_test = glmax.predict(fitted.family, fitted.params, X_test)
     return -jnp.sum(y_test * jnp.log(mu_test) - mu_test)   # Poisson NLL
 
-grad_fn = jax.grad(held_out_loglik)
-g = grad_fn(y_train, X_train, y_test, X_test)
-# g[i] = ∂(held-out NLL) / ∂y_train[i]
+# Differentiate w.r.t. y_train and X_train (argnums 0 and 1)
+grad_fn = jax.grad(held_out_loglik, argnums=(0, 1))
+g_y, g_X = grad_fn(y_train, X_train, y_test, X_test)
 ```
 
 `jax.value_and_grad` also works:
 
 ```python
-loss, grads = jax.value_and_grad(held_out_loglik)(y_train, X_train, y_test, X_test)
+loss, (g_y, g_X) = jax.value_and_grad(
+    held_out_loglik, argnums=(0, 1)
+)(y_train, X_train, y_test, X_test)
 ```
 
 ### Differentiating `predict`
@@ -107,6 +109,9 @@ dpred_dbeta = jax.grad(total_predicted)(fitted.params.beta)
 ## JIT compilation
 
 All verbs are JIT-compiled on first call. The family instance and fitter strategy are treated as static structure — changing them forces a retrace, while changing `X`, `y`, or other arrays does not.
+
+!!! note "First-call latency"
+    The first call to any verb traces and compiles the computation. This can take a few seconds on the first run but is a one-time cost — subsequent calls with the same array shapes are fast. If you're benchmarking, always time the second call.
 
 If you're calling `fit` inside a larger JIT-compiled function, there's no need to double-wrap:
 
