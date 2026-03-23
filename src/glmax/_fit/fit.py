@@ -13,7 +13,6 @@ from ..family import ExponentialDispersionFamily
 from .irls import IRLSFitter
 from .types import (
     AbstractFitter,
-    FitResult,
     FittedGLM,
     Params,
 )
@@ -99,10 +98,6 @@ def fit(
         init = Params(beta=init.beta, disp=init.disp, aux=None if default_aux is None else init.aux)
 
     result = fitter.fit(family, X, y, offset, weights, init)
-
-    if not isinstance(result, FitResult):
-        raise TypeError("fit(...) expects `fitter` to return a FitResult instance.")
-
     return FittedGLM(family=family, result=result)
 
 
