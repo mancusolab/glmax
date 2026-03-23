@@ -131,7 +131,7 @@ def test_check_signature_matches_canonical_surface() -> None:
     sig = inspect.signature(glmax.check)
     assert list(sig.parameters) == ["fitted", "diagnostic"]
     assert sig.parameters["fitted"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-    assert sig.parameters["diagnostic"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert sig.parameters["diagnostic"].kind is inspect.Parameter.KEYWORD_ONLY
     assert sig.parameters["diagnostic"].default is not inspect.Signature.empty
 
 
@@ -299,6 +299,7 @@ def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None
         glink: IdentityLink = IdentityLink()
         _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
         _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+        is_discrete: ClassVar[bool] = False
 
         def negloglikelihood(self, y, eta, disp=1.0, aux=None):
             del aux

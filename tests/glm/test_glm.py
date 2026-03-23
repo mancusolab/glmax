@@ -93,6 +93,7 @@ class _AuxiliaryWarmStartFamily(ExponentialDispersionFamily):
     glink: IdentityLink = IdentityLink()
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+    is_discrete: ClassVar[bool] = False
 
     def negloglikelihood(self, y, eta, disp=0.0, aux=None):
         del disp, aux
@@ -126,6 +127,7 @@ class _LegacyCalcWeightFamily(ExponentialDispersionFamily):
     glink: IdentityLink = IdentityLink()
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+    is_discrete: ClassVar[bool] = False
 
     def negloglikelihood(self, y, eta, disp=0.0, aux=None):
         del disp, aux
@@ -159,6 +161,7 @@ class _MissingAuxLogProbFamily(ExponentialDispersionFamily):
     glink: IdentityLink = IdentityLink()
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+    is_discrete: ClassVar[bool] = False
 
     def negloglikelihood(self, y, eta, disp=0.0):
         del disp

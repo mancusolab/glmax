@@ -33,7 +33,13 @@ class ExponentialDispersionFamily(eqx.Module):
     `aux` stores optional family-specific state $a$.
     """
 
+    # instances of concrete classes should hold a link function
     glink: AbstractVar[AbstractLink]
+
+    # helper class variable to discern if support is discrete or continuous
+    is_discrete: AbstractClassVar[bool]
+
+    # internal class variables to help with QC and invariant checking
     _links: AbstractClassVar[list[type[AbstractLink]]]
     _bounds: AbstractClassVar[tuple[float, float]]
 
@@ -258,6 +264,7 @@ class Gaussian(ExponentialDispersionFamily):
     """
 
     glink: AbstractLink = IdentityLink()
+    is_discrete: ClassVar[bool] = False
     _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink, PowerLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
 
@@ -452,6 +459,7 @@ class Binomial(ExponentialDispersionFamily):
     """
 
     glink: AbstractLink = LogitLink()
+    is_discrete: ClassVar[bool] = True
     _links: ClassVar[list[type[AbstractLink]]] = [
         LogitLink,
         LogLink,
@@ -586,6 +594,7 @@ class Poisson(ExponentialDispersionFamily):
     """
 
     glink: AbstractLink = LogLink()
+    is_discrete: ClassVar[bool] = True
     _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink]  # Sqrt
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
@@ -715,6 +724,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
     """
 
     glink: AbstractLink = LogLink()
+    is_discrete: ClassVar[bool] = True
     _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink, NBLink, PowerLink]  # CLogLog
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
@@ -982,6 +992,7 @@ class Gamma(ExponentialDispersionFamily):
     """
 
     glink: AbstractLink = InverseLink()
+    is_discrete: ClassVar[bool] = False
     _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, InverseLink, LogLink]
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 

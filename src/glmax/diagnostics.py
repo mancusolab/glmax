@@ -11,7 +11,7 @@ from jax.scipy import linalg as jscla
 from jaxtyping import Array
 
 from ._fit import FittedGLM
-from .family.dist import Binomial, Gaussian, NegativeBinomial, Poisson
+from .family.dist import Gaussian
 
 
 T = TypeVar("T")
@@ -121,7 +121,6 @@ class DevianceResidual(AbstractDiagnostic[Array], strict=True):
         return jnp.sign(y - mu) * jnp.sqrt(d)
 
 
-_DISCRETE_FAMILIES = (Poisson, Binomial, NegativeBinomial)
 _EPS = jnp.finfo(jnp.float64).eps
 
 
@@ -161,7 +160,7 @@ class QuantileResidual(AbstractDiagnostic[Array], strict=True):
         aux = fitted.params.aux
 
         p_upper = family.cdf(y, mu, disp, aux=aux)
-        p_lower = family.cdf(y - 1.0, mu, disp, aux=aux) if isinstance(family, _DISCRETE_FAMILIES) else p_upper
+        p_lower = family.cdf(y - 1.0, mu, disp, aux=aux) if family.is_discrete else p_upper
         p_mid = 0.5 * (p_upper + p_lower)
         p_mid = jnp.clip(jnp.asarray(p_mid), _EPS, 1.0 - _EPS)
         return jaxstats.norm.ppf(p_mid)
@@ -313,6 +312,7 @@ class Influence(AbstractDiagnostic[InfluenceStats], strict=True):
 @eqx.filter_jit
 def check(
     fitted: FittedGLM,
+    *,
     diagnostic: AbstractDiagnostic[T] = GoodnessOfFit(),
 ) -> T:
     r"""Assess model fit with one diagnostic and return its typed result.

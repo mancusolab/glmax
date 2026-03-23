@@ -51,6 +51,7 @@ class _CanonicalWarmStartFamily(ExponentialDispersionFamily):
     glink: IdentityLink = IdentityLink()
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+    is_discrete: ClassVar[bool] = False
 
     def negloglikelihood(self, y, eta, disp=1.0, aux=None):
         del aux
@@ -89,6 +90,7 @@ class _NonIdempotentCanonicalWarmStartFamily(ExponentialDispersionFamily):
     glink: IdentityLink = IdentityLink()
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+    is_discrete: ClassVar[bool] = False
 
     def negloglikelihood(self, y, eta, disp=1.0, aux=None):
         del aux
@@ -129,6 +131,7 @@ class _AuxSensitiveIRLSFamily(ExponentialDispersionFamily):
     glink: IdentityLink = IdentityLink()
     _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
     _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
+    is_discrete: ClassVar[bool] = False
 
     def negloglikelihood(self, y, eta, disp=1.0, aux=None):
         del disp
