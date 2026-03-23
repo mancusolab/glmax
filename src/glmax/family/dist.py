@@ -11,7 +11,7 @@ import jax.scipy.stats as jaxstats
 
 from equinox import AbstractVar
 from jax.scipy.special import betainc, gammaln, xlogy
-from jaxtyping import Array, ArrayLike, ScalarLike
+from jaxtyping import Array, ScalarLike
 
 from .links import (
     AbstractLink,
@@ -63,8 +63,8 @@ class ExponentialDispersionFamily(eqx.Module):
     @abstractmethod
     def negloglikelihood(
         self,
-        y: ArrayLike,
-        eta: ArrayLike,
+        y: Array,
+        eta: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -88,7 +88,7 @@ class ExponentialDispersionFamily(eqx.Module):
         """
 
     @abstractmethod
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
+    def variance(self, mu: Array, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
         r"""Variance function $V(\mu)$.
 
         This returns the family-specific variance expression evaluated at
@@ -109,8 +109,8 @@ class ExponentialDispersionFamily(eqx.Module):
     @abstractmethod
     def cdf(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -134,8 +134,8 @@ class ExponentialDispersionFamily(eqx.Module):
     @abstractmethod
     def deviance_contribs(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -160,7 +160,7 @@ class ExponentialDispersionFamily(eqx.Module):
     def sample(
         self,
         key: Array,
-        eta: ArrayLike,
+        eta: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -184,7 +184,7 @@ class ExponentialDispersionFamily(eqx.Module):
 
     def calc_weight(
         self,
-        eta: ArrayLike,
+        eta: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> tuple[Array, Array, Array]:
@@ -214,14 +214,14 @@ class ExponentialDispersionFamily(eqx.Module):
         w = 1.0 / (v * g_deriv**2)
         return mu, g_deriv, w
 
-    def init_eta(self, y: ArrayLike) -> Array:
+    def init_eta(self, y: Array) -> Array:
         return self.glink((y + y.mean()) / 2)
 
     def update_nuisance(
         self,
-        X: ArrayLike,
-        y: ArrayLike,
-        eta: ArrayLike,
+        X: Array,
+        y: Array,
+        eta: Array,
         disp: ScalarLike,
         step_size: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
@@ -292,8 +292,8 @@ class Gaussian(ExponentialDispersionFamily):
 
     def negloglikelihood(
         self,
-        y: ArrayLike,
-        eta: ArrayLike,
+        y: Array,
+        eta: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -321,7 +321,7 @@ class Gaussian(ExponentialDispersionFamily):
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
         return -jnp.sum(jaxstats.norm.logpdf(y, mu, jnp.sqrt(safe_disp)))
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
+    def variance(self, mu: Array, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
         r"""Gaussian variance term $\phi V(\mu) = \phi$.
 
         When `disp <= 0` (e.g. the IRLS sentinel `0.0` on the first step
@@ -347,9 +347,9 @@ class Gaussian(ExponentialDispersionFamily):
 
     def update_nuisance(
         self,
-        X: ArrayLike,
-        y: ArrayLike,
-        eta: ArrayLike,
+        X: Array,
+        y: Array,
+        eta: Array,
         disp: ScalarLike,
         step_size: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
@@ -383,7 +383,7 @@ class Gaussian(ExponentialDispersionFamily):
     def sample(
         self,
         key: Array,
-        eta: ArrayLike,
+        eta: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -410,8 +410,8 @@ class Gaussian(ExponentialDispersionFamily):
 
     def cdf(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -437,8 +437,8 @@ class Gaussian(ExponentialDispersionFamily):
 
     def deviance_contribs(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -456,7 +456,7 @@ class Gaussian(ExponentialDispersionFamily):
         Non-negative deviance contributions, shape `(n,)`.
         """
         del disp, aux
-        return (jnp.asarray(y) - jnp.asarray(mu)) ** 2
+        return (y - mu) ** 2
 
 
 class Binomial(ExponentialDispersionFamily):
@@ -495,8 +495,8 @@ class Binomial(ExponentialDispersionFamily):
 
     def negloglikelihood(
         self,
-        y: ArrayLike,
-        eta: ArrayLike,
+        y: Array,
+        eta: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -519,17 +519,17 @@ class Binomial(ExponentialDispersionFamily):
         del disp, aux
         return -jnp.sum(jaxstats.bernoulli.logpmf(y, self.glink.inverse(eta)))
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
+    def variance(self, mu: Array, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
         del disp, aux
         return mu * (1 - mu)
 
-    def init_eta(self, y: ArrayLike) -> Array:
+    def init_eta(self, y: Array) -> Array:
         return self.glink((y + 0.5) / 2.0)
 
     def sample(
         self,
         key: Array,
-        eta: ArrayLike,
+        eta: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -552,8 +552,8 @@ class Binomial(ExponentialDispersionFamily):
 
     def cdf(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -571,12 +571,12 @@ class Binomial(ExponentialDispersionFamily):
         CDF values, shape `(n,)`.
         """
         del disp, aux
-        return jaxstats.bernoulli.cdf(y, p=jnp.asarray(mu))
+        return jaxstats.bernoulli.cdf(y, p=mu)
 
     def deviance_contribs(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -594,8 +594,8 @@ class Binomial(ExponentialDispersionFamily):
         Non-negative deviance contributions, shape `(n,)`.
         """
         del disp, aux
-        y_ = jnp.asarray(y)
-        mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
+        y_ = y
+        mu_ = jnp.clip(mu, *self._bounds)
         return 2.0 * (xlogy(y_, y_) - xlogy(y_, mu_) + xlogy(1.0 - y_, 1.0 - y_) - xlogy(1.0 - y_, 1.0 - mu_))
 
 
@@ -626,8 +626,8 @@ class Poisson(ExponentialDispersionFamily):
 
     def negloglikelihood(
         self,
-        y: ArrayLike,
-        eta: ArrayLike,
+        y: Array,
+        eta: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -649,14 +649,14 @@ class Poisson(ExponentialDispersionFamily):
         del disp, aux
         return -jnp.sum(jaxstats.poisson.logpmf(y, self.glink.inverse(eta)))
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
+    def variance(self, mu: Array, disp: ScalarLike = 0.0, aux: ScalarLike | None = None) -> Array:
         del disp, aux
         return mu
 
     def sample(
         self,
         key: Array,
-        eta: ArrayLike,
+        eta: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -679,8 +679,8 @@ class Poisson(ExponentialDispersionFamily):
 
     def cdf(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -698,12 +698,12 @@ class Poisson(ExponentialDispersionFamily):
         CDF values, shape `(n,)`.
         """
         del disp, aux
-        return jaxstats.poisson.cdf(y, mu=jnp.asarray(mu))
+        return jaxstats.poisson.cdf(y, mu=mu)
 
     def deviance_contribs(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 0.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -721,8 +721,8 @@ class Poisson(ExponentialDispersionFamily):
         Non-negative deviance contributions, shape `(n,)`.
         """
         del disp, aux
-        y_ = jnp.asarray(y)
-        mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
+        y_ = y
+        mu_ = jnp.clip(mu, *self._bounds)
         return 2.0 * (xlogy(y_, y_) - xlogy(y_, mu_) - (y_ - mu_))
 
 
@@ -756,8 +756,8 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
     def negloglikelihood(
         self,
-        y: ArrayLike,
-        eta: ArrayLike,
+        y: Array,
+        eta: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -797,14 +797,14 @@ class NegativeBinomial(ExponentialDispersionFamily):
         term2 = r * log1m_p + y * log_p
         return -jnp.sum(term1 + term2)
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
+    def variance(self, mu: Array, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
         alpha = aux
         return mu + alpha * (mu**2)
 
     def sample(
         self,
         key: Array,
-        eta: ArrayLike,
+        eta: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -833,9 +833,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         gamma_sample = rdm.gamma(key1, r, shape=mu.shape) * (mu / r)
         return rdm.poisson(key2, lam=gamma_sample).astype(jnp.float64)
 
-    def alpha_score_and_hessian(
-        self, X: ArrayLike, y: ArrayLike, eta: ArrayLike, alpha: ScalarLike
-    ) -> tuple[Array, Array]:
+    def alpha_score_and_hessian(self, X: Array, y: Array, eta: Array, alpha: ScalarLike) -> tuple[Array, Array]:
         r"""Gradient and Hessian of the negative log-likelihood w.r.t. $\alpha$.
 
         Here $\alpha > 0$ is the Negative Binomial overdispersion parameter.
@@ -859,9 +857,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         _alpha_hess = jax.hessian(_ll)
         return _alpha_score(alpha), _alpha_hess(alpha)  # .reshape((1,))
 
-    def log_alpha_score_and_hessian(
-        self, X: ArrayLike, y: ArrayLike, eta: ArrayLike, log_alpha: ScalarLike
-    ) -> tuple[Array, Array]:
+    def log_alpha_score_and_hessian(self, X: Array, y: Array, eta: Array, log_alpha: ScalarLike) -> tuple[Array, Array]:
         r"""Gradient and Hessian of the negative log-likelihood w.r.t. $\log\alpha$.
 
         Differentiates in log-space to ensure $\alpha > 0$ throughout Newton
@@ -891,9 +887,9 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
     def update_nuisance(
         self,
-        X: ArrayLike,
-        y: ArrayLike,
-        eta: ArrayLike,
+        X: Array,
+        y: Array,
+        eta: Array,
         disp: ScalarLike,
         step_size: ScalarLike = 0.1,
         aux: ScalarLike | None = None,
@@ -944,8 +940,8 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
     def cdf(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -964,14 +960,13 @@ class NegativeBinomial(ExponentialDispersionFamily):
         """
         alpha = aux
         r = 1.0 / alpha
-        mu_ = jnp.asarray(mu)
-        p_fail = r / (r + mu_)
+        p_fail = r / (r + mu)
         return betainc(r, jnp.floor(y) + 1.0, p_fail)
 
     def deviance_contribs(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -990,8 +985,8 @@ class NegativeBinomial(ExponentialDispersionFamily):
         """
         alpha = aux
         r = 1.0 / alpha
-        y_ = jnp.asarray(y)
-        mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
+        y_ = y
+        mu_ = jnp.clip(mu, *self._bounds)
         return 2.0 * (r * (jnp.log1p(mu_ / r) - jnp.log1p(y_ / r)) + xlogy(y_, y_) - xlogy(y_, mu_))
 
 
@@ -1024,8 +1019,8 @@ class Gamma(ExponentialDispersionFamily):
 
     def negloglikelihood(
         self,
-        y: ArrayLike,
-        eta: ArrayLike,
+        y: Array,
+        eta: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -1058,7 +1053,7 @@ class Gamma(ExponentialDispersionFamily):
         theta = mu * safe_disp
         return -jnp.sum(jaxstats.gamma.logpdf(y, a=k, scale=theta))
 
-    def variance(self, mu: ArrayLike, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
+    def variance(self, mu: Array, disp: ScalarLike = 1.0, aux: ScalarLike | None = None) -> Array:
         r"""Gamma variance term $\phi V(\mu) = \phi \mu^2$.
 
         When `disp <= 0` (e.g. the IRLS sentinel `0.0` on the first step
@@ -1084,7 +1079,7 @@ class Gamma(ExponentialDispersionFamily):
     def sample(
         self,
         key: Array,
-        eta: ArrayLike,
+        eta: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -1113,8 +1108,8 @@ class Gamma(ExponentialDispersionFamily):
 
     def cdf(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -1133,15 +1128,15 @@ class Gamma(ExponentialDispersionFamily):
         """
         del aux
         safe_disp = jnp.where(jnp.asarray(disp) > 0, disp, 1.0)
-        mu_ = jnp.clip(jnp.asarray(mu), *self._bounds)
+        mu_ = jnp.clip(mu, *self._bounds)
         k = 1.0 / safe_disp
         theta = mu_ * safe_disp
         return jaxstats.gamma.cdf(y, a=k, scale=theta)
 
     def deviance_contribs(
         self,
-        y: ArrayLike,
-        mu: ArrayLike,
+        y: Array,
+        mu: Array,
         disp: ScalarLike = 1.0,
         aux: ScalarLike | None = None,
     ) -> Array:
@@ -1159,7 +1154,7 @@ class Gamma(ExponentialDispersionFamily):
         Non-negative deviance contributions, shape `(n,)`.
         """
         del disp, aux
-        y_ = jnp.asarray(y)
-        mu_ = jnp.asarray(mu)
+        y_ = y
+        mu_ = mu
         r_ = (y_ - mu_) / mu_
         return 2.0 * (r_ - jnp.log1p(r_))

@@ -838,3 +838,29 @@ def test_unsupported_weights_rejected() -> None:
 
     with pytest.raises(ValueError, match="weights"):
         glmax.fit(Gaussian(), X, y, weights=jnp.ones(4))
+
+
+def test_fit_is_filter_vmappable_over_y() -> None:
+    key1, key2 = jr.split(jr.key(0))
+    n, batch = 30, 4
+    X = jnp.column_stack([jnp.ones(n), jr.normal(key1, (n,))])
+    ys = jr.normal(key2, (batch, n))
+
+    fitted = eqx.filter_vmap(lambda y: glmax.fit(Gaussian(), X, y))(ys)
+
+    assert fitted.params.beta.shape == (batch, 2)
+    assert fitted.eta.shape == (batch, n)
+    assert bool(jnp.all(fitted.converged))
+
+
+def test_fit_is_filter_vmappable_over_x_and_y() -> None:
+    key1, key2 = jr.split(jr.key(0))
+    n, batch = 30, 4
+    X = jnp.column_stack([jnp.ones(n), jr.normal(key1, (n,))])
+    Xs = jnp.broadcast_to(X, (batch, n, 2))
+    ys = jr.normal(key2, (batch, n))
+
+    fitted = eqx.filter_vmap(lambda X, y: glmax.fit(Gaussian(), X, y))(Xs, ys)
+
+    assert fitted.params.beta.shape == (batch, 2)
+    assert bool(jnp.all(fitted.converged))

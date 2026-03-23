@@ -101,6 +101,7 @@ plugins:
 
 nav:
     - Home: 'index.md'
+    - Guide: 'guide.md'
     - API:
           - 'Families & Links': 'api/families-and-links.md'
           - 'fit':

@@ -8,7 +8,6 @@ import jax.numpy as jnp
 import lineax as lx
 
 from jax import Array, lax
-from jaxtyping import ArrayLike, ScalarLike
 
 from ..family import ExponentialDispersionFamily
 from .types import AbstractFitter, FitResult, Params
@@ -33,15 +32,15 @@ def _newton(
     family: ExponentialDispersionFamily,
     solver: lx.AbstractLinearSolver,
     eta: Array,
+    offset_eta: Array,
+    disp_init: Array,
+    aux_init: Array | None,
     max_iter: int = 200,
     tol: float = 1e-6,
     step_size: float = 1.0,
     armijo_c: float = 0.1,
     armijo_factor: float = 0.5,
     armijo_max_steps: int = 30,
-    offset_eta: ArrayLike = 0.0,
-    disp_init: ScalarLike = 0.0,
-    aux_init: ScalarLike = 0.0,
 ) -> _NewtonState:
     """Fisher scoring Newton to solve a GLM."""
     _, p = X.shape
@@ -49,7 +48,6 @@ def _newton(
     if not isinstance(solver, (lx.QR, lx.SVD)):
         solver = lx.Normal(solver)
     step_size = cast(Array, jnp.asarray(step_size))
-    offset_eta = jnp.asarray(offset_eta)
 
     def body_fun(val: tuple[Array, ...]):
         likelihood_o, diff, num_iter, beta_o, eta_o, disp_o, aux_o = val
@@ -226,14 +224,14 @@ class NewtonFitter(AbstractFitter, strict=True):
             family,
             self.solver,
             init_eta,
+            offset,
+            disp_init,
+            aux_init,
             self.max_iter,
             self.tol,
             self.step_size,
             self.armijo_c,
             self.armijo_factor,
-            offset_eta=offset,
-            disp_init=disp_init,
-            aux_init=aux_init,
         )
         beta, n_iter, converged, disp, aux, objective, objective_delta = newton_state
 

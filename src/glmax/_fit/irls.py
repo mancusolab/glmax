@@ -8,7 +8,6 @@ import jax.numpy as jnp
 import lineax as lx
 
 from jax import Array, lax
-from jaxtyping import ArrayLike, ScalarLike
 
 from ..family import ExponentialDispersionFamily
 from .types import AbstractFitter, FitResult, Params
@@ -33,12 +32,12 @@ def _irls(
     family: ExponentialDispersionFamily,
     solver: lx.AbstractLinearSolver,
     eta: Array,
+    offset_eta: Array,
+    disp_init: Array,
+    aux_init: Array | None,
     max_iter: int = 1000,
     tol: float = 1e-3,
     step_size: float = 1.0,
-    offset_eta: ArrayLike = 0.0,
-    disp_init: ScalarLike = 0.0,
-    aux_init: ScalarLike = 0.0,
 ) -> _IRLSState:
     """IRLS to solve GLM."""
     _, p = X.shape
@@ -193,12 +192,12 @@ class IRLSFitter(AbstractFitter, strict=True):
             family,
             self.solver,
             init_eta,
+            offset,
+            disp_init,
+            aux_init,
             self.max_iter,
             self.tol,
             self.step_size,
-            offset,
-            disp_init=disp_init,
-            aux_init=aux_init,
         )
         beta, n_iter, converged, disp, aux, objective, objective_delta = irls_state
 

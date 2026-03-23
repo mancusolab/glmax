@@ -1,8 +1,8 @@
 import equinox as eqx
 import jax.numpy as jnp
 
+from jax import Array
 from jax.scipy.special import betainc, expit
-from jaxtyping import ArrayLike
 
 
 def _clipped_expit(x):
@@ -21,7 +21,7 @@ def _grad_per_sample(func, x):
     return eqx.filter_vmap(eqx.filter_grad(func))(x)
 
 
-def t_cdf(value: ArrayLike, df: float, loc: ArrayLike = 0.0, scale: ArrayLike = 1.0):
+def t_cdf(value: Array, df: float, loc: float = 0.0, scale: float = 1.0):
     r"""Evaluate the Student-$t$ cumulative distribution function.
 
     This uses the Beta-function identity for the Student-$t$ distribution,

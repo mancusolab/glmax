@@ -7,7 +7,7 @@ import equinox as eqx
 import jax.numpy as jnp
 import jax.scipy.special as jspec
 
-from jaxtyping import Array, ArrayLike, Scalar
+from jaxtyping import Array, Scalar
 
 from .utils import _clipped_expit, _grad_per_sample
 
@@ -25,7 +25,7 @@ class AbstractLink(eqx.Module):
     """
 
     @abstractmethod
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \eta$.
 
         Here $\mu$ is the mean-response vector and $\eta$ is the linear
@@ -41,7 +41,7 @@ class AbstractLink(eqx.Module):
         """
 
     @abstractmethod
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = \mu$.
 
         Here $\eta$ is the linear predictor and $\mu$ is the implied mean
@@ -57,7 +57,7 @@ class AbstractLink(eqx.Module):
         """
 
     @abstractmethod
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu)$.
 
         The derivative is evaluated elementwise with respect to the mean
@@ -73,7 +73,7 @@ class AbstractLink(eqx.Module):
         """
 
     @abstractmethod
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta)$.
 
         The derivative is evaluated elementwise with respect to the linear
@@ -113,7 +113,7 @@ class PowerLink(AbstractLink):
         if self.power == 0:
             raise ValueError("PowerLink: power=0 is degenerate (inverse is undefined)")
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \mu^p$.
 
         The symbol $p$ denotes the configured power exponent.
@@ -128,7 +128,7 @@ class PowerLink(AbstractLink):
         """
         return jnp.power(mu, self.power)
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = \eta^{1/p}$.
 
         The symbol $p$ denotes the configured power exponent.
@@ -143,7 +143,7 @@ class PowerLink(AbstractLink):
         """
         return jnp.power(eta, 1.0 / self.power)
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = p \mu^{p-1}$ via autodiff.
 
         **Arguments:**
@@ -156,7 +156,7 @@ class PowerLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = \eta^{1/p-1}/p$ via autodiff.
 
         **Arguments:**
@@ -178,7 +178,7 @@ class IdentityLink(AbstractLink):
     $(g^{-1})'(\eta) = 1$. This is the canonical link for the Gaussian family.
     """
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \mu$.
 
         **Arguments:**
@@ -191,7 +191,7 @@ class IdentityLink(AbstractLink):
         """
         return mu
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = \eta$.
 
         **Arguments:**
@@ -204,7 +204,7 @@ class IdentityLink(AbstractLink):
         """
         return eta
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = 1$.
 
         **Arguments:**
@@ -217,7 +217,7 @@ class IdentityLink(AbstractLink):
         """
         return jnp.ones_like(mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = 1$.
 
         **Arguments:**
@@ -242,7 +242,7 @@ class LogitLink(AbstractLink):
     This is the canonical link for the Binomial family.
     """
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \log(\mu / (1 - \mu))$.
 
         Here $\mu \in (0, 1)$ is the Bernoulli success probability and
@@ -258,7 +258,7 @@ class LogitLink(AbstractLink):
         """
         return jspec.logit(mu)
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = \sigma(\eta)$, clipped to $(0, 1)$.
 
         The symbol $\sigma$ denotes the logistic sigmoid function.
@@ -273,7 +273,7 @@ class LogitLink(AbstractLink):
         """
         return _clipped_expit(eta)
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = 1 / (\mu(1 - \mu))$ via autodiff.
 
         **Arguments:**
@@ -286,7 +286,7 @@ class LogitLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = \sigma(\eta)(1 - \sigma(\eta))$ via autodiff.
 
         **Arguments:**
@@ -310,7 +310,7 @@ class InverseLink(AbstractLink):
     This is the canonical link for Gamma models.
     """
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = 1/\mu$.
 
         This link requires strictly positive means $\mu > 0$.
@@ -325,7 +325,7 @@ class InverseLink(AbstractLink):
         """
         return jnp.reciprocal(mu)
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = 1/\eta$.
 
         This inverse uses a tiny-value guard so values near $\eta = 0$ do
@@ -339,7 +339,6 @@ class InverseLink(AbstractLink):
 
         $1/\eta$, shape `(n,)`.
         """
-        eta = jnp.asarray(eta)
         # Gamma link: eta = 1/mu > 0; clip to tiny to prevent inf at eta=0.
         # Use result_type(eta) so float32 inputs stay float32; the project
         # default is float64 (jax_enable_x64 set at import), but this guard
@@ -348,7 +347,7 @@ class InverseLink(AbstractLink):
         eta = jnp.where(jnp.abs(eta) < tiny, tiny, eta)
         return jnp.reciprocal(eta)
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = -1/\mu^2$ via autodiff.
 
         **Arguments:**
@@ -361,7 +360,7 @@ class InverseLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = -1/\eta^2$ via autodiff.
 
         **Arguments:**
@@ -385,7 +384,7 @@ class LogLink(AbstractLink):
     This is the canonical link for the Poisson family.
     """
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \log(\mu)$.
 
         This link requires strictly positive means $\mu > 0$.
@@ -400,7 +399,7 @@ class LogLink(AbstractLink):
         """
         return jnp.log(mu)
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = e^\eta$.
 
         **Arguments:**
@@ -413,7 +412,7 @@ class LogLink(AbstractLink):
         """
         return jnp.exp(eta)
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = 1/\mu$ via autodiff.
 
         **Arguments:**
@@ -426,7 +425,7 @@ class LogLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = e^\eta$ via autodiff.
 
         **Arguments:**
@@ -452,7 +451,7 @@ class ProbitLink(AbstractLink):
     in bioassay and econometrics.
     """
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \Phi^{-1}(\mu)$.
 
         **Arguments:**
@@ -465,7 +464,7 @@ class ProbitLink(AbstractLink):
         """
         return jspec.ndtri(mu)
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = \Phi(\eta)$.
 
         **Arguments:**
@@ -478,7 +477,7 @@ class ProbitLink(AbstractLink):
         """
         return jspec.ndtr(eta)
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = 1 / \phi(\Phi^{-1}(\mu))$ via autodiff.
 
         Here $\phi$ is the standard normal PDF.
@@ -493,7 +492,7 @@ class ProbitLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = \phi(\eta)$ via autodiff.
 
         Here $\phi$ is the standard normal PDF.
@@ -521,7 +520,7 @@ class CLogLogLink(AbstractLink):
     slower than it approaches 1.
     """
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \log(-\log(1 - \mu))$.
 
         **Arguments:**
@@ -532,9 +531,9 @@ class CLogLogLink(AbstractLink):
 
         Complementary log-log, shape `(n,)`.
         """
-        return jnp.log(-jnp.log1p(-jnp.asarray(mu)))
+        return jnp.log(-jnp.log1p(-mu))
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = 1 - \exp(-\exp(\eta))$.
 
         **Arguments:**
@@ -545,9 +544,9 @@ class CLogLogLink(AbstractLink):
 
         $1 - e^{-e^\eta}$, shape `(n,)`.
         """
-        return -jnp.expm1(-jnp.exp(jnp.asarray(eta)))
+        return -jnp.expm1(-jnp.exp(eta))
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = -1 / ((1 - \mu)\log(1 - \mu))$ via autodiff.
 
         **Arguments:**
@@ -560,7 +559,7 @@ class CLogLogLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = \exp(\eta - \exp(\eta))$ via autodiff.
 
         **Arguments:**
@@ -585,7 +584,7 @@ class LogLogLink(AbstractLink):
     approaching 0 faster than it approaches 1.
     """
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = -\log(-\log(\mu))$.
 
         **Arguments:**
@@ -596,9 +595,9 @@ class LogLogLink(AbstractLink):
 
         Log-log value, shape `(n,)`.
         """
-        return -jnp.log(-jnp.log(jnp.asarray(mu)))
+        return -jnp.log(-jnp.log(mu))
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = \exp(-\exp(-\eta))$.
 
         **Arguments:**
@@ -609,9 +608,9 @@ class LogLogLink(AbstractLink):
 
         $e^{-e^{-\eta}}$, shape `(n,)`.
         """
-        return jnp.exp(-jnp.exp(-jnp.asarray(eta)))
+        return jnp.exp(-jnp.exp(-eta))
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = -1 / (\mu \log(\mu))$ via autodiff.
 
         **Arguments:**
@@ -624,7 +623,7 @@ class LogLogLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = \exp(-\eta - \exp(-\eta))$ via autodiff.
 
         **Arguments:**
@@ -649,7 +648,7 @@ class SqrtLink(AbstractLink):
     approximately stabilises the variance for count data.
     """
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \sqrt{\mu}$.
 
         **Arguments:**
@@ -660,9 +659,9 @@ class SqrtLink(AbstractLink):
 
         $\sqrt{\mu}$, shape `(n,)`.
         """
-        return jnp.sqrt(jnp.asarray(mu))
+        return jnp.sqrt(mu)
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = \eta^2$.
 
         **Arguments:**
@@ -673,9 +672,9 @@ class SqrtLink(AbstractLink):
 
         $\eta^2$, shape `(n,)`.
         """
-        return jnp.square(jnp.asarray(eta))
+        return jnp.square(eta)
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = 1 / (2\sqrt{\mu})$ via autodiff.
 
         **Arguments:**
@@ -688,7 +687,7 @@ class SqrtLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = 2\eta$ via autodiff.
 
         **Arguments:**
@@ -714,7 +713,7 @@ class CauchitLink(AbstractLink):
     decay as $1/\eta^2$ rather than exponentially.
     """
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \tan(\pi(\mu - 1/2))$.
 
         **Arguments:**
@@ -725,9 +724,9 @@ class CauchitLink(AbstractLink):
 
         Cauchit value, shape `(n,)`.
         """
-        return jnp.tan(jnp.pi * (jnp.asarray(mu) - 0.5))
+        return jnp.tan(jnp.pi * (mu - 0.5))
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = 1/2 + \arctan(\eta) / \pi$.
 
         **Arguments:**
@@ -738,9 +737,9 @@ class CauchitLink(AbstractLink):
 
         $1/2 + \arctan(\eta)/\pi$, shape `(n,)`.
         """
-        return 0.5 + jnp.arctan(jnp.asarray(eta)) / jnp.pi
+        return 0.5 + jnp.arctan(eta) / jnp.pi
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = \pi / \cos^2(\pi(\mu - 1/2))$ via autodiff.
 
         **Arguments:**
@@ -753,7 +752,7 @@ class CauchitLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta) = 1 / (\pi(1 + \eta^2))$ via autodiff.
 
         **Arguments:**
@@ -789,7 +788,7 @@ class NBLink(AbstractLink):
         """
         self.alpha = jnp.asarray(alpha)
 
-    def __call__(self, mu: ArrayLike) -> Array:
+    def __call__(self, mu: Array) -> Array:
         r"""Compute $g(\mu) = \log(\alpha \mu / (1 + \alpha \mu))$.
 
         The symbol $\alpha$ denotes the configured overdispersion parameter.
@@ -804,10 +803,10 @@ class NBLink(AbstractLink):
         """
         # log(x) - log1p(x) is numerically more stable than log(x/(x+1))
         # at large mu*alpha, where x/(x+1) rounds to 1 and log returns 0.
-        mu_alpha = jnp.asarray(mu) * self.alpha
+        mu_alpha = mu * self.alpha
         return jnp.log(mu_alpha) - jnp.log1p(mu_alpha)
 
-    def inverse(self, eta: ArrayLike) -> Array:
+    def inverse(self, eta: Array) -> Array:
         r"""Compute $g^{-1}(\eta) = 1 / (\alpha \operatorname{expm1}(-\eta))$.
 
         The symbol $\alpha$ denotes the configured overdispersion parameter.
@@ -822,7 +821,7 @@ class NBLink(AbstractLink):
         """
         return 1.0 / (self.alpha * jnp.expm1(-eta))
 
-    def deriv(self, mu: ArrayLike) -> Array:
+    def deriv(self, mu: Array) -> Array:
         r"""Compute $g'(\mu) = 1 / (\mu(1 + \alpha\mu))$ via autodiff.
 
         **Arguments:**
@@ -835,7 +834,7 @@ class NBLink(AbstractLink):
         """
         return _grad_per_sample(self, mu)
 
-    def inverse_deriv(self, eta: ArrayLike) -> Array:
+    def inverse_deriv(self, eta: Array) -> Array:
         r"""Compute $(g^{-1})'(\eta)$ via autodiff.
 
         **Arguments:**

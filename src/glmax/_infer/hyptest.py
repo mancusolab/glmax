@@ -9,7 +9,6 @@ import jax.numpy as jnp
 
 from jax import Array
 from jax.scipy.stats import norm
-from jaxtyping import ArrayLike
 
 from .._fit import FittedGLM
 from ..family.dist import ExponentialDispersionFamily, Gaussian
@@ -136,7 +135,7 @@ class ScoreTest(AbstractTest, strict=True):
         return InferenceResult(params=fit_result.params, se=se, stat=stat, p=p)
 
 
-def _wald_test(statistic: ArrayLike, df: int, family: ExponentialDispersionFamily) -> Array:
+def _wald_test(statistic: Array, df: int, family: ExponentialDispersionFamily) -> Array:
     r"""Two-sided Wald test p-values.
 
     Uses a $t_{df}$ distribution for Gaussian families and
