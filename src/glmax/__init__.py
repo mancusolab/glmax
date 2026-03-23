@@ -37,6 +37,8 @@ from .diagnostics import (
 from .family import (
     AbstractLink as AbstractLink,
     Binomial as Binomial,
+    CauchitLink as CauchitLink,
+    CLogLogLink as CLogLogLink,
     ExponentialDispersionFamily as ExponentialDispersionFamily,
     Gamma as Gamma,
     Gaussian as Gaussian,
@@ -44,10 +46,13 @@ from .family import (
     InverseLink as InverseLink,
     LogitLink as LogitLink,
     LogLink as LogLink,
+    LogLogLink as LogLogLink,
     NBLink as NBLink,
     NegativeBinomial as NegativeBinomial,
     Poisson as Poisson,
     PowerLink as PowerLink,
+    ProbitLink as ProbitLink,
+    SqrtLink as SqrtLink,
 )
 
 

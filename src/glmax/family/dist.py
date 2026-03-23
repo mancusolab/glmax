@@ -13,7 +13,20 @@ from equinox import AbstractVar
 from jax.scipy.special import betainc, gammaln, xlogy
 from jaxtyping import Array, ArrayLike, ScalarLike
 
-from .links import AbstractLink, IdentityLink, InverseLink, LogitLink, LogLink, NBLink, PowerLink
+from .links import (
+    AbstractLink,
+    CauchitLink,
+    CLogLogLink,
+    IdentityLink,
+    InverseLink,
+    LogitLink,
+    LogLink,
+    LogLogLink,
+    NBLink,
+    PowerLink,
+    ProbitLink,
+    SqrtLink,
+)
 
 
 if TYPE_CHECKING:
@@ -462,9 +475,13 @@ class Binomial(ExponentialDispersionFamily):
     is_discrete: ClassVar[bool] = True
     _links: ClassVar[list[type[AbstractLink]]] = [
         LogitLink,
+        ProbitLink,
+        CauchitLink,
+        CLogLogLink,
+        LogLogLink,
         LogLink,
         IdentityLink,
-    ]  # Probit, Cauchy, LogC, CLogLog, LogLog
+    ]
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, 1.0 - jnp.finfo(float).eps)
 
     def __init__(self, glink: AbstractLink = LogitLink()) -> None:
@@ -595,7 +612,7 @@ class Poisson(ExponentialDispersionFamily):
 
     glink: AbstractLink = LogLink()
     is_discrete: ClassVar[bool] = True
-    _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink]  # Sqrt
+    _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink, SqrtLink]
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
     def __init__(self, glink: AbstractLink = LogLink()) -> None:

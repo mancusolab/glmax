@@ -27,7 +27,19 @@ from glmax import AbstractFitter, FitResult, FittedGLM, InferenceResult, Params
 from glmax._fit import IRLSFitter
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
-from glmax.family.links import IdentityLink, InverseLink, LogitLink, LogLink, NBLink, PowerLink
+from glmax.family.links import (
+    CauchitLink,
+    CLogLogLink,
+    IdentityLink,
+    InverseLink,
+    LogitLink,
+    LogLink,
+    LogLogLink,
+    NBLink,
+    PowerLink,
+    ProbitLink,
+    SqrtLink,
+)
 from glmax.family.utils import t_cdf
 
 
@@ -271,6 +283,12 @@ _VALID_LINK_COMBINATION_CASES = [
         id="poisson-log-link",
     ),
     pytest.param(
+        Poisson(SqrtLink()),
+        _INTERCEPT_ONLY_X,
+        jnp.array([1.0, 2.0, 3.0, 2.0, 1.0]),
+        id="poisson-sqrt-link",
+    ),
+    pytest.param(
         Binomial(LogitLink()),
         _BINOMIAL_INTERCEPT_ONLY_X,
         jnp.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]),
@@ -287,6 +305,30 @@ _VALID_LINK_COMBINATION_CASES = [
         _BINOMIAL_INTERCEPT_ONLY_X,
         jnp.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]),
         id="binomial-log-link",
+    ),
+    pytest.param(
+        Binomial(ProbitLink()),
+        _BINOMIAL_INTERCEPT_ONLY_X,
+        jnp.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]),
+        id="binomial-probit-link",
+    ),
+    pytest.param(
+        Binomial(CLogLogLink()),
+        _BINOMIAL_INTERCEPT_ONLY_X,
+        jnp.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]),
+        id="binomial-cloglog-link",
+    ),
+    pytest.param(
+        Binomial(LogLogLink()),
+        _BINOMIAL_INTERCEPT_ONLY_X,
+        jnp.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]),
+        id="binomial-loglog-link",
+    ),
+    pytest.param(
+        Binomial(CauchitLink()),
+        _BINOMIAL_INTERCEPT_ONLY_X,
+        jnp.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]),
+        id="binomial-cauchit-link",
     ),
     pytest.param(
         NegativeBinomial(IdentityLink()),
@@ -370,11 +412,21 @@ def _statsmodels_result_for_fitted(fitted: FittedGLM):
     elif isinstance(family, Poisson):
         if isinstance(glink, IdentityLink):
             sm_family = sm.families.Poisson(link=sm_links.Identity())
+        elif isinstance(glink, SqrtLink):
+            sm_family = sm.families.Poisson(link=sm_links.Sqrt())
         else:
             sm_family = sm.families.Poisson(link=sm_links.Log())
     elif isinstance(family, Binomial):
         if isinstance(glink, LogitLink):
             sm_family = sm.families.Binomial(link=sm_links.Logit())
+        elif isinstance(glink, ProbitLink):
+            sm_family = sm.families.Binomial(link=sm_links.Probit())
+        elif isinstance(glink, CLogLogLink):
+            sm_family = sm.families.Binomial(link=sm_links.CLogLog())
+        elif isinstance(glink, LogLogLink):
+            sm_family = sm.families.Binomial(link=sm_links.LogLog())
+        elif isinstance(glink, CauchitLink):
+            sm_family = sm.families.Binomial(link=sm_links.Cauchy())
         elif isinstance(glink, LogLink):
             sm_family = sm.families.Binomial(link=sm_links.Log())
         else:

@@ -18,9 +18,14 @@ import jax
 import jax.numpy as jnp
 
 from glmax.family.links import (
+    CauchitLink,
+    CLogLogLink,
     InverseLink,
+    LogLogLink,
     NBLink,
     PowerLink,
+    ProbitLink,
+    SqrtLink,
 )
 
 
@@ -250,3 +255,304 @@ def test_nb_link_inverse_at_zero_is_neg_inf():
     # Domain constraint: eta=0 is outside the valid domain (eta < 0).
     # The expected mathematical result is -inf; confirm it rather than masking it.
     assert jnp.all(result == -jnp.inf), f"Expected -inf at eta=0, got {result}"
+
+
+# ---------------------------------------------------------------------------
+# ProbitLink
+# ---------------------------------------------------------------------------
+
+
+def test_probit_link_call_known_value():
+    """ProbitLink()(0.5) == 0.0 (median of standard normal)."""
+    link = ProbitLink()
+    np.testing.assert_allclose(link(jnp.array([0.5])), jnp.array([0.0]), atol=1e-6)
+
+
+def test_probit_link_inverse_known_value():
+    """ProbitLink().inverse(0.0) == 0.5."""
+    link = ProbitLink()
+    np.testing.assert_allclose(link.inverse(jnp.array([0.0])), jnp.array([0.5]), atol=1e-6)
+
+
+def test_probit_link_roundtrip():
+    """ProbitLink: inverse(call(mu)) == mu for interior probabilities."""
+    link = ProbitLink()
+    mu = jnp.array([0.1, 0.3, 0.5, 0.7, 0.9])
+    np.testing.assert_allclose(link.inverse(link(mu)), mu, rtol=1e-6)
+
+
+def test_probit_link_deriv_vs_finite_diff():
+    """ProbitLink.deriv agrees with central finite differences."""
+    link = ProbitLink()
+    mu = jnp.array([0.2, 0.4, 0.5, 0.6, 0.8])
+    ad = link.deriv(mu)
+    fd = jax.vmap(lambda x: _finite_diff(link, x))(mu)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_probit_link_inverse_deriv_vs_finite_diff():
+    """ProbitLink.inverse_deriv agrees with central finite differences."""
+    link = ProbitLink()
+    eta = jnp.array([-1.5, -0.5, 0.0, 0.5, 1.5])
+    ad = link.inverse_deriv(eta)
+    fd = jax.vmap(lambda x: _finite_diff(link.inverse, x))(eta)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_probit_link_inverse_deriv_is_normal_pdf():
+    """ProbitLink.inverse_deriv(eta) == phi(eta), the standard normal PDF."""
+    import jax.scipy.stats as jss
+
+    link = ProbitLink()
+    eta = jnp.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    np.testing.assert_allclose(link.inverse_deriv(eta), jss.norm.pdf(eta), rtol=1e-6)
+
+
+def test_probit_link_jit_roundtrip():
+    """ProbitLink round-trip survives eqx.filter_jit."""
+    link = ProbitLink()
+    mu = jnp.array([0.2, 0.5, 0.8])
+    mu_rt = eqx.filter_jit(lambda lnk, x: lnk.inverse(lnk(x)))(link, mu)
+    np.testing.assert_allclose(mu_rt, mu, rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# CLogLogLink
+# ---------------------------------------------------------------------------
+
+
+def test_cloglog_link_call_known_value():
+    """CLogLogLink()(1 - 1/e) == 0.0."""
+    link = CLogLogLink()
+    mu = jnp.array([1.0 - 1.0 / jnp.e])
+    np.testing.assert_allclose(link(mu), jnp.array([0.0]), atol=1e-6)
+
+
+def test_cloglog_link_inverse_known_value():
+    """CLogLogLink().inverse(0.0) == 1 - 1/e."""
+    link = CLogLogLink()
+    expected = 1.0 - 1.0 / jnp.e
+    np.testing.assert_allclose(link.inverse(jnp.array([0.0])), jnp.array([expected]), rtol=1e-6)
+
+
+def test_cloglog_link_roundtrip():
+    """CLogLogLink: inverse(call(mu)) == mu for interior probabilities."""
+    link = CLogLogLink()
+    mu = jnp.array([0.1, 0.3, 0.5, 0.7, 0.9])
+    np.testing.assert_allclose(link.inverse(link(mu)), mu, rtol=1e-6)
+
+
+def test_cloglog_link_deriv_vs_finite_diff():
+    """CLogLogLink.deriv agrees with central finite differences."""
+    link = CLogLogLink()
+    mu = jnp.array([0.2, 0.4, 0.6, 0.8])
+    ad = link.deriv(mu)
+    fd = jax.vmap(lambda x: _finite_diff(link, x))(mu)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_cloglog_link_inverse_deriv_vs_finite_diff():
+    """CLogLogLink.inverse_deriv agrees with central finite differences."""
+    link = CLogLogLink()
+    eta = jnp.array([-2.0, -1.0, 0.0, 1.0])
+    ad = link.inverse_deriv(eta)
+    fd = jax.vmap(lambda x: _finite_diff(link.inverse, x))(eta)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_cloglog_link_asymmetry():
+    """CLogLog is asymmetric: g(0.5) != 0.0 (unlike logit or cauchit)."""
+    link = CLogLogLink()
+    # CLogLog(0.5) should not equal zero (which would imply symmetry around 0.5)
+    result = link(jnp.array([0.5]))
+    assert float(result[0]) != pytest.approx(0.0, abs=0.01)
+
+
+def test_cloglog_link_jit_roundtrip():
+    """CLogLogLink round-trip survives eqx.filter_jit."""
+    link = CLogLogLink()
+    mu = jnp.array([0.2, 0.5, 0.8])
+    mu_rt = eqx.filter_jit(lambda lnk, x: lnk.inverse(lnk(x)))(link, mu)
+    np.testing.assert_allclose(mu_rt, mu, rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# LogLogLink
+# ---------------------------------------------------------------------------
+
+
+def test_loglog_link_call_known_value():
+    """LogLogLink()(1/e) == 0.0."""
+    link = LogLogLink()
+    mu = jnp.array([1.0 / jnp.e])
+    np.testing.assert_allclose(link(mu), jnp.array([0.0]), atol=1e-6)
+
+
+def test_loglog_link_inverse_known_value():
+    """LogLogLink().inverse(0.0) == 1/e."""
+    link = LogLogLink()
+    expected = 1.0 / jnp.e
+    np.testing.assert_allclose(link.inverse(jnp.array([0.0])), jnp.array([expected]), rtol=1e-6)
+
+
+def test_loglog_link_roundtrip():
+    """LogLogLink: inverse(call(mu)) == mu for interior probabilities."""
+    link = LogLogLink()
+    mu = jnp.array([0.1, 0.3, 0.5, 0.7, 0.9])
+    np.testing.assert_allclose(link.inverse(link(mu)), mu, rtol=1e-6)
+
+
+def test_loglog_link_deriv_vs_finite_diff():
+    """LogLogLink.deriv agrees with central finite differences."""
+    link = LogLogLink()
+    mu = jnp.array([0.2, 0.4, 0.6, 0.8])
+    ad = link.deriv(mu)
+    fd = jax.vmap(lambda x: _finite_diff(link, x))(mu)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_loglog_link_inverse_deriv_vs_finite_diff():
+    """LogLogLink.inverse_deriv agrees with central finite differences."""
+    link = LogLogLink()
+    eta = jnp.array([-1.0, 0.0, 1.0, 2.0])
+    ad = link.inverse_deriv(eta)
+    fd = jax.vmap(lambda x: _finite_diff(link.inverse, x))(eta)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_loglog_cloglog_are_mirror_images():
+    """LogLog and CLogLog are mirror images: LogLog(mu) == -CLogLog(1 - mu)."""
+    loglog = LogLogLink()
+    cloglog = CLogLogLink()
+    mu = jnp.array([0.1, 0.3, 0.5, 0.7, 0.9])
+    np.testing.assert_allclose(loglog(mu), -cloglog(1.0 - mu), rtol=1e-6)
+
+
+def test_loglog_link_jit_roundtrip():
+    """LogLogLink round-trip survives eqx.filter_jit."""
+    link = LogLogLink()
+    mu = jnp.array([0.2, 0.5, 0.8])
+    mu_rt = eqx.filter_jit(lambda lnk, x: lnk.inverse(lnk(x)))(link, mu)
+    np.testing.assert_allclose(mu_rt, mu, rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# SqrtLink
+# ---------------------------------------------------------------------------
+
+
+def test_sqrt_link_call_known_value():
+    """SqrtLink()(4.0) == 2.0."""
+    link = SqrtLink()
+    np.testing.assert_allclose(link(jnp.array([4.0])), jnp.array([2.0]), rtol=1e-6)
+
+
+def test_sqrt_link_inverse_known_value():
+    """SqrtLink().inverse(3.0) == 9.0."""
+    link = SqrtLink()
+    np.testing.assert_allclose(link.inverse(jnp.array([3.0])), jnp.array([9.0]), rtol=1e-6)
+
+
+def test_sqrt_link_roundtrip():
+    """SqrtLink: inverse(call(mu)) == mu for positive mu."""
+    link = SqrtLink()
+    mu = jnp.array([0.25, 1.0, 4.0, 9.0])
+    np.testing.assert_allclose(link.inverse(link(mu)), mu, rtol=1e-6)
+
+
+def test_sqrt_link_deriv_vs_finite_diff():
+    """SqrtLink.deriv agrees with central finite differences."""
+    link = SqrtLink()
+    mu = jnp.array([0.5, 1.0, 2.0, 4.0])
+    ad = link.deriv(mu)
+    fd = jax.vmap(lambda x: _finite_diff(link, x))(mu)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_sqrt_link_inverse_deriv_vs_finite_diff():
+    """SqrtLink.inverse_deriv agrees with central finite differences."""
+    link = SqrtLink()
+    eta = jnp.array([0.5, 1.0, 2.0, 3.0])
+    ad = link.inverse_deriv(eta)
+    fd = jax.vmap(lambda x: _finite_diff(link.inverse, x))(eta)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_sqrt_link_inverse_deriv_is_2eta():
+    """SqrtLink.inverse_deriv(eta) == 2*eta."""
+    link = SqrtLink()
+    eta = jnp.array([0.5, 1.0, 2.0, 3.0])
+    np.testing.assert_allclose(link.inverse_deriv(eta), 2.0 * eta, rtol=1e-6)
+
+
+def test_sqrt_link_jit_roundtrip():
+    """SqrtLink round-trip survives eqx.filter_jit."""
+    link = SqrtLink()
+    mu = jnp.array([1.0, 4.0, 9.0])
+    mu_rt = eqx.filter_jit(lambda lnk, x: lnk.inverse(lnk(x)))(link, mu)
+    np.testing.assert_allclose(mu_rt, mu, rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# CauchitLink
+# ---------------------------------------------------------------------------
+
+
+def test_cauchit_link_call_known_value():
+    """CauchitLink()(0.5) == 0.0 (tan(0) == 0)."""
+    link = CauchitLink()
+    np.testing.assert_allclose(link(jnp.array([0.5])), jnp.array([0.0]), atol=1e-6)
+
+
+def test_cauchit_link_inverse_known_value():
+    """CauchitLink().inverse(0.0) == 0.5."""
+    link = CauchitLink()
+    np.testing.assert_allclose(link.inverse(jnp.array([0.0])), jnp.array([0.5]), atol=1e-6)
+
+
+def test_cauchit_link_roundtrip():
+    """CauchitLink: inverse(call(mu)) == mu for interior probabilities."""
+    link = CauchitLink()
+    mu = jnp.array([0.1, 0.3, 0.5, 0.7, 0.9])
+    np.testing.assert_allclose(link.inverse(link(mu)), mu, rtol=1e-5)
+
+
+def test_cauchit_link_deriv_vs_finite_diff():
+    """CauchitLink.deriv agrees with central finite differences."""
+    link = CauchitLink()
+    mu = jnp.array([0.2, 0.4, 0.5, 0.6, 0.8])
+    ad = link.deriv(mu)
+    fd = jax.vmap(lambda x: _finite_diff(link, x))(mu)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_cauchit_link_inverse_deriv_vs_finite_diff():
+    """CauchitLink.inverse_deriv agrees with central finite differences."""
+    link = CauchitLink()
+    eta = jnp.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    ad = link.inverse_deriv(eta)
+    fd = jax.vmap(lambda x: _finite_diff(link.inverse, x))(eta)
+    np.testing.assert_allclose(ad, fd, rtol=1e-4)
+
+
+def test_cauchit_link_inverse_deriv_is_cauchy_pdf():
+    """CauchitLink.inverse_deriv(eta) == 1 / (pi * (1 + eta^2)), the Cauchy PDF."""
+    link = CauchitLink()
+    eta = jnp.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    expected = 1.0 / (jnp.pi * (1.0 + eta**2))
+    np.testing.assert_allclose(link.inverse_deriv(eta), expected, rtol=1e-6)
+
+
+def test_cauchit_link_symmetry():
+    """CauchitLink is symmetric around 0.5: g(1 - mu) == -g(mu)."""
+    link = CauchitLink()
+    mu = jnp.array([0.1, 0.2, 0.3, 0.4])
+    np.testing.assert_allclose(link(1.0 - mu), -link(mu), rtol=1e-6)
+
+
+def test_cauchit_link_jit_roundtrip():
+    """CauchitLink round-trip survives eqx.filter_jit."""
+    link = CauchitLink()
+    mu = jnp.array([0.2, 0.5, 0.8])
+    mu_rt = eqx.filter_jit(lambda lnk, x: lnk.inverse(lnk(x)))(link, mu)
+    np.testing.assert_allclose(mu_rt, mu, rtol=1e-5)

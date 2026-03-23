@@ -440,6 +440,333 @@ class LogLink(AbstractLink):
         return _grad_per_sample(self.inverse, eta)
 
 
+class ProbitLink(AbstractLink):
+    r"""Probit link $g(\mu) = \Phi^{-1}(\mu)$.
+
+    Here $\Phi^{-1}$ is the standard normal quantile function (inverse CDF).
+    The inverse link is $g^{-1}(\eta) = \Phi(\eta)$, where $\Phi$ is the
+    standard normal CDF. The derivative $g'(\mu)$ and inverse-link derivative
+    $(g^{-1})'(\eta)$ are computed via autodiff.
+
+    This is the second most common link for the Binomial family, widely used
+    in bioassay and econometrics.
+    """
+
+    def __call__(self, mu: ArrayLike) -> Array:
+        r"""Compute $g(\mu) = \Phi^{-1}(\mu)$.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`, entries in $(0, 1)$.
+
+        **Returns:**
+
+        Standard normal quantile $\Phi^{-1}(\mu)$, shape `(n,)`.
+        """
+        return jspec.ndtri(mu)
+
+    def inverse(self, eta: ArrayLike) -> Array:
+        r"""Compute $g^{-1}(\eta) = \Phi(\eta)$.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+
+        **Returns:**
+
+        Standard normal CDF $\Phi(\eta)$, shape `(n,)`.
+        """
+        return jspec.ndtr(eta)
+
+    def deriv(self, mu: ArrayLike) -> Array:
+        r"""Compute $g'(\mu) = 1 / \phi(\Phi^{-1}(\mu))$ via autodiff.
+
+        Here $\phi$ is the standard normal PDF.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`.
+
+        **Returns:**
+
+        Probit link derivative, shape `(n,)`.
+        """
+        return _grad_per_sample(self, mu)
+
+    def inverse_deriv(self, eta: ArrayLike) -> Array:
+        r"""Compute $(g^{-1})'(\eta) = \phi(\eta)$ via autodiff.
+
+        Here $\phi$ is the standard normal PDF.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+
+        **Returns:**
+
+        Standard normal PDF $\phi(\eta)$, shape `(n,)`.
+        """
+        return _grad_per_sample(self.inverse, eta)
+
+
+class CLogLogLink(AbstractLink):
+    r"""Complementary log-log link $g(\mu) = \log(-\log(1 - \mu))$.
+
+    The inverse link is $g^{-1}(\eta) = 1 - \exp(-\exp(\eta))$.
+    The derivative $g'(\mu)$ and inverse-link derivative $(g^{-1})'(\eta)$
+    are computed via autodiff.
+
+    This is the canonical link for interval-censored survival models and
+    log-Weibull regression. It is asymmetric: the probability approaches 0
+    slower than it approaches 1.
+    """
+
+    def __call__(self, mu: ArrayLike) -> Array:
+        r"""Compute $g(\mu) = \log(-\log(1 - \mu))$.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`, entries in $(0, 1)$.
+
+        **Returns:**
+
+        Complementary log-log, shape `(n,)`.
+        """
+        return jnp.log(-jnp.log1p(-jnp.asarray(mu)))
+
+    def inverse(self, eta: ArrayLike) -> Array:
+        r"""Compute $g^{-1}(\eta) = 1 - \exp(-\exp(\eta))$.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+
+        **Returns:**
+
+        $1 - e^{-e^\eta}$, shape `(n,)`.
+        """
+        return -jnp.expm1(-jnp.exp(jnp.asarray(eta)))
+
+    def deriv(self, mu: ArrayLike) -> Array:
+        r"""Compute $g'(\mu) = -1 / ((1 - \mu)\log(1 - \mu))$ via autodiff.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`.
+
+        **Returns:**
+
+        CLogLog link derivative, shape `(n,)`.
+        """
+        return _grad_per_sample(self, mu)
+
+    def inverse_deriv(self, eta: ArrayLike) -> Array:
+        r"""Compute $(g^{-1})'(\eta) = \exp(\eta - \exp(\eta))$ via autodiff.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+
+        **Returns:**
+
+        CLogLog inverse-link derivative, shape `(n,)`.
+        """
+        return _grad_per_sample(self.inverse, eta)
+
+
+class LogLogLink(AbstractLink):
+    r"""Log-log link $g(\mu) = -\log(-\log(\mu))$.
+
+    The inverse link is $g^{-1}(\eta) = \exp(-\exp(-\eta))$.
+    The derivative $g'(\mu)$ and inverse-link derivative $(g^{-1})'(\eta)$
+    are computed via autodiff.
+
+    This is the mirror of CLogLog: it is asymmetric in the opposite direction,
+    approaching 0 faster than it approaches 1.
+    """
+
+    def __call__(self, mu: ArrayLike) -> Array:
+        r"""Compute $g(\mu) = -\log(-\log(\mu))$.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`, entries in $(0, 1)$.
+
+        **Returns:**
+
+        Log-log value, shape `(n,)`.
+        """
+        return -jnp.log(-jnp.log(jnp.asarray(mu)))
+
+    def inverse(self, eta: ArrayLike) -> Array:
+        r"""Compute $g^{-1}(\eta) = \exp(-\exp(-\eta))$.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+
+        **Returns:**
+
+        $e^{-e^{-\eta}}$, shape `(n,)`.
+        """
+        return jnp.exp(-jnp.exp(-jnp.asarray(eta)))
+
+    def deriv(self, mu: ArrayLike) -> Array:
+        r"""Compute $g'(\mu) = -1 / (\mu \log(\mu))$ via autodiff.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`.
+
+        **Returns:**
+
+        LogLog link derivative, shape `(n,)`.
+        """
+        return _grad_per_sample(self, mu)
+
+    def inverse_deriv(self, eta: ArrayLike) -> Array:
+        r"""Compute $(g^{-1})'(\eta) = \exp(-\eta - \exp(-\eta))$ via autodiff.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+
+        **Returns:**
+
+        LogLog inverse-link derivative, shape `(n,)`.
+        """
+        return _grad_per_sample(self.inverse, eta)
+
+
+class SqrtLink(AbstractLink):
+    r"""Square-root link $g(\mu) = \sqrt{\mu}$.
+
+    The derivative is $g'(\mu) = 1 / (2\sqrt{\mu})$, the inverse link is
+    $g^{-1}(\eta) = \eta^2$, and the inverse-link derivative is
+    $(g^{-1})'(\eta) = 2\eta$.
+
+    This is a variance-stabilising link for the Poisson family: it
+    approximately stabilises the variance for count data.
+    """
+
+    def __call__(self, mu: ArrayLike) -> Array:
+        r"""Compute $g(\mu) = \sqrt{\mu}$.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`, entries $\geq 0$.
+
+        **Returns:**
+
+        $\sqrt{\mu}$, shape `(n,)`.
+        """
+        return jnp.sqrt(jnp.asarray(mu))
+
+    def inverse(self, eta: ArrayLike) -> Array:
+        r"""Compute $g^{-1}(\eta) = \eta^2$.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`, entries $\geq 0$.
+
+        **Returns:**
+
+        $\eta^2$, shape `(n,)`.
+        """
+        return jnp.square(jnp.asarray(eta))
+
+    def deriv(self, mu: ArrayLike) -> Array:
+        r"""Compute $g'(\mu) = 1 / (2\sqrt{\mu})$ via autodiff.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`.
+
+        **Returns:**
+
+        $1/(2\sqrt{\mu})$, shape `(n,)`.
+        """
+        return _grad_per_sample(self, mu)
+
+    def inverse_deriv(self, eta: ArrayLike) -> Array:
+        r"""Compute $(g^{-1})'(\eta) = 2\eta$ via autodiff.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+
+        **Returns:**
+
+        $2\eta$, shape `(n,)`.
+        """
+        return _grad_per_sample(self.inverse, eta)
+
+
+class CauchitLink(AbstractLink):
+    r"""Cauchit link $g(\mu) = \tan(\pi(\mu - 1/2))$.
+
+    The inverse link is $g^{-1}(\eta) = 1/2 + \arctan(\eta)/\pi$.
+    The derivative $g'(\mu)$ and inverse-link derivative $(g^{-1})'(\eta)$
+    are computed via autodiff.
+
+    This is a heavy-tailed alternative to the probit link for the Binomial
+    family. It is robust to extreme observations near 0 or 1 because its tails
+    decay as $1/\eta^2$ rather than exponentially.
+    """
+
+    def __call__(self, mu: ArrayLike) -> Array:
+        r"""Compute $g(\mu) = \tan(\pi(\mu - 1/2))$.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`, entries in $(0, 1)$.
+
+        **Returns:**
+
+        Cauchit value, shape `(n,)`.
+        """
+        return jnp.tan(jnp.pi * (jnp.asarray(mu) - 0.5))
+
+    def inverse(self, eta: ArrayLike) -> Array:
+        r"""Compute $g^{-1}(\eta) = 1/2 + \arctan(\eta) / \pi$.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+
+        **Returns:**
+
+        $1/2 + \arctan(\eta)/\pi$, shape `(n,)`.
+        """
+        return 0.5 + jnp.arctan(jnp.asarray(eta)) / jnp.pi
+
+    def deriv(self, mu: ArrayLike) -> Array:
+        r"""Compute $g'(\mu) = \pi / \cos^2(\pi(\mu - 1/2))$ via autodiff.
+
+        **Arguments:**
+
+        - `mu`: mean, shape `(n,)`.
+
+        **Returns:**
+
+        Cauchit link derivative, shape `(n,)`.
+        """
+        return _grad_per_sample(self, mu)
+
+    def inverse_deriv(self, eta: ArrayLike) -> Array:
+        r"""Compute $(g^{-1})'(\eta) = 1 / (\pi(1 + \eta^2))$ via autodiff.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+
+        **Returns:**
+
+        Cauchit inverse-link derivative, shape `(n,)`.
+        """
+        return _grad_per_sample(self.inverse, eta)
+
+
 class NBLink(AbstractLink):
     r"""Negative-binomial link $g(\mu) = \log(\alpha \mu / (1 + \alpha \mu))$.
 
