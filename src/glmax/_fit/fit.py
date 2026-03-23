@@ -1,9 +1,9 @@
 # pattern: Functional Core
 
+from typing import cast
 
 import equinox as eqx
 import jax.numpy as jnp
-import jax.tree_util as jtu
 
 from jax import Array
 from jaxtyping import ArrayLike
@@ -12,7 +12,6 @@ from .._misc import inexact_asarray
 from ..family import ExponentialDispersionFamily
 from .irls import IRLSFitter
 from .types import (
-    _canonicalize_init,
     AbstractFitter,
     FitResult,
     FittedGLM,
@@ -73,14 +72,15 @@ def fit(
         raise TypeError("fit(...) expects `fitter` to be an AbstractFitter instance.")
 
     # ensure things are in inexact numerical space.
-    X, y = jtu.tree_map(inexact_asarray, (X, y))
+    X = cast(Array, inexact_asarray(X))
+    y = cast(Array, inexact_asarray(y))
     if offset is None:
         offset = jnp.zeros_like(y)
     else:
-        offset = inexact_asarray(offset)
+        offset = cast(Array, inexact_asarray(offset))
 
     if weights is not None:
-        weights = inexact_asarray(weights)
+        weights = cast(Array, inexact_asarray(weights))
 
     if X.ndim != 2:
         raise ValueError("X must be rank-2 with shape (n, p).")
@@ -89,15 +89,14 @@ def fit(
     if X.shape[0] != y.shape[0]:
         raise ValueError("X and y must share the sample dimension n.")
 
-    X = eqx.error_if(X, ~jnp.all(jnp.isfinite(X)), "X must contain only finite values.")
-    y = eqx.error_if(y, ~jnp.all(jnp.isfinite(y)), "y must contain only finite values.")
+    # these are helpful enough, but lets not go overboard checking for bad input...
+    # we need to re-cast due to error_if having type sig Any
+    X = cast(Array, eqx.error_if(X, ~jnp.all(jnp.isfinite(X)), "X must contain only finite values."))
+    y = cast(Array, eqx.error_if(y, ~jnp.all(jnp.isfinite(y)), "y must contain only finite values."))
 
     if init is not None:
-        beta, disp, aux = _canonicalize_init(init, X.shape[1])
         _, default_aux = family.init_nuisance()
-        if default_aux is None:
-            aux = None
-        init = Params(beta=beta, disp=disp, aux=aux)
+        init = Params(beta=init.beta, disp=init.disp, aux=None if default_aux is None else init.aux)
 
     result = fitter.fit(family, X, y, offset, weights, init)
 
@@ -145,13 +144,12 @@ def predict(
     if not isinstance(params, Params):
         raise TypeError("predict(...) expects `params` to be a Params instance.")
 
-    X = inexact_asarray(X)
-    if offset is None:
-        offset = jnp.zeros(X.shape[0], dtype=X.dtype)
-    else:
-        offset = inexact_asarray(offset)
+    X = cast(Array, inexact_asarray(X))
 
-    beta, _disp, _aux = _canonicalize_init(params, X.shape[1])
+    eta = X @ params.beta
 
-    eta = X @ beta + offset
+    if offset is not None:
+        offset = cast(Array, inexact_asarray(offset))
+        eta = eta + offset
+
     return family.glink.inverse(eta)

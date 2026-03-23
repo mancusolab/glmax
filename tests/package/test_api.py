@@ -240,39 +240,6 @@ def test_canonical_fit_succeeds_for_supported_families(family, X, y) -> None:
     _assert_canonical_params_for_family(family, result.params)
 
 
-def test_predict_rejects_invalid_params_contracts_deterministically() -> None:
-    family = Gaussian()
-    X = jnp.array([[0.0], [1.0], [2.0]])
-
-    with pytest.raises(ValueError, match="Params.beta"):
-        glmax.predict(family, Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0), aux=None), X)
-
-    with pytest.raises(TypeError, match="Params.beta must be numeric"):
-        glmax.predict(family, Params(beta=["bad"], disp=jnp.array(0.0), aux=None), X)
-
-    with pytest.raises(TypeError, match="Params.disp must be numeric"):
-        glmax.predict(family, Params(beta=jnp.array([1.0]), disp="bad", aux=None), X)
-
-    with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
-        glmax.predict(family, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0), aux=None), X)
-
-    with pytest.raises(TypeError, match="Params.disp must have an inexact dtype"):
-        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32), aux=None), X)
-
-    with pytest.raises(TypeError, match="Params.aux must be numeric"):
-        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux="bad"), X)
-
-    with pytest.raises(TypeError, match="Params.aux must have an inexact dtype"):
-        glmax.predict(
-            family,
-            Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0, dtype=jnp.int32)),
-            X,
-        )
-
-    with pytest.raises(ValueError, match="Params.aux must be a scalar"):
-        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), X)
-
-
 @pytest.mark.parametrize(
     ("family", "X", "y"),
     [

@@ -81,35 +81,3 @@ def test_predict_boundary_rejects_invalid_nouns() -> None:
 
     with pytest.raises(TypeError, match="Params"):
         glmax.predict(family, jnp.array([1.0]), X)
-
-
-def test_predict_rejects_beta_shape_mismatch() -> None:
-    X = jnp.array([[0.0], [1.0], [2.0]])
-    bad_params = Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0), aux=None)
-
-    with pytest.raises(ValueError, match="Params.beta"):
-        glmax.predict(Gaussian(), bad_params, X)
-
-
-def test_predict_rejects_non_numeric_or_non_scalar_params() -> None:
-    family = Gaussian()
-    X = jnp.array([[0.0], [1.0], [2.0]])
-
-    with pytest.raises(TypeError, match="Params.beta must be numeric"):
-        glmax.predict(family, Params(beta=["bad"], disp=jnp.array(0.0), aux=None), X)
-
-    with pytest.raises(TypeError, match="Params.disp must be numeric"):
-        glmax.predict(family, Params(beta=jnp.array([1.0]), disp="bad", aux=None), X)
-
-    with pytest.raises(TypeError, match="Params.aux must be numeric"):
-        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux="bad"), X)
-
-    with pytest.raises(TypeError, match="Params.aux must have an inexact dtype"):
-        glmax.predict(
-            family,
-            Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0, dtype=jnp.int32)),
-            X,
-        )
-
-    with pytest.raises(ValueError, match="Params.aux must be a scalar"):
-        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.1, 0.2])), X)

@@ -548,88 +548,6 @@ def test_fit_boundary_rejects_raw_data_and_non_params_init() -> None:
         glmax.fit(Gaussian(), jnp.ones((3, 1)), jnp.ones(3), init=jnp.zeros(1))
 
 
-@pytest.mark.parametrize(
-    ("bad_init", "error_type", "match"),
-    [
-        (
-            Params(beta=["bad"], disp=jnp.array(0.0), aux=None),
-            TypeError,
-            "Params.beta must be numeric",
-        ),
-        (
-            Params(beta=jnp.array([1.0]), disp="bad", aux=None),
-            TypeError,
-            "Params.disp must be numeric",
-        ),
-        (
-            Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux="bad"),
-            TypeError,
-            "Params.aux must be numeric",
-        ),
-        (
-            Params(beta=jnp.array([1.0]), disp=jnp.array(0, dtype=jnp.int32), aux=None),
-            TypeError,
-            "Params.disp must have an inexact dtype",
-        ),
-        (
-            Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array(0, dtype=jnp.int32)),
-            TypeError,
-            "Params.aux must have an inexact dtype",
-        ),
-        (
-            Params(beta=jnp.array([1.0, 2.0]), disp=jnp.array(0.0), aux=None),
-            ValueError,
-            "Params.beta must be a one-dimensional vector with length equal to X.shape\\[1\\]",
-        ),
-        (
-            Params(beta=jnp.array([1.0]), disp=jnp.array([0.0, 1.0]), aux=None),
-            ValueError,
-            "Params.disp must be a scalar",
-        ),
-        (
-            Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.0, 1.0])),
-            ValueError,
-            "Params.aux must be a scalar",
-        ),
-    ],
-)
-def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
-    bad_init: Params,
-    error_type: type[Exception],
-    match: str,
-) -> None:
-    seen = {"called": False}
-
-    class RecordingFitter(AbstractFitter, strict=True):
-        solver: lx.AbstractLinearSolver = lx.Cholesky()
-        step_size: float = 1.0
-        tol: float = 1e-3
-        max_iter: int = 1000
-
-        def fit(
-            self,
-            family: ExponentialDispersionFamily,
-            X: Array,
-            y: Array,
-            offset: Array,
-            weights: Array | None,
-            init: Params | None = None,
-        ) -> FitResult:
-            del family, X, y, offset, weights
-            seen["called"] = True
-            seen["init"] = init
-            return _make_fit_result()
-
-    family = Gaussian()
-    X = jnp.ones((3, 1))
-    y = jnp.ones(3)
-
-    with pytest.raises(error_type, match=match):
-        glmax.fit(family, X, y, init=bad_init, fitter=RecordingFitter())
-
-    assert not seen["called"]
-
-
 @pytest.mark.parametrize("family", [Gaussian(), Gamma(), Poisson(), Binomial()])
 def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter(family) -> None:
     seen = {"called": False}
@@ -787,15 +705,6 @@ def test_negative_binomial_fit_glm_weights_match_final_auxiliary_parameter() -> 
 
     assert fitted.params.aux is not None
     assert jnp.allclose(fitted.glm_wt, expected_weight, rtol=1e-6, atol=1e-7)
-
-
-def test_default_fitter_validates_init_beta_shape() -> None:
-    X = jnp.ones((4, 2))
-    y = jnp.ones(4)
-    bad_init = Params(beta=jnp.ones((2, 1)), disp=jnp.array(0.0), aux=None)
-
-    with pytest.raises(ValueError, match="Params.beta"):
-        glmax.fit(Gaussian(), X, y, init=bad_init)
 
 
 @pytest.mark.parametrize(

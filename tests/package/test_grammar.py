@@ -139,12 +139,6 @@ def test_grammar_contract_matrix_rejects_invalid_noun_usage() -> None:
     assert isinstance(inferred, InferenceResult)
     assert bool(jnp.isnan(inferred.stat).any() or jnp.isnan(inferred.p).any())
 
-    with pytest.raises(TypeError, match="Params.beta must have an inexact dtype"):
-        glmax.predict(family, Params(beta=jnp.array([1], dtype=jnp.int32), disp=jnp.array(0.0), aux=None), X)
-
-    with pytest.raises(ValueError, match="Params.aux must be a scalar"):
-        glmax.predict(family, Params(beta=jnp.array([1.0]), disp=jnp.array(0.0), aux=jnp.array([0.2, 0.3])), X)
-
     with pytest.raises(eqx.EquinoxRuntimeError, match="fitted.params.disp"):
         glmax.infer(
             unchecked_fitted(
