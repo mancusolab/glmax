@@ -4,13 +4,12 @@
 explicit covariance estimator. This separation keeps the workflow clear about
 what inferential assumptions are being used after fitting.
 
-## Hypothesis-Test Contract
+## Hypothesis testing
 
 ??? abstract "`glmax.AbstractTest`"
 
     ::: glmax.AbstractTest
 
-## Concrete Tests
 
 ::: glmax.WaldTest
 
@@ -18,7 +17,7 @@ what inferential assumptions are being used after fitting.
 
 ::: glmax.ScoreTest
 
-## Standard-Error Contract
+## Standard-Error estimators
 
 Covariance estimators are separate strategy objects so the same fitted noun can
 be paired with different error models.
@@ -27,7 +26,6 @@ be paired with different error models.
 
     ::: glmax.AbstractStdErrEstimator
 
-## Concrete Estimators
 
 ::: glmax.FisherInfoError
 

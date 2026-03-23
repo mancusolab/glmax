@@ -21,6 +21,8 @@ mean response $\mu$, how the variance scales with $\mu$, and how
 
 ---
 
+## Exponential dispersion families
+
 `ExponentialDispersionFamily` defines the common interface that fitting,
 inference, diagnostics, and prediction rely on. Concrete families implement
 this contract.
@@ -40,7 +42,6 @@ this contract.
                 - update_nuisance
                 - init_nuisance
 
-## Concrete families
 
 ::: glmax.Gaussian
     options:
@@ -75,7 +76,9 @@ this contract.
         members:
             - __init__
 
-## Link contract
+---
+
+## Link functions
 
 Links connect the mean response $\mu$ to the linear predictor $\eta$. The
 abstract link contract documents the forward link, inverse link, and their
@@ -92,7 +95,6 @@ interface.
                 - deriv
                 - inverse_deriv
 
-## Concrete links
 
 ::: glmax.IdentityLink
     options:

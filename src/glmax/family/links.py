@@ -92,10 +92,12 @@ class AbstractLink(eqx.Module):
 class PowerLink(AbstractLink):
     r"""Power link $g(\mu) = \mu^p$.
 
-    Here $\mu$ is the mean response and $p$ is the power exponent.
-    The derivative is $g'(\mu) = p \mu^{p-1}$, the inverse link is
-    $g^{-1}(\eta) = \eta^{1/p}$, and the inverse-link derivative is
-    $(g^{-1})'(\eta) = \eta^{1/p - 1} / p$.
+    Here $p$ is the power exponent. Derivatives are computed via autodiff.
+
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = \mu^p$ | $g'(\mu) = p\mu^{p-1}$ |
+    | $g^{-1}(\eta) = \eta^{1/p}$ | $(g^{-1})'(\eta) = \eta^{1/p-1}/p$ |
     """
 
     power: Scalar
@@ -173,9 +175,12 @@ class PowerLink(AbstractLink):
 class IdentityLink(AbstractLink):
     r"""Identity link $g(\mu) = \mu$.
 
-    The derivative is $g'(\mu) = 1$, the inverse link is
-    $g^{-1}(\eta) = \eta$, and the inverse-link derivative is
-    $(g^{-1})'(\eta) = 1$. This is the canonical link for the Gaussian family.
+    Canonical link for the Gaussian family.
+
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = \mu$ | $g'(\mu) = 1$ |
+    | $g^{-1}(\eta) = \eta$ | $(g^{-1})'(\eta) = 1$ |
     """
 
     def __call__(self, mu: Array) -> Array:
@@ -234,12 +239,13 @@ class IdentityLink(AbstractLink):
 class LogitLink(AbstractLink):
     r"""Logit link $g(\mu) = \log(\mu / (1 - \mu))$.
 
-    The derivative is $g'(\mu) = 1 / (\mu (1 - \mu))$, the inverse link is
-    $g^{-1}(\eta) = \sigma(\eta)$ where $\sigma$ is the logistic sigmoid, and
-    the inverse-link derivative is
-    $(g^{-1})'(\eta) = \sigma(\eta) (1 - \sigma(\eta))$.
+    Canonical link for the Binomial family. Here $\sigma$ denotes the logistic
+    sigmoid.
 
-    This is the canonical link for the Binomial family.
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = \log\!\left(\frac{\mu}{1-\mu}\right)$ | $g'(\mu) = \frac{1}{\mu(1-\mu)}$ |
+    | $g^{-1}(\eta) = \sigma(\eta)$ | $(g^{-1})'(\eta) = \sigma(\eta)(1-\sigma(\eta))$ |
     """
 
     def __call__(self, mu: Array) -> Array:
@@ -303,11 +309,12 @@ class LogitLink(AbstractLink):
 class InverseLink(AbstractLink):
     r"""Reciprocal link $g(\mu) = 1 / \mu$.
 
-    The derivative is $g'(\mu) = -1 / \mu^2$, the inverse link is
-    $g^{-1}(\eta) = 1 / \eta$, and the inverse-link derivative is
-    $(g^{-1})'(\eta) = -1 / \eta^2$.
+    Canonical link for the Gamma family.
 
-    This is the canonical link for Gamma models.
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = 1/\mu$ | $g'(\mu) = -1/\mu^2$ |
+    | $g^{-1}(\eta) = 1/\eta$ | $(g^{-1})'(\eta) = -1/\eta^2$ |
     """
 
     def __call__(self, mu: Array) -> Array:
@@ -377,11 +384,12 @@ class InverseLink(AbstractLink):
 class LogLink(AbstractLink):
     r"""Log link $g(\mu) = \log(\mu)$.
 
-    The derivative is $g'(\mu) = 1 / \mu$, the inverse link is
-    $g^{-1}(\eta) = e^\eta$, and the inverse-link derivative is
-    $(g^{-1})'(\eta) = e^\eta$.
+    Canonical link for the Poisson family.
 
-    This is the canonical link for the Poisson family.
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = \log(\mu)$ | $g'(\mu) = 1/\mu$ |
+    | $g^{-1}(\eta) = e^\eta$ | $(g^{-1})'(\eta) = e^\eta$ |
     """
 
     def __call__(self, mu: Array) -> Array:
@@ -442,13 +450,14 @@ class LogLink(AbstractLink):
 class ProbitLink(AbstractLink):
     r"""Probit link $g(\mu) = \Phi^{-1}(\mu)$.
 
-    Here $\Phi^{-1}$ is the standard normal quantile function (inverse CDF).
-    The inverse link is $g^{-1}(\eta) = \Phi(\eta)$, where $\Phi$ is the
-    standard normal CDF. The derivative $g'(\mu)$ and inverse-link derivative
-    $(g^{-1})'(\eta)$ are computed via autodiff.
+    Second most common link for the Binomial family, widely used in bioassay
+    and econometrics. Here $\Phi$ is the standard normal CDF and $\phi$ is the
+    standard normal PDF. Derivatives are computed via autodiff.
 
-    This is the second most common link for the Binomial family, widely used
-    in bioassay and econometrics.
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = \Phi^{-1}(\mu)$ | $g'(\mu) = 1/\phi(\Phi^{-1}(\mu))$ |
+    | $g^{-1}(\eta) = \Phi(\eta)$ | $(g^{-1})'(\eta) = \phi(\eta)$ |
     """
 
     def __call__(self, mu: Array) -> Array:
@@ -511,13 +520,14 @@ class ProbitLink(AbstractLink):
 class CLogLogLink(AbstractLink):
     r"""Complementary log-log link $g(\mu) = \log(-\log(1 - \mu))$.
 
-    The inverse link is $g^{-1}(\eta) = 1 - \exp(-\exp(\eta))$.
-    The derivative $g'(\mu)$ and inverse-link derivative $(g^{-1})'(\eta)$
-    are computed via autodiff.
+    Canonical link for interval-censored survival models and log-Weibull
+    regression. Asymmetric: probability approaches 0 slower than it
+    approaches 1. Derivatives are computed via autodiff.
 
-    This is the canonical link for interval-censored survival models and
-    log-Weibull regression. It is asymmetric: the probability approaches 0
-    slower than it approaches 1.
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = \log(-\log(1-\mu))$ | $g'(\mu) = -\frac{1}{(1-\mu)\log(1-\mu)}$ |
+    | $g^{-1}(\eta) = 1 - e^{-e^\eta}$ | $(g^{-1})'(\eta) = e^{\eta - e^\eta}$ |
     """
 
     def __call__(self, mu: Array) -> Array:
@@ -576,12 +586,13 @@ class CLogLogLink(AbstractLink):
 class LogLogLink(AbstractLink):
     r"""Log-log link $g(\mu) = -\log(-\log(\mu))$.
 
-    The inverse link is $g^{-1}(\eta) = \exp(-\exp(-\eta))$.
-    The derivative $g'(\mu)$ and inverse-link derivative $(g^{-1})'(\eta)$
-    are computed via autodiff.
+    Mirror of CLogLog: asymmetric in the opposite direction, approaching 0
+    faster than it approaches 1. Derivatives are computed via autodiff.
 
-    This is the mirror of CLogLog: it is asymmetric in the opposite direction,
-    approaching 0 faster than it approaches 1.
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = -\log(-\log(\mu))$ | $g'(\mu) = -\frac{1}{\mu\log(\mu)}$ |
+    | $g^{-1}(\eta) = e^{-e^{-\eta}}$ | $(g^{-1})'(\eta) = e^{-\eta - e^{-\eta}}$ |
     """
 
     def __call__(self, mu: Array) -> Array:
@@ -640,12 +651,13 @@ class LogLogLink(AbstractLink):
 class SqrtLink(AbstractLink):
     r"""Square-root link $g(\mu) = \sqrt{\mu}$.
 
-    The derivative is $g'(\mu) = 1 / (2\sqrt{\mu})$, the inverse link is
-    $g^{-1}(\eta) = \eta^2$, and the inverse-link derivative is
-    $(g^{-1})'(\eta) = 2\eta$.
+    Variance-stabilising link for the Poisson family: approximately stabilises
+    variance for count data.
 
-    This is a variance-stabilising link for the Poisson family: it
-    approximately stabilises the variance for count data.
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = \sqrt{\mu}$ | $g'(\mu) = \frac{1}{2\sqrt{\mu}}$ |
+    | $g^{-1}(\eta) = \eta^2$ | $(g^{-1})'(\eta) = 2\eta$ |
     """
 
     def __call__(self, mu: Array) -> Array:
@@ -704,13 +716,14 @@ class SqrtLink(AbstractLink):
 class CauchitLink(AbstractLink):
     r"""Cauchit link $g(\mu) = \tan(\pi(\mu - 1/2))$.
 
-    The inverse link is $g^{-1}(\eta) = 1/2 + \arctan(\eta)/\pi$.
-    The derivative $g'(\mu)$ and inverse-link derivative $(g^{-1})'(\eta)$
-    are computed via autodiff.
+    Heavy-tailed alternative to the probit link for the Binomial family.
+    Robust to extreme observations near 0 or 1: tails decay as $1/\eta^2$
+    rather than exponentially. Derivatives are computed via autodiff.
 
-    This is a heavy-tailed alternative to the probit link for the Binomial
-    family. It is robust to extreme observations near 0 or 1 because its tails
-    decay as $1/\eta^2$ rather than exponentially.
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = \tan(\pi(\mu - \tfrac{1}{2}))$ | $g'(\mu) = \frac{\pi}{\cos^2(\pi(\mu - \tfrac{1}{2}))}$ |
+    | $g^{-1}(\eta) = \tfrac{1}{2} + \frac{\arctan(\eta)}{\pi}$ | $(g^{-1})'(\eta) = \frac{1}{\pi(1+\eta^2)}$ |
     """
 
     def __call__(self, mu: Array) -> Array:
@@ -769,12 +782,14 @@ class CauchitLink(AbstractLink):
 class NBLink(AbstractLink):
     r"""Negative-binomial link $g(\mu) = \log(\alpha \mu / (1 + \alpha \mu))$.
 
-    Here $\mu$ is the mean response and $\alpha > 0$ is the overdispersion
-    parameter. The derivative is
-    $g'(\mu) = 1 / (\mu (1 + \alpha \mu))$, the inverse link is
-    $g^{-1}(\eta) = 1 / (\alpha \operatorname{expm1}(-\eta))$, and the
-    inverse-link derivative is $(g^{-1})'(\eta)$ computed from that inverse
-    expression.
+    Canonical link for the Negative Binomial family. Here $\alpha > 0$ is the
+    overdispersion parameter. The inverse-link derivative is computed via
+    autodiff.
+
+    | Function | Derivative |
+    |---|---|
+    | $g(\mu) = \log\!\left(\frac{\alpha\mu}{1+\alpha\mu}\right)$ | $g'(\mu) = \frac{1}{\mu(1+\alpha\mu)}$ |
+    | $g^{-1}(\eta) = \frac{1}{\alpha\,\mathrm{expm1}(-\eta)}$ | $(g^{-1})'(\eta)$ via autodiff |
     """
 
     alpha: Scalar

@@ -9,13 +9,14 @@ for that diagnostic, which keeps the workflow easy to compose and type-check.
 
 ---
 
-## Diagnostic Contract
+## Diagnostics
 
 `AbstractDiagnostic` defines the strategy interface behind `check`.
 
-::: glmax.AbstractDiagnostic
+??? abstract "glmax.AbstractDiagnostic"
 
-## Built-In Diagnostic Strategies
+    ::: glmax.AbstractDiagnostic
+
 
 ::: glmax.PearsonResidual
 
@@ -35,15 +36,8 @@ for that diagnostic, which keeps the workflow easy to compose and type-check.
 
 ::: glmax.Influence
 
-## Diagnostic Result Nouns
-
-Some diagnostics return arrays directly, while others return explicit result
-nouns.
-
-### `GofStats`
+## Diagnostic results
 
 ::: glmax.GofStats
-
-### `InfluenceStats`
 
 ::: glmax.InfluenceStats

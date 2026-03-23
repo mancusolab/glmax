@@ -265,15 +265,16 @@ class ExponentialDispersionFamily(eqx.Module):
 
 
 class Gaussian(ExponentialDispersionFamily):
-    r"""Gaussian (normal) exponential family.
+    r"""Gaussian (normal) exponential family with density
 
-    Models a continuous response $y \in \mathbb{R}$ with
-    $y \mid \mu \sim \mathcal{N}(\mu, \sigma^2)$.
+    $$f(y \mid \mu, \phi) = \frac{1}{\sqrt{2\pi\phi}}
+    \exp\!\left(-\frac{(y - \mu)^2}{2\phi}\right)$$
 
-    The variance function is $V(\mu) = 1$ and the observation variance is
-    $\phi V(\mu) = \phi$, where $\phi = \sigma^2$ is the Gaussian dispersion.
-    The canonical link is the identity $g(\mu) = \mu$. Gaussian uses `disp`
-    as the dispersion carrier and ignores `aux`.
+    The mean is $\mu \in \mathbb{R}$, the dispersion is $\phi = \sigma^2 > 0$,
+    and the variance function is $V(\mu) = 1$, so $\mathrm{Var}(Y \mid \mu) = \phi$.
+
+    The canonical link is the identity $g(\mu) = \mu$. Gaussian stores
+    dispersion in `disp` and ignores `aux`.
     """
 
     glink: AbstractLink = IdentityLink()
@@ -460,15 +461,16 @@ class Gaussian(ExponentialDispersionFamily):
 
 
 class Binomial(ExponentialDispersionFamily):
-    r"""Binomial exponential family for binary responses.
+    r"""Binomial exponential family for binary responses with PMF
 
-    Models a binary response $y \in \{0, 1\}$ with
-    $y \mid \mu \sim \mathrm{Bernoulli}(\mu)$, $\mu \in (0, 1)$.
+    $$P(Y = y \mid \mu) = \mu^y (1 - \mu)^{1 - y}, \quad y \in \{0, 1\}$$
 
-    The unit variance function is $V(\mu) = \mu(1 - \mu)$, so the model
-    variance is $\phi V(\mu)$ with fixed $\phi = 1$. The canonical link is
-    the logit $g(\mu) = \log(\mu / (1 - \mu))$. Binomial fixes `disp = 1.0`
-    and ignores `aux`.
+    The mean is $\mu \in (0, 1)$ and the variance function is
+    $V(\mu) = \mu(1 - \mu)$, so $\mathrm{Var}(Y \mid \mu) = \mu(1 - \mu)$
+    with fixed dispersion $\phi = 1$.
+
+    The canonical link is the logit $g(\mu) = \log(\mu / (1 - \mu))$.
+    Binomial fixes `disp = 1.0` and ignores `aux`.
     """
 
     glink: AbstractLink = LogitLink()
@@ -600,14 +602,16 @@ class Binomial(ExponentialDispersionFamily):
 
 
 class Poisson(ExponentialDispersionFamily):
-    r"""Poisson exponential family for count responses.
+    r"""Poisson exponential family for count responses with PMF
 
-    Models a non-negative integer response $y \in \{0, 1, 2, \ldots\}$ with
-    $y \mid \mu \sim \mathrm{Poisson}(\mu)$, $\mu > 0$.
+    $$P(Y = y \mid \mu) = \frac{e^{-\mu} \mu^y}{y!},
+    \quad y \in \{0, 1, 2, \ldots\}$$
 
-    The unit variance function is $V(\mu) = \mu$, so the model variance is
-    $\phi V(\mu)$ with fixed $\phi = 1$. The canonical link is
-    $g(\mu) = \log(\mu)$. Poisson fixes `disp = 1.0` and ignores `aux`.
+    The mean is $\mu > 0$ and the variance function is $V(\mu) = \mu$, so
+    $\mathrm{Var}(Y \mid \mu) = \mu$ with fixed dispersion $\phi = 1$.
+
+    The canonical link is $g(\mu) = \log(\mu)$. Poisson fixes `disp = 1.0`
+    and ignores `aux`.
     """
 
     glink: AbstractLink = LogLink()
@@ -727,17 +731,17 @@ class Poisson(ExponentialDispersionFamily):
 
 
 class NegativeBinomial(ExponentialDispersionFamily):
-    r"""Negative-binomial (NB-2) exponential family for overdispersed count data.
+    r"""Negative-binomial (NB-2) exponential family for overdispersed counts with PMF
 
-    Models a non-negative integer response via the NB-2 parameterization
-    $\operatorname{Var}(Y \mid \mu) = \mu + \alpha \mu^2$, where $\alpha > 0$ is the
-    overdispersion parameter. Uses a log link by default.
-    Negative Binomial fixes `disp = 1.0` and uses `aux` as `alpha`.
+    $$P(Y = y \mid \mu, \alpha) = \binom{y + r - 1}{y}
+    \left(\frac{r}{r + \mu}\right)^r \left(\frac{\mu}{r + \mu}\right)^y,
+    \quad r = 1/\alpha, \; y \in \{0, 1, 2, \ldots\}$$
 
-    During the transition to the split contract, methods still accept legacy
-    callers that pass `alpha` through `disp`; when `aux` is provided it always
-    takes precedence, and whichever carrier is used is validated as a positive,
-    finite `alpha`.
+    The mean is $\mu > 0$, the overdispersion is $\alpha > 0$, and the
+    variance function is $V(\mu) = \mu + \alpha\mu^2$ with fixed $\phi = 1$.
+    As $\alpha \to 0$ the distribution converges to Poisson.
+
+    Negative Binomial fixes `disp = 1.0` and stores overdispersion in `aux`.
     """
 
     glink: AbstractLink = LogLink()
