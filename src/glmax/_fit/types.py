@@ -84,8 +84,8 @@ class FitResult(eqx.Module, strict=True):
         - `eta`: fitted linear predictor $\hat{\eta}$, shape `(n,)`.
         - `mu`: fitted mean response $\hat{\mu}$, shape `(n,)`.
         - `glm_wt`: GLM working weight vector $w$, shape `(n,)`.
-        - `converged`: boolean scalar; `True` if IRLS converged within tolerance.
-        - `num_iters`: integer scalar; number of IRLS iterations taken.
+        - `converged`: boolean scalar; `True` if the fitter converged within tolerance.
+        - `num_iters`: integer scalar; number of iterations taken.
         - `objective`: final negative log-likelihood scalar.
         - `objective_delta`: change in objective on the last iteration.
         - `score_residual`: score-style residual

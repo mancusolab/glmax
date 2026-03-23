@@ -33,7 +33,7 @@ Both strategies return the same `FittedGLM` noun and are `eqx.filter_jit`-compat
 
 ## Linear solvers
 
-Each fitter delegates its weighted normal-equations step to a `lineax` solver.
+Each fitter uses a `lineax` solver for its internal linear system.
 Pass any `lx.AbstractLinearSolver` as `solver=` when constructing a fitter.
 `lx.Cholesky()` is the default and the fastest option for well-conditioned
 systems. Use `lx.QR()` when the design matrix is rank-deficient.

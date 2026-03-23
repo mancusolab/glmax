@@ -101,7 +101,9 @@ plugins:
 
 nav:
     - Home: 'index.md'
-    - Guide: 'guide.md'
+    - Overview: 'guide.md'
+    - JAX Transformations: 'jax-transformations.md'
+    - From statsmodels: 'from-statsmodels.md'
     - API:
           - 'Families & Links': 'api/families-and-links.md'
           - 'fit':
