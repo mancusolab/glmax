@@ -265,10 +265,10 @@ class FittedGLM(eqx.Module, strict=True):
 
 
 class AbstractFitter(eqx.Module, strict=True):
-    r"""Abstract base for fit strategies used by `fit(model, data, fitter=...)`.
+    r"""Abstract base for fit strategies used by `fit(family, X, y, fitter=...)`.
 
     Subclasses must declare a concrete `solver: lx.AbstractLinearSolver` field
-    and implement `__call__`. The default concrete strategy is `IRLSFitter`.
+    and implement `fit`. The default concrete strategy is `IRLSFitter`.
     """
 
     solver: eqx.AbstractVar[lx.AbstractLinearSolver]

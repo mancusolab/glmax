@@ -9,17 +9,13 @@ Five canonical verbs form the complete user workflow:
 ```python
 import jax.numpy as jnp
 import glmax
-from glmax import GLMData
 from glmax.family import Poisson
 
-model = glmax.specify(family=Poisson())
-data  = GLMData(
-    X=jnp.array([[0.0], [1.0], [2.0], [3.0]]),
-    y=jnp.array([0.0,   1.0,   1.0,   2.0]),
-)
+X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
+y = jnp.array([0.0,   1.0,   1.0,   2.0])
 
-fitted = glmax.fit(model, data)
-mu_hat = glmax.predict(model, fitted.params, data)
+fitted = glmax.fit(Poisson(), X, y)
+mu_hat = glmax.predict(fitted.family, fitted.params, X)
 result = glmax.infer(fitted)
 pearson = glmax.check(fitted)
 ```
@@ -38,9 +34,9 @@ and `infer`.
 
 ## API surface
 
-**Workflow** — [`specify`](api/specify/index.md), [`fit`](api/fit/index.md), [`predict`](api/predict.md), [`infer`](api/infer/index.md), [`check`](api/check.md)
+**Workflow** — [`fit`](api/fit/index.md), [`predict`](api/predict.md), [`infer`](api/infer/index.md), [`check`](api/check.md)
 
-**Specification** — [`Families & Links`](api/specify/families-and-links.md)
+**Families & Links** — [`Families & Links`](api/specify/families-and-links.md)
 
 **Advanced Fitting** — [`Strategies & Solvers`](api/fit/strategies.md)
 

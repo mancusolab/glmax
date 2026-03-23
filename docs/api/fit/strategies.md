@@ -1,6 +1,6 @@
 # Fitting Strategies And Solvers
 
-Most users should stay with `glmax.fit(model, data)` and the default IRLS
+Most users should stay with `glmax.fit(family, X, y)` and the default IRLS
 strategy. This page documents the lower-level strategy and solver objects for
 users who need to control the numerical fitting path explicitly.
 
@@ -11,7 +11,7 @@ users who need to control the numerical fitting path explicitly.
     ::: glmax.AbstractFitter
         options:
             members:
-                - __call__
+                - fit
 
 ::: glmax.IRLSFitter
 

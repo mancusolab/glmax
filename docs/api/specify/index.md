@@ -1,16 +1,23 @@
-# Model Specification
+# Families
 
-`glmax.specify(...)` is the entry point for model specification. Its job is to
-define the statistical family and link structure before any data are fit. The
-high-level philosophy is that model specification should stay pure: `specify`
-returns a noun that describes the model, not a stateful object that already
-knows about coefficients, solvers, or observed data.
+A GLM is defined by its response family and link function. Pass a family
+instance directly to [`glmax.fit`][] as the first argument:
 
-::: glmax.specify
+```python
+import glmax
+from glmax.family import Poisson
 
----
+fitted = glmax.fit(Poisson(), X, y)
+```
 
-`specify` produces the canonical model noun used by the rest of the workflow.
+The family determines how the linear predictor $\eta = X\beta$ maps to the
+mean response $\mu$, and how the variance scales with $\mu$. It also governs
+how [`glmax.Params`][] fields are interpreted:
 
-::: glmax.GLM
+- `disp` is the GLM dispersion / $\phi$. Gaussian and Gamma use it as EDM
+  dispersion; Poisson, Binomial, and Negative Binomial canonicalize it to `1.0`.
+- `aux` carries optional family-specific state. Negative Binomial stores its
+  overdispersion `alpha` in `aux` while canonical `disp` remains `1.0`.
 
+See [Families & Links](families-and-links.md) for the full family and link
+reference.
