@@ -7,7 +7,7 @@
 - **Exposes**:
   - Package-root API from `src/glmax/__init__.py`: `Params`, `AbstractFitter`, `FitResult`, `FittedGLM`, `IRLSFitter`, `NewtonFitter`, `InferenceResult`, `AbstractDiagnostic`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `fit`, `predict`, `infer`, `check`, `AbstractLink`, `IdentityLink`, `LogLink`, `LogitLink`, `InverseLink`, `PowerLink`, `ProbitLink`, `CLogLogLink`, `LogLogLink`, `SqrtLink`, `CauchitLink`, `NBLink`, `Gaussian`, `Gamma`, `Poisson`, `Binomial`, `NegativeBinomial`, `ExponentialDispersionFamily`.
   - Family and link implementations from `src/glmax/family/__init__.py`.
-  - User-facing grammar docs in `README.md`, `docs/index.md`, `docs/api/specify/index.md`, `docs/api/specify/families-and-links.md`, `docs/api/fit/index.md`, `docs/api/fit/strategies.md`, `docs/api/predict.md`, `docs/api/infer/index.md`, `docs/api/infer/strategies.md`, and `docs/api/check.md`.
+  - User-facing grammar docs in `README.md`, `docs/index.md`, `docs/api/families-and-links.md`, `docs/api/fit/index.md`, `docs/api/fit/strategies.md`, `docs/api/predict.md`, `docs/api/infer/index.md`, `docs/api/infer/strategies.md`, and `docs/api/check.md`.
 - **Guarantees**:
   - Canonical user workflow is `fit -> predict -> infer -> check`.
   - `glmax.fit(family, X, y, *, offset=None, weights=None, init=None, fitter=IRLSFitter())` is the curated public fit contract, is `@eqx.filter_jit`-wrapped, and returns `FittedGLM`.
@@ -51,6 +51,6 @@
 ## Verification
 - Do not run bare `pytest`.
 - Use `pytest -p no:capture tests` for all pytest invocations.
-- Keep `README.md`, `docs/index.md`, `docs/api/specify/index.md`, `docs/api/specify/families-and-links.md`, `docs/api/fit/index.md`, `docs/api/fit/strategies.md`, `docs/api/predict.md`, `docs/api/infer/index.md`, `docs/api/infer/strategies.md`, and `docs/api/check.md` aligned with the package-root exports and advanced strategy surface.
+- Keep `README.md`, `docs/index.md`, `docs/api/families-and-links.md`, `docs/api/fit/index.md`, `docs/api/fit/strategies.md`, `docs/api/predict.md`, `docs/api/infer/index.md`, `docs/api/infer/strategies.md`, and `docs/api/check.md` aligned with the package-root exports and advanced strategy surface.
 - Contract changes should update the owning tests, especially `tests/package/test_api.py`, `tests/package/test_grammar.py`, and the relevant verb-specific suites under `tests/fit/`, `tests/infer/`, `tests/data/`, `tests/glm/`.
 - Public numerics and solver docstrings use raw markdown section labels: `**Arguments:**`, `**Returns:**`, and `**Raises:**` or `**Failure Modes:**`.

@@ -92,9 +92,27 @@ def _irls(
 class IRLSFitter(AbstractFitter, strict=True):
     r"""Iteratively Reweighted Least Squares (IRLS) fit strategy.
 
-    The default [`glmax.AbstractFitter`][] used by [`glmax.fit`][]. Runs a
-    `lax.while_loop`-based IRLS algorithm and returns a
-    [`glmax.FitResult`][].
+    The default [`glmax.AbstractFitter`][] used by [`glmax.fit`][]. At each
+    iteration IRLS forms the adjusted response
+
+    $$z_i = \eta_i + s \cdot g'(\mu_i)(y_i - \mu_i)$$
+
+    and solves the weighted normal equations
+
+    $$(X^\top W X)\,\hat\beta = X^\top W z$$
+
+    where $W = \text{diag}(w)$ are the GLM working weights from
+    [`glmax.ExponentialDispersionFamily.calc_weight`][] and $s$ is
+    `step_size`. The linear system is solved with a `lineax` solver and the
+    linear predictor is updated as $\eta \leftarrow X\hat\beta + \text{offset}$.
+
+    IRLS is mathematically equivalent to Fisher scoring Newton but expressed as
+    a sequence of weighted least-squares problems. It converges in one
+    iteration for Gaussian/identity, where the working weights are constant and
+    the objective is exactly quadratic. For all other families the weights
+    depend on the current mean estimate, so multiple iterations are required.
+    The fixed `step_size` controls the update magnitude; use
+    [`glmax.NewtonFitter`][] if you want automatic backtracking line search.
     """
 
     solver: lx.AbstractLinearSolver

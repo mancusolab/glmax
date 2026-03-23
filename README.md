@@ -33,7 +33,7 @@ Both are `eqx.filter_jit`-compatible and return the same `FittedGLM` noun.
   `alpha` here while canonical `disp` remains `1.0`.
 
 See [docs/index.md](docs/index.md) for the workflow overview and the
-[Families & Links guide](docs/api/specify/families-and-links.md) for the
+[Families & Links guide](docs/api/families-and-links.md) for the
 family-specific `disp`/`aux` split.
 
 ## Installation

@@ -36,7 +36,7 @@ and `infer`.
 
 **Workflow** — [`fit`](api/fit/index.md), [`predict`](api/predict.md), [`infer`](api/infer/index.md), [`check`](api/check.md)
 
-**Families & Links** — [`Families & Links`](api/specify/families-and-links.md)
+**Families & Links** — [`Families & Links`](api/families-and-links.md)
 
 **Advanced Fitting** — [`Strategies & Solvers`](api/fit/strategies.md)
 

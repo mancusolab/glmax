@@ -20,10 +20,16 @@ Both strategies return the same `FittedGLM` noun and are `eqx.filter_jit`-compat
                 - fit
 
 ::: glmax.IRLSFitter
+    options:
+        members:
+            - __init__
 
 ---
 
 ::: glmax.NewtonFitter
+    options:
+        members:
+            - __init__
 
 ## Linear solvers
 

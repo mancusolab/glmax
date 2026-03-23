@@ -126,7 +126,7 @@ class NewtonFitter(AbstractFitter, strict=True):
     $$\Delta\beta = (X^\top W X)^{-1} X^\top [w \odot g'(\mu) \odot (\mu - y)]$$
 
     where $W = \text{diag}(w)$ are the GLM working weights from
-    [`ExponentialDispersionFamily.calc_weight`][]. Step size is chosen by
+    [`glmax.ExponentialDispersionFamily.calc_weight`][]. Step size is chosen by
     backtracking Armijo: starting from `step_size` and shrinking by
     `armijo_factor` until the sufficient-decrease condition holds.
 

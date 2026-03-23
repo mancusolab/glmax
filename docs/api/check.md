@@ -1,4 +1,4 @@
-# `check`
+# Model Diagnostics
 
 `glmax.check(...)` computes diagnostics from a fitted noun without refitting.
 The high-level philosophy is that diagnostics are explicit strategy objects:

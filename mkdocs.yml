@@ -102,17 +102,15 @@ plugins:
 nav:
     - Home: 'index.md'
     - API:
-          - 'specify':
-              - 'Overview': 'api/specify/index.md'
-              - 'Families & Links': 'api/specify/families-and-links.md'
+          - 'Families & Links': 'api/families-and-links.md'
           - 'fit':
               - 'Overview': 'api/fit/index.md'
               - 'Strategies & Solvers': 'api/fit/strategies.md'
-          - 'predict': 'api/predict.md'
           - 'infer':
               - 'Overview': 'api/infer/index.md'
               - 'Strategies & Standard Errors': 'api/infer/strategies.md'
           - 'check': 'api/check.md'
+          - 'predict': 'api/predict.md'
     - Release Notes: 'release-notes.md'
     - Misc:
         - 'authors.md'
