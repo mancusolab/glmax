@@ -10,6 +10,7 @@ from ._fit import (
     FitResult as FitResult,
     FittedGLM as FittedGLM,
     IRLSFitter as IRLSFitter,
+    NewtonFitter as NewtonFitter,
     Params as Params,
     predict as predict,
 )

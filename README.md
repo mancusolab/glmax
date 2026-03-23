@@ -19,6 +19,10 @@ The package-root also exports inference strategy and stderr types:
 `AbstractTest`, `WaldTest`, `ScoreTest`,
 `AbstractStdErrEstimator`, `FisherInfoError`, and `HuberError`.
 
+Two fit strategies ship out of the box: `IRLSFitter` (default) and
+`NewtonFitter` (Fisher scoring Newton with backtracking Armijo line search).
+Both are `eqx.filter_jit`-compatible and return the same `FittedGLM` noun.
+
 `Params(beta, disp, aux)` is the shared parameter carrier across `fit`,
 `predict`, and `infer`:
 
@@ -56,6 +60,9 @@ infer_result = glmax.infer(fitted)
 # Route through an explicit inferrer when needed.
 score_result = glmax.infer(fitted, inferrer=glmax.ScoreTest())
 pearson = glmax.check(fitted)
+
+# Swap to Newton with backtracking line search.
+fitted_newton = glmax.fit(Gaussian(), X, y, fitter=glmax.NewtonFitter())
 ```
 
 ## Testing

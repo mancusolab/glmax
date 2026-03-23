@@ -4,7 +4,7 @@
 
 ## Workflow
 
-Five canonical verbs form the complete user workflow:
+Four canonical verbs form the complete user workflow:
 
 ```python
 import jax.numpy as jnp

@@ -5,7 +5,7 @@
 
 ## Contracts
 - **Exposes**:
-  - Package-root API from `src/glmax/__init__.py`: `Params`, `AbstractFitter`, `FitResult`, `FittedGLM`, `IRLSFitter`, `InferenceResult`, `AbstractDiagnostic`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `fit`, `predict`, `infer`, `check`, `AbstractLink`, `IdentityLink`, `LogLink`, `LogitLink`, `InverseLink`, `PowerLink`, `ProbitLink`, `CLogLogLink`, `LogLogLink`, `SqrtLink`, `CauchitLink`, `NBLink`, `Gaussian`, `Gamma`, `Poisson`, `Binomial`, `NegativeBinomial`, `ExponentialDispersionFamily`.
+  - Package-root API from `src/glmax/__init__.py`: `Params`, `AbstractFitter`, `FitResult`, `FittedGLM`, `IRLSFitter`, `NewtonFitter`, `InferenceResult`, `AbstractDiagnostic`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `fit`, `predict`, `infer`, `check`, `AbstractLink`, `IdentityLink`, `LogLink`, `LogitLink`, `InverseLink`, `PowerLink`, `ProbitLink`, `CLogLogLink`, `LogLogLink`, `SqrtLink`, `CauchitLink`, `NBLink`, `Gaussian`, `Gamma`, `Poisson`, `Binomial`, `NegativeBinomial`, `ExponentialDispersionFamily`.
   - Family and link implementations from `src/glmax/family/__init__.py`.
   - User-facing grammar docs in `README.md`, `docs/index.md`, `docs/api/specify/index.md`, `docs/api/specify/families-and-links.md`, `docs/api/fit/index.md`, `docs/api/fit/strategies.md`, `docs/api/predict.md`, `docs/api/infer/index.md`, `docs/api/infer/strategies.md`, and `docs/api/check.md`.
 - **Guarantees**:
@@ -24,7 +24,7 @@
   - `FittedGLM` is the public fitted noun and binds `family` plus `result`, forwarding common fit artifacts for ergonomics.
   - `InferenceResult` carries `params`, `se`, `stat`, and `p`; those summaries are produced by `infer(fitted, ...)`, not `fit(...)`.
   - `check(fitted, diagnostic=...)` is `@eqx.filter_jit`-wrapped and returns a single typed diagnostic result `T` for the supplied `AbstractDiagnostic[T]`. `check(fitted)` uses the function's default diagnostic without refitting.
-  - `AbstractFitter` subclasses must declare `solver`, `step_size`, `tol`, and `max_iter` as concrete fields. `IRLSFitter` defaults to `solver=lx.Cholesky()`, `step_size=1.0`, `tol=1e-3`, `max_iter=1000`.
+  - `AbstractFitter` subclasses must declare `solver`, `step_size`, `tol`, and `max_iter` as concrete fields. `IRLSFitter` defaults to `solver=lx.Cholesky()`, `step_size=1.0`, `tol=1e-3`, `max_iter=1000`. `NewtonFitter` adds `armijo_c=0.1` and `armijo_factor=0.5`; its `step_size` is the initial Armijo trial step (default `1.0`) and its default `tol=1e-6`, `max_iter=200`.
   - Negative Binomial stores its auxiliary `alpha` in `Params.aux`; canonical `Params.disp` remains the GLM dispersion slot and is `1.0` for Negative Binomial fits.
 
 ## Dependencies

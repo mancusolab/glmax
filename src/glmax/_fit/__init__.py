@@ -5,6 +5,7 @@ from .fit import (
     predict as predict,
 )
 from .irls import IRLSFitter as IRLSFitter
+from .newton import NewtonFitter as NewtonFitter
 from .types import (
     AbstractFitter as AbstractFitter,
     FitResult as FitResult,

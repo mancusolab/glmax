@@ -1,10 +1,16 @@
-# Fitting Strategies And Solvers
+# Fitting strategies
 
-Most users should stay with `glmax.fit(family, X, y)` and the default IRLS
-strategy. This page documents the lower-level strategy and solver objects for
-users who need to control the numerical fitting path explicitly.
+`glmax.fit` defaults to `IRLSFitter`. Pass `fitter=` to swap strategies without
+changing anything else in the workflow.
 
-## Fitter Strategies
+```python
+fitted_irls   = glmax.fit(family, X, y)
+fitted_newton = glmax.fit(family, X, y, fitter=glmax.NewtonFitter())
+```
+
+Both strategies return the same `FittedGLM` noun and are `eqx.filter_jit`-compatible.
+
+## Fitter strategies
 
 ??? abstract "`glmax.AbstractFitter`"
 
@@ -15,24 +21,14 @@ users who need to control the numerical fitting path explicitly.
 
 ::: glmax.IRLSFitter
 
-## Linear Solvers
-
-Weighted least-squares steps are delegated to linear solvers. These remain
-advanced tools under rather than primary package-root workflow
-objects.
-
-??? abstract "`glmax.AbstractLinearSolver`"
-
-    ::: glmax.AbstractLinearSolver
-
-
-::: glmax.CholeskySolver
-
 ---
 
-::: glmax.QRSolver
+::: glmax.NewtonFitter
 
----
+## Linear solvers
 
-::: glmax.CGSolver
+Each fitter delegates its weighted normal-equations step to a `lineax` solver.
+Pass any `lx.AbstractLinearSolver` as `solver=` when constructing a fitter.
+`lx.Cholesky()` is the default and the fastest option for well-conditioned
+systems. Use `lx.QR()` when the design matrix is rank-deficient.
 
