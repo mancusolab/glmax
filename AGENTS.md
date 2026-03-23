@@ -5,7 +5,7 @@
 
 ## Contracts
 - **Exposes**:
-  - Package-root API from `src/glmax/__init__.py`: `Params`, `AbstractFitter`, `FitResult`, `FittedGLM`, `IRLSFitter`, `InferenceResult`, `AbstractDiagnostic`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `fit`, `predict`, `infer`, `check`.
+  - Package-root API from `src/glmax/__init__.py`: `Params`, `AbstractFitter`, `FitResult`, `FittedGLM`, `IRLSFitter`, `InferenceResult`, `AbstractDiagnostic`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `fit`, `predict`, `infer`, `check`, `AbstractLink`, `IdentityLink`, `LogLink`, `LogitLink`, `InverseLink`, `PowerLink`, `ProbitLink`, `CLogLogLink`, `LogLogLink`, `SqrtLink`, `CauchitLink`, `NBLink`, `Gaussian`, `Gamma`, `Poisson`, `Binomial`, `NegativeBinomial`, `ExponentialDispersionFamily`.
   - Family and link implementations from `src/glmax/family/__init__.py`.
   - User-facing grammar docs in `README.md`, `docs/index.md`, `docs/api/specify/index.md`, `docs/api/specify/families-and-links.md`, `docs/api/fit/index.md`, `docs/api/fit/strategies.md`, `docs/api/predict.md`, `docs/api/infer/index.md`, `docs/api/infer/strategies.md`, and `docs/api/check.md`.
 - **Guarantees**:

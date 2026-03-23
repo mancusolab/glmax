@@ -1,9 +1,9 @@
-# Families And Links
+# Families and links
 
-The `specify` step chooses a response family and its link function. This is
-where the statistical meaning of `Params(beta, disp, aux)` is determined:
-different families interpret `disp` and `aux` differently, but the workflow
-continues to pass the same explicit nouns between verbs.
+Choosing a family and link is the first step in any `fit` call. The family
+determines how `Params(beta, disp, aux)` is interpreted — different families
+use `disp` and `aux` differently — and the link connects the linear predictor
+$\eta$ to the mean response $\mu$.
 
 ---
 
@@ -119,3 +119,37 @@ derivatives so the family layer and GLM kernels can work against one interface.
         members:
             - __init__
 
+---
+
+::: glmax.ProbitLink
+    options:
+        members:
+            - __init__
+
+---
+
+::: glmax.CLogLogLink
+    options:
+        members:
+            - __init__
+
+---
+
+::: glmax.LogLogLink
+    options:
+        members:
+            - __init__
+
+---
+
+::: glmax.SqrtLink
+    options:
+        members:
+            - __init__
+
+---
+
+::: glmax.CauchitLink
+    options:
+        members:
+            - __init__
