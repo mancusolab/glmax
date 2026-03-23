@@ -169,8 +169,9 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
 
     class RecordingFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
-        max_iter: int = 1000
+        step_size: float = 1.0
         tol: float = 1e-3
+        max_iter: int = 1000
 
         def fit(
             self,
@@ -206,8 +207,9 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
 def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
     class BadFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
-        max_iter: int = 1000
+        step_size: float = 1.0
         tol: float = 1e-3
+        max_iter: int = 1000
 
         def fit(
             self,
@@ -545,8 +547,9 @@ def test_fit_validates_init_params_at_public_boundary_before_custom_fitter(
 
     class RecordingFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
-        max_iter: int = 1000
+        step_size: float = 1.0
         tol: float = 1e-3
+        max_iter: int = 1000
 
         def fit(
             self,
@@ -578,8 +581,9 @@ def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter(fam
 
     class RecordingFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
-        max_iter: int = 1000
+        step_size: float = 1.0
         tol: float = 1e-3
+        max_iter: int = 1000
 
         def fit(
             self,

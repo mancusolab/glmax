@@ -2,7 +2,7 @@
 
 """IRLS optimizer kernels and default fitter strategy."""
 
-from typing import NamedTuple
+from typing import cast, NamedTuple
 
 import jax.numpy as jnp
 import lineax as lx
@@ -28,11 +28,11 @@ class _IRLSState(NamedTuple):
 
 
 def _irls(
-    X: ArrayLike,
-    y: ArrayLike,
+    X: Array,
+    y: Array,
     family: ExponentialDispersionFamily,
     solver: lx.AbstractLinearSolver,
-    eta: ArrayLike,
+    eta: Array,
     max_iter: int = 1000,
     tol: float = 1e-3,
     step_size: float = 1.0,
@@ -44,10 +44,11 @@ def _irls(
     _, p = X.shape
 
     Xop = lx.MatrixLinearOperator(X)
+    step_size = cast(Array, jnp.asarray(step_size))
     if not isinstance(solver, (lx.QR, lx.SVD)):
         solver = lx.Normal(solver)
 
-    def body_fun(val: tuple):
+    def body_fun(val: tuple[Array, ...]):
         likelihood_o, diff, num_iter, _beta_o, eta_o, disp_o, aux_o = val
 
         # compute means, weights, and gradients
@@ -97,14 +98,16 @@ class IRLSFitter(AbstractFitter, strict=True):
     """
 
     solver: lx.AbstractLinearSolver
-    max_iter: int
+    step_size: float
     tol: float
+    max_iter: int
 
     def __init__(
         self,
         solver: lx.AbstractLinearSolver = lx.Cholesky(),
-        max_iter: int = 1000,
+        step_size: float = 1.0,
         tol: float = 1e-3,
+        max_iter: int = 1000,
     ):
         r"""Construct an IRLS fitter.
 
@@ -113,12 +116,14 @@ class IRLSFitter(AbstractFitter, strict=True):
         - `solver`: `lineax` solver used for each IRLS weighted least-squares
           step. Defaults to `lx.Cholesky()`. Any `lx.AbstractLinearSolver`
           that handles symmetric positive-semidefinite systems works here.
-        - `max_iter`: maximum number of IRLS iterations. Defaults to `1000`.
+        - `step_size`: IRLS update step-size multiplier. Defaults to `1.0`.
         - `tol`: convergence tolerance on the objective change. Defaults to `1e-3`.
+        - `max_iter`: maximum number of IRLS iterations. Defaults to `1000`.
         """
         self.solver = solver
-        self.max_iter = max_iter
+        self.step_size = step_size
         self.tol = tol
+        self.max_iter = max_iter
 
     def fit(
         self,
@@ -128,7 +133,6 @@ class IRLSFitter(AbstractFitter, strict=True):
         offset: Array,
         weights: Array | None,
         init: Params | None = None,
-        step_size: float = 1.0,
     ) -> FitResult:
         r"""Run IRLS to convergence and return a `FitResult`.
 
@@ -173,7 +177,7 @@ class IRLSFitter(AbstractFitter, strict=True):
             init_eta,
             self.max_iter,
             self.tol,
-            step_size,
+            self.step_size,
             offset,
             disp_init=disp_init,
             aux_init=aux_init,

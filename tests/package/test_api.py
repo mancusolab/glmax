@@ -141,8 +141,9 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
 
     class DummyFitter(AbstractFitter, strict=True):
         solver: lx.AbstractLinearSolver = lx.Cholesky()
-        max_iter: int = 1000
+        step_size: float = 1.0
         tol: float = 1e-3
+        max_iter: int = 1000
 
         def fit(
             self,

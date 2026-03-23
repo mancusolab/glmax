@@ -272,8 +272,9 @@ class AbstractFitter(eqx.Module, strict=True):
     """
 
     solver: eqx.AbstractVar[lx.AbstractLinearSolver]
-    max_iter: eqx.AbstractVar[int]
+    step_size: eqx.AbstractVar[float]
     tol: eqx.AbstractVar[float]
+    max_iter: eqx.AbstractVar[int]
 
     @abstractmethod
     def fit(
