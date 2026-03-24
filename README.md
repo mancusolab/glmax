@@ -1,7 +1,5 @@
 # glmax
 
-> **Alpha software** — API may change without notice. Use at your own risk.
-
 Grammar-first generalized linear modeling in JAX. JIT-compiled end-to-end and differentiable through the fitted parameters via the implicit function theorem.
 
 ## Example
@@ -32,7 +30,10 @@ pip install git+https://github.com/mancusolab/glmax.git
 
 ## Performance
 
-Benchmarked against [statsmodels](https://www.statsmodels.org/) on Poisson regression. Timing uses 10 steady-state runs after JIT warm-up.
+Benchmarked against [statsmodels](https://www.statsmodels.org/) on Poisson regression. Timing uses 10 steady-state runs
+after JIT warm-up. Statsmodels does not support GPU/TPU natively, and all reported runtimes are CPU-based, however
+the colab environment has different host CPUs depending on the runtime selected. As such we report the native CPU
+runtimes for statsmodels for each runtime environment.
 
 | n | p | statsmodels (ms) | glmax (ms) | speedup | runtime |
 |------:|----:|-----------------:|-----------:|--------:|---------|

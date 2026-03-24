@@ -116,6 +116,5 @@ nav:
           - 'check': 'api/check.md'
           - 'predict': 'api/predict.md'
     - Misc:
-        - 'authors.md'
         - 'license.md'
         - 'conduct.md'
