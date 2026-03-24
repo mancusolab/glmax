@@ -1,3 +1,7 @@
+# Adapted from lineax/_misc.py
+# https://github.com/patrick-kidger/lineax
+# Copyright 2023 Google LLC, licensed under the Apache License 2.0.
+
 import jax
 import jax.numpy as jnp
 

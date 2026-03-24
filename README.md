@@ -1,83 +1,59 @@
 # glmax
 
-!!! warning
+> **Alpha software** — API may change without notice. Use at your own risk.
 
-    THIS PROJECT IS STILL IN ALPHA AND SUBJEC TO CHANGE DRAMATICALLY; USE AT YOUR OWN RISK**
+Grammar-first generalized linear modeling in JAX. JIT-compiled end-to-end and differentiable through the fitted parameters via the implicit function theorem.
 
- `glmax` provides generalized linear modeling with a grammar-first API built
-around explicit nouns and top-level verbs.
-
-The canonical workflow is:
-
-1. `fit(family, X, y, *, offset=None, init=None, fitter=...) -> FittedGLM`
-2. `predict(family, params, X, *, offset=None)` for fitted means
-3. `infer(fitted, inferrer=None, stderr=...)` for inferential summaries without refitting
-4. `check(fitted)` for diagnostics without refitting
-
-The canonical nouns are `Params`, `FitResult`, `FittedGLM`, `InferenceResult`, `AbstractDiagnostic`, `GofStats`, and `InfluenceStats`.
-The package-root also exports inference strategy and stderr types:
-`AbstractTest`, `WaldTest`, `ScoreTest`,
-`AbstractStdErrEstimator`, `FisherInfoError`, and `HuberError`.
-
-Two fit strategies ship out of the box: `IRLSFitter` (default) and
-`NewtonFitter` (Fisher scoring Newton with backtracking Armijo line search).
-Both are `eqx.filter_jit`-compatible and return the same `FittedGLM` noun.
-
-`Params(beta, disp, aux)` is the shared parameter carrier across `fit`,
-`predict`, and `infer`:
-
-- `beta` stores regression coefficients.
-- `disp` stores GLM dispersion. Gaussian and Gamma use it as EDM dispersion;
-  Poisson, Binomial, and Negative Binomial canonicalize it to `1.0`.
-- `aux` stores optional family-specific state. Negative Binomial stores its
-  `alpha` here while canonical `disp` remains `1.0`.
-
-See [docs/index.md](docs/index.md) for the workflow overview and the
-[Families & Links guide](docs/api/families-and-links.md) for the
-family-specific `disp`/`aux` split.
-
-## Installation
-
-```bash
-git clone https://github.com/mancusolab/glmax.git
-cd glmax
-pip install .
-```
-
-## Quickstart
+## Example
 
 ```python
 import jax.numpy as jnp
 import glmax
-from glmax.family import Gaussian
 
-X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
-y = jnp.array([0.1, 1.2, 1.9, 3.1])
+X = jnp.array([[1.0, 0.5], [1.0, -0.3], [1.0, 1.2], [1.0, -0.8]])
+y = jnp.array([2.0, 1.0, 4.0, 1.0])
 
-fitted = glmax.fit(Gaussian(), X, y)
-pred = glmax.predict(fitted.family, fitted.params, X)
-infer_result = glmax.infer(fitted)
-# Route through an explicit inferrer when needed.
-score_result = glmax.infer(fitted, inferrer=glmax.ScoreTest())
-pearson = glmax.check(fitted)
-
-# Swap to Newton with backtracking line search.
-fitted_newton = glmax.fit(Gaussian(), X, y, fitter=glmax.NewtonFitter())
+fitted  = glmax.fit(glmax.Poisson(), X, y)
+pred    = glmax.predict(fitted.family, fitted.params, X)
+result  = glmax.infer(fitted)
+diag    = glmax.check(fitted)
 ```
 
-## Testing
+Four verbs — `fit`, `predict`, `infer`, and `check` — cover the full modeling workflow. Each takes explicit inputs and returns an explicit result. No hidden state is threaded between calls.
 
-Use the repository-standard pytest invocation (also wired into project scripts):
+See the [docs](https://mancusolab.github.io/glmax) for the full API reference and guides.
+
+## Installation
+
+```bash
+pip install git+https://github.com/mancusolab/glmax.git
+```
+
+
+## Performance
+
+Benchmarked against [statsmodels](https://www.statsmodels.org/) on Poisson regression. Timing uses 10 steady-state runs after JIT warm-up.
+
+| n | p | statsmodels (ms) | glmax (ms) | speedup | runtime |
+|------:|----:|-----------------:|-----------:|--------:|---------|
+| 500 | 10 | 4.32 | 0.92 | 4.7× | CPU |
+| 2,000 | 20 | 277.76 | 4.14 | 67.1× | CPU |
+| 10,000 | 50 | 1428.76 | 42.77 | 33.4× | CPU |
+| 500 | 10 | 2.97 | 3.00 | 1.0× | T4 GPU |
+| 2,000 | 20 | 13.94 | 4.38 | 3.2× | T4 GPU |
+| 10,000 | 50 | 212.70 | 17.94 | 11.9× | T4 GPU |
+| 500 | 10 | 1.90 | 2.89 | 0.7× | v5e-1 TPU |
+| 2,000 | 20 | 8.46 | 8.80 | 1.0× | v5e-1 TPU |
+| 10,000 | 50 | 1220.66 | 25.65 | 47.6× | v5e-1 TPU |
+
+See [`examples/benchmark_colab.ipynb`](examples/benchmark_colab.ipynb) for the full benchmark notebook.
+
+## Testing
 
 ```bash
 pytest -p no:capture tests
 ```
 
-## Support
-
-- Issues: https://github.com/mancusolab/glmax/issues
-- Source: https://github.com/mancusolab/glmax
-
 ## License
 
-`glmax` is distributed under the MIT license.
+MIT
