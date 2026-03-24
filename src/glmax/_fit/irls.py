@@ -42,7 +42,7 @@ def _irls(
     """IRLS to solve GLM."""
     _, p = X.shape
 
-    Xop = lx.MatrixLinearOperator(X)
+    # Xop = lx.MatrixLinearOperator(X)
     step_size = cast(Array, jnp.asarray(step_size))
     if not isinstance(solver, (lx.QR, lx.SVD)):
         solver = lx.Normal(solver)
@@ -55,9 +55,14 @@ def _irls(
         r = eta_o + g_deriv_k * (y - mu_k) * step_size - offset_eta
 
         # prepare for lineax and solve
-        Woh = lx.DiagonalLinearOperator(jnp.sqrt(weight))
-        A = Woh @ Xop
-        b = Woh.mv(r)
+        # TODO: lineax has a bug atm that converts Woh into n x n matrix which dramatically slows things down
+        # workaround is the below fix. will stay in place until addressed in lineax.
+        # Woh = lx.DiagonalLinearOperator(jnp.sqrt(weight))
+        # A = Woh @ Xop
+        # b = Woh.mv(r)
+        sqrt_w = jnp.sqrt(weight)
+        A = lx.MatrixLinearOperator(X * sqrt_w[:, jnp.newaxis])
+        b = r * sqrt_w
         beta = lx.linear_solve(A, b, solver=solver).value
 
         # update eta
@@ -178,9 +183,9 @@ class IRLSFitter(AbstractFitter, strict=True):
 
         default_disp, default_aux = family.init_nuisance()
         if init is not None:
-            disp_init = jnp.asarray(init.disp)
-            aux_init = jnp.asarray(init.aux) if init.aux is not None else default_aux
-            init_eta = X @ jnp.asarray(init.beta) + offset
+            disp_init = init.disp
+            aux_init = init.aux if init.aux is not None else default_aux
+            init_eta = X @ init.beta + offset
         else:
             disp_init = default_disp
             aux_init = default_aux

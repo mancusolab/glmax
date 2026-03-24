@@ -663,10 +663,13 @@ def test_init_nuisance_returns_correct_defaults() -> None:
 
 class TestFamilyDocstrings:
     def test_docstrings_describe_disp_aux_split(self):
-        assert "dispersion carrier and ignores `aux`" in Gaussian.__doc__
-        assert "fixes `disp = 1.0` and ignores `aux`" in Poisson.__doc__
+        assert "dispersion in `disp` and ignores `aux`" in Gaussian.__doc__
+        assert "Poisson fixes `disp = 1.0`" in Poisson.__doc__ and "ignores `aux`" in Poisson.__doc__
         assert "Binomial fixes `disp = 1.0`" in Binomial.__doc__ and "ignores `aux`" in Binomial.__doc__
-        assert "fixes `disp = 1.0` and uses `aux` as `alpha`" in NegativeBinomial.__doc__
+        assert (
+            "Negative Binomial fixes `disp = 1.0`" in NegativeBinomial.__doc__
+            and "stores overdispersion in `aux`" in NegativeBinomial.__doc__
+        )
         assert "uses `disp` as EDM dispersion and ignores `aux`" in Gamma.__doc__
 
 

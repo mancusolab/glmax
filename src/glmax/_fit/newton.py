@@ -44,7 +44,7 @@ def _newton(
 ) -> _NewtonState:
     """Fisher scoring Newton to solve a GLM."""
     _, p = X.shape
-    Xop = lx.MatrixLinearOperator(X)
+    # Xop = lx.MatrixLinearOperator(X)
     if not isinstance(solver, (lx.QR, lx.SVD)):
         solver = lx.Normal(solver)
     step_size = cast(Array, jnp.asarray(step_size))
@@ -59,9 +59,15 @@ def _newton(
         # Expressed as weighted normal equations: (W^{1/2} X)^T (W^{1/2} X) delta
         #   = (W^{1/2} X)^T (W^{1/2} r) where r = g'(mu) * (mu - y).
         r = g_deriv_k * (mu_k - y)
-        Wh = lx.DiagonalLinearOperator(jnp.sqrt(weight_k))
-        A = Wh @ Xop
-        b = Wh.mv(r)
+
+        # TODO: lineax has a bug atm that converts Woh into n x n matrix which dramatically slows things down
+        # workaround is the below fix. will stay in place until addressed in lineax.
+        # Wh = lx.DiagonalLinearOperator(jnp.sqrt(weight_k))
+        # A = Wh @ Xop
+        # b = Wh.mv(r)
+        sqrt_w = jnp.sqrt(weight_k)
+        A = lx.MatrixLinearOperator(X * sqrt_w[:, jnp.newaxis])
+        b = r * sqrt_w
         delta_beta = lx.linear_solve(A, b, solver=solver).value
 
         # Directional derivative gradient^T delta for the Armijo condition.
