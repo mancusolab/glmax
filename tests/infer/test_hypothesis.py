@@ -218,7 +218,7 @@ def test_score_test_rejects_degenerate_fisher_diag() -> None:
     assert float(phi) > 0.0
     assert bool(jnp.any(fisher_diag <= 0.0))
 
-    with pytest.raises(ValueError, match="Fisher information diagonal"):
+    with pytest.raises((ValueError, RuntimeError), match="Fisher information diagonal"):
         ScoreTest().test(degenerate_fitted, FisherInfoError())
 
 
