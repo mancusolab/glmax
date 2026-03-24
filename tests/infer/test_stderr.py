@@ -55,7 +55,7 @@ def test_fisher_info_error_jit_safe_and_finite():
     estimator = FisherInfoError()
 
     def _jit_fisher(result):
-        return estimator(result)
+        return estimator.covariance(result)
 
     cov_jit = eqx.filter_jit(_jit_fisher)(result)
 
@@ -81,7 +81,7 @@ def test_fisher_info_error_scales_by_phi():
     expected_cov = phi * jnp.linalg.inv(infor)
 
     estimator = FisherInfoError()
-    actual_cov = estimator(result)
+    actual_cov = estimator.covariance(result)
 
     assert bool(jnp.allclose(actual_cov, expected_cov, atol=1e-5)), (
         f"FisherInfoError does not scale by phi correctly.\n"
@@ -93,7 +93,7 @@ def test_huber_error_finite_and_symmetric() -> None:
     X, y = _make_gaussian_xy()
     result = glmax.fit(Gaussian(), X, y)
 
-    cov = HuberError()(result)
+    cov = HuberError().covariance(result)
 
     assert bool(jnp.all(jnp.isfinite(cov))), f"HuberError covariance must be finite; got diag={jnp.diag(cov)}"
     assert bool(jnp.allclose(cov, cov.T, atol=1e-6)), "HuberError covariance must be symmetric"
@@ -112,7 +112,7 @@ def test_stderr_estimators_reject_nonpositive_fitted_dispersion(estimator) -> No
     invalid_fitted = _with_dispersion(fitted, 0.0)
 
     with pytest.raises(ValueError, match="fitted.params.disp"):
-        estimator(invalid_fitted)
+        estimator.covariance(invalid_fitted)
 
 
 def test_huber_error_uses_fitted_dispersion_as_phi_source_of_truth() -> None:
@@ -120,7 +120,7 @@ def test_huber_error_uses_fitted_dispersion_as_phi_source_of_truth() -> None:
     fitted = glmax.fit(Gaussian(), X, y)
     scaled_fitted = _with_dispersion(fitted, jnp.asarray(fitted.params.disp) * 3.0)
 
-    cov = HuberError()(scaled_fitted)
+    cov = HuberError().covariance(scaled_fitted)
     expected_cov = _expected_huber_covariance(scaled_fitted)
 
     assert bool(jnp.allclose(cov, expected_cov, atol=1e-5)), (
@@ -133,7 +133,7 @@ def test_fisher_info_error_uses_fitted_dispersion_as_phi_source_of_truth() -> No
     X, y = _make_gaussian_xy(seed=13)
     fitted = glmax.fit(Gaussian(), X, y)
 
-    cov = FisherInfoError()(fitted)
+    cov = FisherInfoError().covariance(fitted)
     expected_cov = _expected_fisher_covariance(fitted)
 
     assert bool(jnp.allclose(cov, expected_cov, atol=1e-5)), (

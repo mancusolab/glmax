@@ -53,4 +53,4 @@ def infer(
     if not isinstance(stderr, AbstractStdErrEstimator):
         raise TypeError("infer(...) expects `stderr` to be an AbstractStdErrEstimator instance.")
 
-    return inferrer(fitted, stderr)
+    return inferrer.test(fitted, stderr)

@@ -79,7 +79,7 @@ def test_infer_uses_injected_stderr_estimator() -> None:
     fitted = _make_fitted()
 
     class RecordingStdErr(AbstractStdErrEstimator):
-        def __call__(self, fitted_arg):
+        def covariance(self, fitted_arg):
             del fitted_arg
             return jnp.array([[4.0]])
 
@@ -148,7 +148,7 @@ def test_infer_passes_stderr_into_inferrer() -> None:
     call_count = {"n": 0}
 
     class CountingStdErr(AbstractStdErrEstimator):
-        def __call__(self, fitted_arg):
+        def covariance(self, fitted_arg):
             call_count["n"] += 1
             return jnp.array([[4.0]])
 

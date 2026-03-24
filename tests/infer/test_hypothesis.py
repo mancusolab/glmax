@@ -74,7 +74,7 @@ def test_wald_test_matches_legacy_infer() -> None:
     fitted = _make_fitted()
 
     legacy = legacy_infer(fitted)
-    inferred = WaldTest()(fitted, FisherInfoError())
+    inferred = WaldTest().test(fitted, FisherInfoError())
 
     assert isinstance(inferred, InferenceResult)
     assert jnp.allclose(inferred.stat, legacy.stat, atol=1e-12)
@@ -86,24 +86,24 @@ def test_wald_test_uses_injected_stderr() -> None:
     fitted = _make_fitted()
 
     class ConstantCovStdErr(AbstractStdErrEstimator):
-        def __call__(self, fitted_arg):
+        def covariance(self, fitted_arg):
             assert fitted_arg is fitted
             return jnp.eye(2) * 4.0
 
-    inferred = WaldTest()(fitted, ConstantCovStdErr())
+    inferred = WaldTest().test(fitted, ConstantCovStdErr())
 
     assert jnp.allclose(inferred.se, jnp.array([2.0, 2.0]))
 
 
 def test_wald_test_rejects_non_fitted_glm() -> None:
     with pytest.raises(TypeError, match="FittedGLM"):
-        WaldTest()(object(), FisherInfoError())
+        WaldTest().test(object(), FisherInfoError())
 
 
 def test_score_test_returns_valid_result() -> None:
     fitted = _make_fitted()
 
-    result = ScoreTest()(fitted, FisherInfoError())
+    result = ScoreTest().test(fitted, FisherInfoError())
 
     assert isinstance(result, InferenceResult)
     assert bool(jnp.all(jnp.isfinite(result.stat)))
@@ -115,11 +115,10 @@ def test_score_test_does_not_call_stderr() -> None:
     fitted = _make_fitted()
 
     class RaisingStdErr(AbstractStdErrEstimator):
-        def __call__(self, fitted_arg):
-            del fitted_arg
+        def covariance(self, fitted):
             raise RuntimeError("stderr should not be called")
 
-    result = ScoreTest()(fitted, RaisingStdErr())
+    result = ScoreTest().test(fitted, RaisingStdErr())
 
     assert isinstance(result, InferenceResult)
 
@@ -134,7 +133,7 @@ def test_score_test_does_not_call_stderr() -> None:
 def test_score_test_matches_task_formula(make_fitted) -> None:
     fitted = make_fitted()
 
-    result = ScoreTest()(fitted, FisherInfoError())
+    result = ScoreTest().test(fitted, FisherInfoError())
     expected_stat = _expected_score_stat(fitted)
     expected_p = 2.0 * norm.sf(jnp.abs(expected_stat))
 
@@ -154,7 +153,7 @@ def test_score_test_matches_task_formula(make_fitted) -> None:
 def test_score_test_stat_shape_matches_beta(make_fitted) -> None:
     fitted = make_fitted()
 
-    result = ScoreTest()(fitted, FisherInfoError())
+    result = ScoreTest().test(fitted, FisherInfoError())
 
     assert result.stat.shape == fitted.params.beta.shape
 
@@ -162,7 +161,7 @@ def test_score_test_stat_shape_matches_beta(make_fitted) -> None:
 def test_score_test_gaussian_p_values_valid() -> None:
     fitted = _make_fitted(Gaussian())
 
-    score_result = ScoreTest()(fitted, FisherInfoError())
+    score_result = ScoreTest().test(fitted, FisherInfoError())
     expected_stat = _expected_score_stat(fitted)
     expected_p = 2.0 * norm.sf(jnp.abs(expected_stat))
 
@@ -176,14 +175,14 @@ def test_score_test_rejects_degenerate_scale() -> None:
     fitted = _make_perfect_fit_gaussian_fitted()
 
     with pytest.raises(ValueError, match="finite and > 0"):
-        ScoreTest()(fitted, FisherInfoError())
+        ScoreTest().test(fitted, FisherInfoError())
 
 
 def test_score_test_rejects_nonpositive_fitted_dispersion() -> None:
     fitted = _with_dispersion(_make_fitted(), 0.0)
 
     with pytest.raises(ValueError, match="fitted.params.disp"):
-        ScoreTest()(fitted, FisherInfoError())
+        ScoreTest().test(fitted, FisherInfoError())
 
 
 @pytest.mark.parametrize(
@@ -196,7 +195,7 @@ def test_score_test_rejects_nonpositive_fitted_dispersion() -> None:
 def test_score_test_uses_fitted_dispersion_as_phi_source_of_truth(make_fitted, disp) -> None:
     fitted = _with_dispersion(make_fitted(), disp)
 
-    result = ScoreTest()(fitted, FisherInfoError())
+    result = ScoreTest().test(fitted, FisherInfoError())
     expected_stat = _expected_score_stat(fitted)
     expected_p = 2.0 * norm.sf(jnp.abs(expected_stat))
 
@@ -220,7 +219,7 @@ def test_score_test_rejects_degenerate_fisher_diag() -> None:
     assert bool(jnp.any(fisher_diag <= 0.0))
 
     with pytest.raises(ValueError, match="Fisher information diagonal"):
-        ScoreTest()(degenerate_fitted, FisherInfoError())
+        ScoreTest().test(degenerate_fitted, FisherInfoError())
 
 
 def test_wald_test_uses_t_distribution_for_gaussian() -> None:

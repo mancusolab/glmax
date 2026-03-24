@@ -23,13 +23,13 @@ __all__ = ["AbstractTest", "WaldTest", "ScoreTest"]
 class AbstractTest(eqx.Module, strict=True):
     r"""Abstract base for inference strategies used by `infer(fitted, inferrer=...)`.
 
-    Subclasses implement `__call__` to compute test statistics and p-values
+    Subclasses implement `test` to compute test statistics and p-values
     from a [`glmax.FittedGLM`][]. The `stderr` estimator is passed in so
     strategies can choose whether to use it.
     """
 
     @abstractmethod
-    def __call__(
+    def test(
         self,
         fitted: FittedGLM,
         stderr: AbstractStdErrEstimator,
@@ -66,7 +66,7 @@ class WaldTest(AbstractTest, strict=True):
     [`glmax.AbstractStdErrEstimator`][].
     """
 
-    def __call__(
+    def test(
         self,
         fitted: FittedGLM,
         stderr: AbstractStdErrEstimator,
@@ -79,7 +79,7 @@ class WaldTest(AbstractTest, strict=True):
         fit_result = fitted.result
 
         beta = fit_result.beta
-        covariance = stderr(fitted)
+        covariance = stderr.covariance(fitted)
         se = jnp.sqrt(jnp.diag(covariance))
         stat = beta / se
         df = int(fit_result.eta.shape[0] - beta.shape[0])
@@ -102,7 +102,7 @@ class ScoreTest(AbstractTest, strict=True):
     when using this inferrer.
     """
 
-    def __call__(
+    def test(
         self,
         fitted: FittedGLM,
         stderr: AbstractStdErrEstimator,

@@ -5,7 +5,6 @@
 import math
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING
 
 import equinox as eqx
 import jax.numpy as jnp
@@ -13,12 +12,10 @@ import jax.numpy as jnp
 from jax import Array
 from jax.numpy import linalg as jnpla
 
-
-if TYPE_CHECKING:
-    from .. import FittedGLM
+from .._fit import FittedGLM
 
 
-def _validated_fitted_dispersion(fitted: "FittedGLM") -> Array:
+def _validated_fitted_dispersion(fitted: FittedGLM) -> Array:
     """Return canonical fitted dispersion after finite/positive validation."""
     phi = jnp.asarray(fitted.params.disp)
     try:
@@ -41,13 +38,13 @@ def _validated_fitted_dispersion(fitted: "FittedGLM") -> Array:
 class AbstractStdErrEstimator(eqx.Module, strict=True):
     r"""Abstract base for covariance estimators used by `infer(fitted, stderr=...)`.
 
-    Subclasses implement `__call__` to return a `(p, p)` covariance matrix for
+    Subclasses implement `covariance` to return a `(p, p)` covariance matrix for
     $\hat{\beta}$. The matrix is consumed by [`glmax.AbstractTest`][]
     strategies to compute standard errors and test statistics.
     """
 
     @abstractmethod
-    def __call__(self, fitted: "FittedGLM") -> Array:
+    def covariance(self, fitted: FittedGLM) -> Array:
         r"""Estimate the covariance matrix for `fitted.result.params.beta`.
 
         The returned matrix estimates
@@ -72,7 +69,7 @@ class FisherInfoError(AbstractStdErrEstimator, strict=True):
     Default estimator used by `WaldTest`.
     """
 
-    def __call__(self, fitted: "FittedGLM") -> Array:
+    def covariance(self, fitted: FittedGLM) -> Array:
         r"""Compute a Fisher-information covariance estimate.
 
         This computes
@@ -105,7 +102,7 @@ class HuberError(AbstractStdErrEstimator, strict=True):
     $\hat{s}_i = w_i r_i / \hat\phi$.
     """
 
-    def __call__(self, fitted: "FittedGLM") -> Array:
+    def covariance(self, fitted: FittedGLM) -> Array:
         r"""Compute the sandwich covariance matrix.
 
         This computes the sandwich estimator
