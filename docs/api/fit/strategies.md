@@ -33,8 +33,8 @@ Both strategies return the same `FittedGLM` noun and work with JIT compilation a
 
 ## Linear solvers
 
-Each fitter uses a `lineax` solver for its internal linear system.
-Pass any `lx.AbstractLinearSolver` as `solver=` when constructing a fitter.
-`lx.Cholesky()` is the default and the fastest option for well-conditioned
-systems. Use `lx.QR()` when the design matrix is rank-deficient.
+Each fitter uses a [lineax](https://docs.kidger.site/lineax/) solver for its internal linear system.
+Pass any `lineax.AbstractLinearSolver` as `solver=` when constructing a fitter.
+`lineax.Cholesky()` is the default and the fastest option for well-conditioned
+systems. Use `lineax.QR()` when the design matrix is rank-deficient.
 

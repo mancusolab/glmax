@@ -154,7 +154,8 @@ influence.dffits     # DFFITS
 fitted = glmax.fit(glmax.Poisson(), X, y, fitter=glmax.NewtonFitter())
 ```
 
-Both strategies return the same [`FittedGLM`](api/fit/index.md) noun. You can also tune tolerances or swap the underlying linear solver:
+Both strategies return the same [`FittedGLM`](api/fit/index.md) noun. You can also tune tolerances or swap the underlying
+[linear solver](https://docs.kidger.site/lineax/api/solvers/):
 
 ```python
 import lineax as lx
@@ -163,7 +164,9 @@ fitter = glmax.IRLSFitter(solver=lx.QR(), tol=1e-6, max_iter=500)
 fitted = glmax.fit(glmax.Gamma(), X, y, fitter=fitter)
 ```
 
-The default Cholesky solver is fastest for small-to-medium problems. QR handles rank-deficient designs more gracefully.
+The default [lineax.Cholesky()](https://docs.kidger.site/lineax/api/solvers/#lineax.Cholesky)
+solver is fastest for small-to-medium problems. [lineax.QR()](https://docs.kidger.site/lineax/api/solvers/#lineax.QR)
+handles rank-deficient designs more gracefully.
 
 ---
 
