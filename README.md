@@ -55,6 +55,14 @@ See [`examples/benchmark_colab.ipynb`](examples/benchmark_colab.ipynb) for the f
 pytest -p no:capture tests
 ```
 
+## Notes
+
+`glmax` was developed by members of the Mancuso Lab with assistance from
+[Claude Code](https://claude.ai/code) and [Codex](https://chatgpt.com/codex), following the practices described in the
+[scientific-software-playbook](https://github.com/mancusolab/scientific-software-playbook).
+
 ## License
 
 MIT
+
+
