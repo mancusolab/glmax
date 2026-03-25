@@ -23,11 +23,11 @@ from jax.scipy.special import xlogy
 
 import glmax
 
-from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
+from glmax.family import Binomial, Gamma, Gaussian, InverseGaussian, NegativeBinomial, Poisson
 
 
 _ALL_FAMILIES = [Gaussian, Poisson, Binomial, NegativeBinomial]
-_ALL_FAMILIES_INCLUDING_GAMMA = [*_ALL_FAMILIES, Gamma]
+_ALL_FAMILIES_INCLUDING_GAMMA = [*_ALL_FAMILIES, Gamma, InverseGaussian]
 _SPLIT_FAMILY_CASES = [
     (Gaussian, 0.5, 0.2),
     (Poisson, 7.0, 0.2),
@@ -152,7 +152,7 @@ class TestCdf:
         expected = scipy.stats.nbinom.cdf(y, n=r, p=r / (r + mu))
         assert jnp.allclose(result, expected, atol=1e-7)
 
-    @pytest.mark.parametrize("FamilyCls", [Gaussian, Poisson, Binomial, NegativeBinomial, Gamma])
+    @pytest.mark.parametrize("FamilyCls", [Gaussian, Poisson, Binomial, NegativeBinomial, Gamma, InverseGaussian])
     def test_cdf_shape_n(self, FamilyCls):
         n = 8
         f = FamilyCls()
@@ -160,6 +160,8 @@ class TestCdf:
         mu = jnp.ones(n) * 1.0
         kwargs = {"aux": 0.5} if FamilyCls is NegativeBinomial else {}
         if FamilyCls is Gamma:
+            kwargs = {"disp": 1.0}
+        if FamilyCls is InverseGaussian:
             kwargs = {"disp": 1.0}
         result = f.cdf(y, mu, **kwargs)
         assert result.shape == (n,)
@@ -208,7 +210,7 @@ class TestDevianceContribs:
         assert jnp.all(jnp.isfinite(result))
         assert jnp.allclose(result, expected, rtol=1e-12, atol=1e-12)
 
-    @pytest.mark.parametrize("FamilyCls", [Gaussian, Poisson, Binomial, NegativeBinomial, Gamma])
+    @pytest.mark.parametrize("FamilyCls", [Gaussian, Poisson, Binomial, NegativeBinomial, Gamma, InverseGaussian])
     def test_deviance_contribs_shape_n(self, FamilyCls):
         n = 8
         f = FamilyCls()
@@ -216,6 +218,8 @@ class TestDevianceContribs:
         mu = jnp.ones(n) * 1.0
         kwargs = {"aux": 0.5} if FamilyCls is NegativeBinomial else {}
         if FamilyCls is Gamma:
+            kwargs = {"disp": 1.0}
+        if FamilyCls is InverseGaussian:
             kwargs = {"disp": 1.0}
         result = f.deviance_contribs(y, mu, **kwargs)
         assert result.shape == (n,)
@@ -650,7 +654,7 @@ class TestSample:
 
 
 def test_init_nuisance_returns_correct_defaults() -> None:
-    for family in [Gaussian(), Poisson(), Binomial(), Gamma()]:
+    for family in [Gaussian(), Poisson(), Binomial(), Gamma(), InverseGaussian()]:
         disp, aux = family.init_nuisance()
         assert jnp.allclose(disp, jnp.asarray(1.0))
         assert aux is None
@@ -671,6 +675,7 @@ class TestFamilyDocstrings:
             and "stores overdispersion in `aux`" in NegativeBinomial.__doc__
         )
         assert "uses `disp` as EDM dispersion and ignores `aux`" in Gamma.__doc__
+        assert "uses `disp` as EDM dispersion and ignores `aux`" in InverseGaussian.__doc__
 
 
 # ---------------------------------------------------------------------------
@@ -725,3 +730,169 @@ class TestGamma:
         result = glmax.fit(Gamma(), X, y)
         assert jnp.all(jnp.isfinite(result.params.beta))
         assert jnp.isfinite(result.params.disp)
+
+
+# ---------------------------------------------------------------------------
+# InverseGaussian numerics
+# ---------------------------------------------------------------------------
+
+
+class TestInverseGaussian:
+    def test_is_edf_subclass(self):
+        from glmax.family.dist import ExponentialDispersionFamily
+
+        assert isinstance(InverseGaussian(), ExponentialDispersionFamily)
+
+    def test_default_link_is_power_minus_two(self):
+        from glmax.family import PowerLink
+
+        ig = InverseGaussian()
+        assert isinstance(ig.glink, PowerLink)
+        assert float(ig.glink.power) == -2.0
+
+    def test_bounds_lower_is_positive(self):
+        assert InverseGaussian()._bounds[0] > 0
+
+    def test_is_not_discrete(self):
+        assert InverseGaussian().is_discrete is False
+
+    def test_variance_formula(self):
+        ig = InverseGaussian()
+        mu = jnp.array([1.0, 2.0, 3.0])
+        v = ig.variance(mu, disp=0.5)
+        assert jnp.allclose(v, 0.5 * mu**3)
+
+    def test_variance_sentinel_zero_disp(self):
+        ig = InverseGaussian()
+        mu = jnp.array([1.0, 2.0])
+        v = ig.variance(mu, disp=0.0)
+        assert jnp.allclose(v, 1.0 * mu**3)
+
+    def test_deviance_contribs_formula(self):
+        ig = InverseGaussian()
+        y = jnp.array([1.0, 2.0, 3.0])
+        mu = jnp.array([1.2, 1.8, 2.8])
+        result = ig.deviance_contribs(y, mu)
+        expected = (y - mu) ** 2 / (mu**2 * y)
+        assert jnp.allclose(result, expected, atol=1e-12)
+
+    def test_deviance_contribs_zero_at_saturation(self):
+        ig = InverseGaussian()
+        y = jnp.array([1.0, 2.0, 3.0])
+        result = ig.deviance_contribs(y, y)
+        assert jnp.allclose(result, 0.0, atol=1e-12)
+
+    def test_deviance_contribs_nonnegative(self):
+        ig = InverseGaussian()
+        y = jnp.array([0.5, 1.0, 2.0, 4.0])
+        mu = jnp.array([0.8, 1.5, 1.8, 3.5])
+        assert jnp.all(ig.deviance_contribs(y, mu) >= 0)
+
+    def test_negloglikelihood_finite(self):
+        ig = InverseGaussian()
+        # PowerLink(-2): inverse is eta^{-1/2}, eta=1 -> mu=1
+        y = jnp.ones(10) * 1.5
+        eta = jnp.ones(10)  # mu = eta^{-1/2} = 1
+        assert jnp.isfinite(ig.negloglikelihood(y, eta, disp=0.5))
+
+    def test_negloglikelihood_matches_formula(self):
+        ig = InverseGaussian()
+        y = jnp.array([1.0, 2.0, 3.0])
+        mu = jnp.array([1.2, 1.8, 2.8])
+        # PowerLink(-2): eta = mu^{-2}
+        eta = mu ** (-2.0)
+        phi = 0.4
+        n = 3
+        expected = (
+            0.5 * n * jnp.log(2.0 * jnp.pi * phi)
+            + 1.5 * jnp.sum(jnp.log(y))
+            + 0.5 * jnp.sum((y - mu) ** 2 / (phi * mu**2 * y))
+        )
+        result = ig.negloglikelihood(y, eta, disp=phi)
+        assert jnp.allclose(result, expected, atol=1e-10)
+
+    def test_cdf_matches_scipy(self):
+        import scipy.stats
+
+        ig = InverseGaussian()
+        y = jnp.array([0.5, 1.0, 2.0, 3.0])
+        mu = jnp.array([1.0, 1.0, 1.5, 2.0])
+        phi = 0.5
+        # scipy.stats.invgauss(mu=phi*mu_i, scale=1/phi) matches our parameterisation
+        result = ig.cdf(y, mu, disp=phi)
+        expected = jnp.array(
+            [float(scipy.stats.invgauss(mu=phi * float(m), scale=1.0 / phi).cdf(float(yi))) for yi, m in zip(y, mu)]
+        )
+        assert jnp.allclose(result, expected, atol=1e-8)
+
+    def test_cdf_range(self):
+        ig = InverseGaussian()
+        y = jnp.array([0.1, 0.5, 1.0, 5.0])
+        mu = jnp.ones(4)
+        result = ig.cdf(y, mu, disp=1.0)
+        assert jnp.all(result >= 0.0)
+        assert jnp.all(result <= 1.0)
+
+    def test_sample_shape_and_positivity(self):
+        ig = InverseGaussian()
+        key = jr.PRNGKey(0)
+        eta = jnp.ones(30)  # PowerLink(-2): mu = 1
+        s = ig.sample(key, eta, disp=0.5)
+        assert s.shape == (30,)
+        assert jnp.all(s > 0), "InverseGaussian samples must be positive"
+
+    def test_sample_is_finite(self):
+        ig = InverseGaussian()
+        key = jr.PRNGKey(1)
+        eta = jnp.ones(50)
+        s = ig.sample(key, eta, disp=1.0)
+        assert jnp.all(jnp.isfinite(s))
+
+    def test_update_nuisance_pearson_formula(self):
+        ig = InverseGaussian()
+        X = jnp.ones((5, 2))
+        y = jnp.array([1.0, 2.0, 1.5, 0.8, 1.2])
+        mu = jnp.array([1.1, 1.9, 1.4, 0.9, 1.3])
+        eta = mu ** (-2.0)  # PowerLink(-2) inverse
+        result_disp, result_aux = ig.update_nuisance(X, y, eta, disp=1.0)
+        expected = jnp.sum((y - mu) ** 2 / (mu**2 * y)) / (5 - 2)
+        assert jnp.allclose(result_disp, expected, atol=1e-10)
+        assert result_aux is None
+
+    def test_fits_positive_response_dataset(self):
+        key = jr.PRNGKey(7)
+        key_X, key_y = jr.split(key)
+        n, p = 60, 3
+        X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key_X, (n, p - 1))], axis=1)
+        # sample from InverseGaussian with mu=1 (eta=1 for PowerLink(-2))
+        ig = InverseGaussian()
+        y = ig.sample(key_y, jnp.ones(n), disp=0.3)
+        result = glmax.fit(InverseGaussian(), X, y)
+        assert jnp.all(jnp.isfinite(result.params.beta))
+        assert jnp.isfinite(result.params.disp)
+        assert float(result.params.disp) > 0
+
+    def test_fits_matches_statsmodels(self):
+        import statsmodels.api as sm
+
+        key = jr.PRNGKey(13)
+        key_X, key_y = jr.split(key)
+        n = 80
+        X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key_X, (n, 1))], axis=1)
+        ig = InverseGaussian()
+        y = ig.sample(key_y, jnp.ones(n) * 0.5, disp=0.2)
+
+        glmax_result = glmax.fit(InverseGaussian(), X, y)
+
+        import numpy as np
+
+        sm_model = sm.GLM(
+            np.array(y),
+            np.array(X),
+            family=sm.families.InverseGaussian(link=sm.families.links.InverseSquared()),
+        )
+        sm_result = sm_model.fit()
+
+        assert jnp.allclose(glmax_result.params.beta, jnp.array(sm_result.params), atol=1e-4), (
+            f"glmax beta {glmax_result.params.beta} != statsmodels {sm_result.params}"
+        )

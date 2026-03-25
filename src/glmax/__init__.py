@@ -44,6 +44,7 @@ from .family import (
     Gamma as Gamma,
     Gaussian as Gaussian,
     IdentityLink as IdentityLink,
+    InverseGaussian as InverseGaussian,
     InverseLink as InverseLink,
     LogitLink as LogitLink,
     LogLink as LogLink,

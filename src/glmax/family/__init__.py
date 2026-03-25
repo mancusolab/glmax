@@ -4,6 +4,7 @@ from .dist import (
     ExponentialDispersionFamily as ExponentialDispersionFamily,
     Gamma as Gamma,
     Gaussian as Gaussian,
+    InverseGaussian as InverseGaussian,
     NegativeBinomial as NegativeBinomial,
     Poisson as Poisson,
 )

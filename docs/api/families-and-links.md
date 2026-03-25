@@ -57,6 +57,13 @@ this contract.
 
 ---
 
+::: glmax.InverseGaussian
+    options:
+        members:
+            - __init__
+
+---
+
 ::: glmax.Poisson
     options:
         members:
