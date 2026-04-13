@@ -3,6 +3,7 @@
 from typing import ClassVar
 
 import numpy as np
+import pytest
 import statsmodels.api as sm
 
 import jax.nn
@@ -271,3 +272,24 @@ def test_NegativeBinomial(getkey):
     _assert_array_eq(glm_state.params.beta, sm_beta, rtol=6e-3)
     _assert_array_eq(infer_state.se, sm_se, rtol=5e-3)
     _assert_array_eq(infer_state.p, sm_p, rtol=4e-2)
+
+
+@pytest.mark.parametrize("n_trials", [5, 10, 25])
+def test_binomial_n_trials_matches_statsmodels(n_trials):
+    import jax.random as jr
+
+    key = jr.PRNGKey(42 + n_trials)
+    key_X, key_y = jr.split(key)
+    n = 100
+    X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key_X, (n, 2))], axis=1)
+    true_eta = X @ jnp.array([0.2, 0.5, -0.3])
+    prob = jax.nn.sigmoid(true_eta)
+    counts = jr.binomial(key_y, n=n_trials, p=prob, shape=(n,)).astype(jnp.float64)
+
+    glmax_result = glmax.fit(Binomial(n_trials=n_trials), X, counts)
+
+    # statsmodels expects (successes, failures) for grouped binomial
+    endog = np.column_stack([np.array(counts), np.full(n, n_trials) - np.array(counts)])
+    sm_result = sm.GLM(endog, np.array(X), family=sm.families.Binomial()).fit()
+
+    _assert_array_eq(glmax_result.params.beta, jnp.array(sm_result.params), rtol=1e-3)

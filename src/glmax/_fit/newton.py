@@ -242,8 +242,9 @@ class NewtonFitter(AbstractFitter, strict=True):
         beta, n_iter, converged, disp, aux, objective, objective_delta = newton_state
 
         eta = X @ beta + offset
-        mu, link_deriv, weight = family.calc_weight(eta, disp, aux)
-        score_residual = (y - mu) * link_deriv
+        mu_fit, link_deriv, weight = family.calc_weight(eta, disp, aux)
+        score_residual = (y - mu_fit) * link_deriv
+        mu = family.glink.inverse(eta)
         beta = jnp.ravel(beta)
 
         return FitResult(

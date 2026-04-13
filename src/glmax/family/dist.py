@@ -461,13 +461,15 @@ class Gaussian(ExponentialDispersionFamily):
 
 
 class Binomial(ExponentialDispersionFamily):
-    r"""Binomial exponential family for binary responses with PMF
+    r"""Binomial exponential family for count responses with PMF
 
-    $$P(Y = y \mid \mu) = \mu^y (1 - \mu)^{1 - y}, \quad y \in \{0, 1\}$$
+    $$P(Y = y \mid \mu) = \binom{N}{y} \mu^y (1 - \mu)^{N - y},
+    \quad y \in \{0, 1, \ldots, N\}$$
 
-    The mean is $\mu \in (0, 1)$ and the variance function is
-    $V(\mu) = \mu(1 - \mu)$, so $\mathrm{Var}(Y \mid \mu) = \mu(1 - \mu)$
-    with fixed dispersion $\phi = 1$.
+    The mean is $\mu \in (0, 1)$ (success probability) and the variance
+    function is $V(\mu) = \mu(1 - \mu)$, so
+    $\mathrm{Var}(Y \mid \mu) = N \mu(1 - \mu)$ with fixed dispersion
+    $\phi = 1$.  When `n_trials=1` this reduces to the Bernoulli model.
 
     The canonical link is the logit $g(\mu) = \log(\mu / (1 - \mu))$.
     Binomial fixes `disp = 1.0` and ignores `aux`.
@@ -485,15 +487,39 @@ class Binomial(ExponentialDispersionFamily):
         IdentityLink,
     ]
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, 1.0 - jnp.finfo(float).eps)
+    n_trials: int = eqx.field(default=1, static=True)
 
-    def __init__(self, glink: AbstractLink = LogitLink()) -> None:
+    def __init__(self, glink: AbstractLink = LogitLink(), n_trials: int = 1) -> None:
         r"""Construct a Binomial family.
 
         **Arguments:**
 
         - `glink`: link function (default: `LogitLink()`).
+        - `n_trials`: number of Binomial trials per observation (default: `1`).
         """
         self.glink = glink
+        self.n_trials = n_trials
+
+    def calc_weight(
+        self,
+        eta: Array,
+        disp: Scalar = 0.0,
+        aux: Scalar | None = None,
+    ) -> tuple[Array, Array, Array]:
+        r"""Compute IRLS weights for grouped Binomial count data.
+
+        Returns `(mu, g_deriv, weight)` where `mu = n_trials * p` is the
+        expected count (same scale as `y`), `g_deriv = g'(p) / n_trials` is the
+        effective link derivative, and `weight = n_trials / (p*(1-p) * g'(p)^2)`
+        is the Fisher information weight.  For `n_trials=1` this reduces to the
+        Bernoulli result.
+        """
+        del disp, aux
+        prob = jnp.clip(self.glink.inverse(eta), *self._bounds)
+        n = self.n_trials
+        v_unit = jnp.clip(prob * (1.0 - prob), min=jnp.finfo(float).tiny)
+        g_prime = self.glink.deriv(prob)
+        return n * prob, g_prime / n, n / (v_unit * g_prime**2)
 
     def negloglikelihood(
         self,
@@ -504,12 +530,9 @@ class Binomial(ExponentialDispersionFamily):
     ) -> Array:
         r"""Binomial negative log-likelihood.
 
-        This uses the Bernoulli likelihood with success probability
-        $\mu = g^{-1}(\eta)$.
-
         **Arguments:**
 
-        - `y`: binary responses in `{0, 1}`, shape `(n,)`.
+        - `y`: success counts in `{0, 1, ..., n_trials}`, shape `(n,)`.
         - `eta`: linear predictor, shape `(n,)`.
         - `disp`: ignored; Binomial fixes `disp = 1.0`.
         - `aux`: ignored.
@@ -519,14 +542,14 @@ class Binomial(ExponentialDispersionFamily):
         Scalar negative log-likelihood.
         """
         del disp, aux
-        return -jnp.sum(jaxstats.bernoulli.logpmf(y, self.glink.inverse(eta)))
+        return -jnp.sum(jaxstats.binom.logpmf(y, self.n_trials, self.glink.inverse(eta)))
 
     def variance(self, mu: Array, disp: Scalar = 0.0, aux: Scalar | None = None) -> Array:
         del disp, aux
-        return mu * (1 - mu)
+        return mu * (1 - mu / self.n_trials)
 
     def init_eta(self, y: Array) -> Array:
-        return self.glink((y + 0.5) / 2.0)
+        return self.glink((y + 0.5) / (self.n_trials + 1.0))
 
     def sample(
         self,
@@ -535,7 +558,7 @@ class Binomial(ExponentialDispersionFamily):
         disp: Scalar = 0.0,
         aux: Scalar | None = None,
     ) -> Array:
-        r"""Sample from $\mathrm{Bernoulli}(\mu)$ where $\mu = g^{-1}(\eta)$.
+        r"""Sample from $\mathrm{Binomial}(N, \mu)$ where $\mu = g^{-1}(\eta)$.
 
         **Arguments:**
 
@@ -546,11 +569,11 @@ class Binomial(ExponentialDispersionFamily):
 
         **Returns:**
 
-        Binary samples, shape `(n,)`.
+        Integer-valued count samples, shape `(n,)`.
         """
         del disp, aux
         mu = self.glink.inverse(eta)
-        return rdm.bernoulli(key, p=mu, shape=mu.shape).astype(jnp.float64)
+        return rdm.binomial(key, n=self.n_trials, p=mu, shape=mu.shape).astype(jnp.float64)
 
     def cdf(
         self,
@@ -559,11 +582,11 @@ class Binomial(ExponentialDispersionFamily):
         disp: Scalar = 0.0,
         aux: Scalar | None = None,
     ) -> Array:
-        r"""Bernoulli cumulative distribution function.
+        r"""Binomial cumulative distribution function.
 
         **Arguments:**
 
-        - `y`: binary responses in `{0, 1}`, shape `(n,)`.
+        - `y`: success counts in `{0, 1, ..., n_trials}`, shape `(n,)`.
         - `mu`: success probabilities, shape `(n,)`.
         - `disp`: ignored.
         - `aux`: ignored.
@@ -573,7 +596,10 @@ class Binomial(ExponentialDispersionFamily):
         CDF values, shape `(n,)`.
         """
         del disp, aux
-        return jaxstats.bernoulli.cdf(y, p=mu)
+        mu_ = jnp.clip(mu, *self._bounds)
+        n = self.n_trials
+        # P(Y <= y; n, p) = I_{1-p}(n-y, y+1) = betainc(n-y, y+1, 1-p) for y < n
+        return jnp.where(y >= n, 1.0, betainc(n - y, y + 1, 1.0 - mu_))
 
     def deviance_contribs(
         self,
@@ -586,7 +612,7 @@ class Binomial(ExponentialDispersionFamily):
 
         **Arguments:**
 
-        - `y`: binary responses in `{0, 1}`, shape `(n,)`.
+        - `y`: success counts in `{0, 1, ..., n_trials}`, shape `(n,)`.
         - `mu`: success probabilities, shape `(n,)`.
         - `disp`: ignored.
         - `aux`: ignored.
@@ -596,9 +622,10 @@ class Binomial(ExponentialDispersionFamily):
         Non-negative deviance contributions, shape `(n,)`.
         """
         del disp, aux
-        y_ = y
+        n = self.n_trials
         mu_ = jnp.clip(mu, *self._bounds)
-        return 2.0 * (xlogy(y_, y_) - xlogy(y_, mu_) + xlogy(1.0 - y_, 1.0 - y_) - xlogy(1.0 - y_, 1.0 - mu_))
+        compl = n - y
+        return 2.0 * (xlogy(y, y) + xlogy(compl, compl) - n * jnp.log(n) - xlogy(y, mu_) - xlogy(compl, 1.0 - mu_))
 
 
 class Poisson(ExponentialDispersionFamily):

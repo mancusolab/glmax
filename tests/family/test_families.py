@@ -125,13 +125,21 @@ class TestCdf:
         expected = scipy.stats.poisson.cdf(y, mu=mu)
         assert jnp.allclose(result, expected, atol=1e-10)
 
-    def test_binomial_cdf_matches_scipy(self):
+    def test_binomial_cdf_matches_scipy_n1(self):
         f = Binomial()
         y = jnp.array([0.0, 1.0, 0.0, 1.0])
         mu = jnp.array([0.3, 0.7, 0.8, 0.2])
         result = f.cdf(y, mu)
-        expected = scipy.stats.bernoulli.cdf(y, p=mu)
+        expected = scipy.stats.binom.cdf(y, 1, mu)
         assert jnp.allclose(result, expected, atol=1e-10)
+
+    def test_binomial_cdf_matches_scipy_n_trials(self):
+        f = Binomial(n_trials=10)
+        y = jnp.array([2.0, 5.0, 8.0, 10.0])
+        mu = jnp.array([0.3, 0.5, 0.7, 0.9])
+        result = f.cdf(y, mu)
+        expected = scipy.stats.binom.cdf(y, 10, mu)
+        assert jnp.allclose(result, expected, atol=1e-6)
 
     def test_gamma_cdf_matches_scipy(self):
         f = Gamma()
@@ -239,7 +247,9 @@ class TestDevianceContribs:
         mu = jnp.array([1e-320], dtype=jnp.float64)
         result = f.deviance_contribs(y, mu)
         mu_ = jnp.clip(mu, *f._bounds)
-        expected = 2.0 * (xlogy(y, y) - xlogy(y, mu_) + xlogy(1.0 - y, 1.0 - y) - xlogy(1.0 - y, 1.0 - mu_))
+        n = f.n_trials
+        compl = n - y
+        expected = 2.0 * (xlogy(y, y) + xlogy(compl, compl) - n * jnp.log(n) - xlogy(y, mu_) - xlogy(compl, 1.0 - mu_))
         assert jnp.all(jnp.isfinite(result))
         assert jnp.allclose(result, expected, rtol=1e-12, atol=1e-12)
 
@@ -896,3 +906,60 @@ class TestInverseGaussian:
         assert jnp.allclose(glmax_result.params.beta, jnp.array(sm_result.params), atol=1e-4), (
             f"glmax beta {glmax_result.params.beta} != statsmodels {sm_result.params}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Binomial numerics (n_trials > 1)
+# ---------------------------------------------------------------------------
+
+
+class TestBinomial:
+    def test_default_n_trials_is_1(self):
+        assert Binomial().n_trials == 1
+
+    def test_n_trials_is_static(self):
+        """n_trials must be a static field — different values cause recompilation, not traces."""
+        import equinox as eqx
+
+        b = Binomial(n_trials=10)
+        arrays, static = eqx.partition(b, eqx.is_array)
+        assert b.n_trials not in jax.tree_util.tree_leaves(arrays)
+
+    def test_n_trials_stored_on_instance(self):
+        assert Binomial(n_trials=5).n_trials == 5
+        assert Binomial(n_trials=20).n_trials == 20
+
+    @pytest.mark.parametrize("n_trials", [1, 5, 10, 50])
+    def test_negloglikelihood_finite_for_valid_counts(self, n_trials):
+        f = Binomial(n_trials=n_trials)
+        y = jnp.array([0.0, n_trials // 2, n_trials], dtype=jnp.float64)
+        eta = jnp.zeros(3)
+        assert jnp.isfinite(f.negloglikelihood(y, eta))
+
+    @pytest.mark.parametrize("n_trials", [1, 5, 10, 50])
+    def test_nll_n1_matches_bernoulli_when_n_trials_1(self, n_trials):
+        """For n_trials=1, NLL must equal the Bernoulli NLL."""
+        import jax.scipy.stats as jss
+
+        f = Binomial(n_trials=1)
+        y = jnp.array([0.0, 1.0, 0.0, 1.0])
+        eta = jnp.array([0.5, -0.3, 1.2, -0.8])
+        mu = f.glink.inverse(eta)
+        expected = -jnp.sum(jss.bernoulli.logpmf(y, mu))
+        assert jnp.allclose(f.negloglikelihood(y, eta), expected, atol=1e-10)
+
+    @pytest.mark.parametrize("n_trials", [5, 10, 25])
+    def test_fit_converges_for_n_trials(self, n_trials):
+        """Fit with n_trials>1 must converge and produce finite betas."""
+        key = jr.PRNGKey(42 + n_trials)
+        key_X, key_y = jr.split(key)
+        n = 100
+        X = jnp.concatenate([jnp.ones((n, 1)), jr.normal(key_X, (n, 2))], axis=1)
+        true_eta = X @ jnp.array([0.2, 0.5, -0.3])
+        prob = jax.nn.sigmoid(true_eta)
+        counts = jr.binomial(key_y, n=n_trials, p=prob, shape=(n,)).astype(jnp.float64)
+
+        result = glmax.fit(Binomial(n_trials=n_trials), X, counts)
+
+        assert jnp.all(jnp.isfinite(result.params.beta))
+        assert bool(result.converged)
