@@ -54,6 +54,12 @@ fitted.mu            # fitted means  (cf. result.fittedvalues)
 glmax.predict(fitted.family, fitted.params, X_new)   # out-of-sample  (cf. result.predict)
 ```
 
+!!! note "Fitted values are on the response scale"
+    Like statsmodels fitted values, `fitted.mu` and `glmax.predict(...)` are
+    response-scale means. For `Binomial(n_trials=N)`, the inverse link gives a
+    success probability $p$, but fitted values are expected success counts
+    $Np$ when `y` is encoded as counts.
+
 For Negative Binomial the overdispersion parameter lives in `fitted.params.aux` rather than appended to the coefficient vector.
 
 ---
@@ -81,7 +87,10 @@ The link is passed directly to the family constructor. See [Families & Links](ap
 
 ## Offsets
 
-Both libraries use `offset=` as a keyword argument. In statsmodels it goes to `.fit()`; in glmax it goes to `fit()` directly. Either way, the offset is added to the linear predictor before the inverse link is applied.
+Both libraries use `offset=` as a keyword argument. In statsmodels it goes to
+`.fit()`; in glmax it goes to `fit()` directly. Either way, the offset is added
+to the linear predictor before converting $\eta$ to fitted values on the
+response scale.
 
 **statsmodels:**
 

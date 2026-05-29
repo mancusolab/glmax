@@ -34,6 +34,7 @@
   - `src/glmax/_fit/fit.py` owns the public `fit` and `predict` verbs (`@eqx.filter_jit`-wrapped). Input validation (shape, finiteness) lives here.
   - `src/glmax/_fit/irls.py` owns `IRLSFitter` (the default fitter) and the `_irls` kernel. `_irls` takes raw JAX arrays and calls family methods directly.
   - `src/glmax/_fit/__init__.py` re-exports all fit internals.
+  - `src/glmax/family/dist.py` owns `ExponentialDispersionFamily.response_mean(...)`; fitters and `predict(...)` use it to return response-scale means.
   - `src/glmax/diagnostics.py` owns `AbstractDiagnostic`, the built-in diagnostic strategies/results, and `check`.
   - `src/glmax/_infer/infer.py` owns `infer`.
   - `src/glmax/_infer/types.py` owns `InferenceResult`.
@@ -44,6 +45,7 @@
 
 ## Invariants
 - Contract carrier split is deliberate: `FitResult` and `FittedGLM` are `equinox.Module` types with constructor-time validation; `Params` and `InferenceResult` are `NamedTuple` pytrees; diagnostic strategies/results are `equinox.Module` types and arrays returned through `check(...)`.
+- `FittedGLM.mu` and `predict(...)` return response-scale means via `family.response_mean(...)`; do not assume `mu == family.glink.inverse(eta)` for grouped-response families such as `Binomial(n_trials > 1)`.
 - Public exports stay centralized in `src/glmax/__init__.py`; if a user-facing noun or verb changes, update docs and contract tests in the same patch.
 - Keep workflow examples on the grammar nouns and top-level verbs. Reserve `_fit` imports for fitter/solver docs and tests; do not present `_fit` or `_infer` module paths as the primary user workflow.
 - `site/` is generated documentation output. Edit `docs/` and `mkdocs.yml`, not `site/`.

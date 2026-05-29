@@ -244,7 +244,7 @@ class NewtonFitter(AbstractFitter, strict=True):
         eta = X @ beta + offset
         mu_fit, link_deriv, weight = family.calc_weight(eta, disp, aux)
         score_residual = (y - mu_fit) * link_deriv
-        mu = family.glink.inverse(eta)
+        mu = family.response_mean(eta, disp, aux)
         beta = jnp.ravel(beta)
 
         return FitResult(

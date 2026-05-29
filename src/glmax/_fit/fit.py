@@ -77,9 +77,9 @@ def _fit_core_jvp(
         throw=True,
     ).value
 
-    # Linear predictor and mean tangents.
+    # Linear predictor and response-mean tangents.
     deta = X @ dbeta + dX @ beta + doffset
-    dmu = family.glink.inverse_deriv(fitted.eta) * deta
+    _, dmu = jax.jvp(lambda eta_: family.response_mean(eta_, disp, aux), (fitted.eta,), (deta,))
 
     # Nuisance parameter tangents via JVP through update_nuisance.
     def nuisance_fn(X_, y_, eta_):
@@ -94,11 +94,12 @@ def _fit_core_jvp(
 
     _, dglm_wt = jax.jvp(glm_wt_fn, (fitted.eta,), (deta,))
 
-    # Score residual tangent: d[(y - μ) g'(μ)].
-    def score_res_fn(y_, mu_):
-        return (y_ - mu_) * family.glink.deriv(mu_)
+    # Score residual tangent: d[(y - μ) g'(μ)] with family-specific response scale.
+    def score_res_fn(y_, eta_):
+        mu_, g_deriv_, _ = family.calc_weight(eta_, disp, aux)
+        return (y_ - mu_) * g_deriv_
 
-    _, dscore_res = jax.jvp(score_res_fn, (y, fitted.mu), (dy, dmu))
+    _, dscore_res = jax.jvp(score_res_fn, (y, fitted.eta), (dy, deta))
 
     # Objective tangent at converged beta.
     def objective_fn(X_, y_, offset_):
@@ -248,9 +249,10 @@ def predict(
     r"""Apply a fitted family to new data and return predicted means.
 
     This is the canonical `predict` grammar verb. It is `@eqx.filter_jit`-wrapped.
-    Prediction computes $\hat{\mu} = g^{-1}(X \hat{\beta} + o)$, where $X$ is
-    the design matrix, $\hat{\beta}$ is the fitted coefficient vector, $o$ is
-    the optional offset, and $g$ is the link function.
+    Prediction computes the family-specific response-scale mean for
+    $\eta = X \hat{\beta} + o$, where $X$ is the design matrix,
+    $\hat{\beta}$ is the fitted coefficient vector, and $o$ is the optional
+    offset.
 
     **Arguments:**
 
@@ -262,8 +264,7 @@ def predict(
 
     **Returns:**
 
-    Predicted mean response vector
-    $\hat{\mu} = g^{-1}(X \hat{\beta} + o)$, shape `(n,)`.
+    Predicted mean response vector, shape `(n,)`, on the same scale as `y`.
 
     **Raises:**
 
@@ -283,4 +284,4 @@ def predict(
         offset = cast(Array, inexact_asarray(offset))
         eta = eta + offset
 
-    return family.glink.inverse(eta)
+    return family.response_mean(eta, params.disp, params.aux)

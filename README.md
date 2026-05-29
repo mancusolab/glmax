@@ -18,6 +18,7 @@ diag    = glmax.check(fitted)
 ```
 
 Four verbs — `fit`, `predict`, `infer`, and `check` — cover the full modeling workflow. Each takes explicit inputs and returns an explicit result. No hidden state is threaded between calls.
+`predict` returns response-scale fitted means, matching `fitted.mu`.
 
 See the [docs](https://mancusolab.github.io/glmax) for the full API reference and guides.
 
@@ -64,5 +65,4 @@ pytest -p no:capture tests
 ## License
 
 MIT
-
 

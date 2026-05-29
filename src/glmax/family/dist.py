@@ -214,6 +214,31 @@ class ExponentialDispersionFamily(eqx.Module):
         w = 1.0 / (v * g_deriv**2)
         return mu, g_deriv, w
 
+    def response_mean(
+        self,
+        eta: Array,
+        disp: Scalar = 0.0,
+        aux: Scalar | None = None,
+    ) -> Array:
+        r"""Return the fitted mean on the response scale.
+
+        The default response mean is the inverse-link value
+        $\mu = g^{-1}(\eta)$. Families whose link parameter differs from the
+        observed response scale override this method.
+
+        **Arguments:**
+
+        - `eta`: linear predictor, shape `(n,)`.
+        - `disp`: dispersion parameter, scalar.
+        - `aux`: optional family-specific auxiliary scalar.
+
+        **Returns:**
+
+        Mean response, shape `(n,)`, on the same scale as `y`.
+        """
+        del disp, aux
+        return self.glink.inverse(eta)
+
     def init_eta(self, y: Array) -> Array:
         return self.glink((y + y.mean()) / 2)
 
@@ -461,17 +486,19 @@ class Gaussian(ExponentialDispersionFamily):
 
 
 class Binomial(ExponentialDispersionFamily):
-    r"""Binomial exponential family for count responses with PMF
+    r"""Binomial exponential family for Bernoulli or grouped count responses.
 
-    $$P(Y = y \mid \mu) = \binom{N}{y} \mu^y (1 - \mu)^{N - y},
+    $$P(Y = y \mid p) = \binom{N}{y} p^y (1 - p)^{N - y},
     \quad y \in \{0, 1, \ldots, N\}$$
 
-    The mean is $\mu \in (0, 1)$ (success probability) and the variance
-    function is $V(\mu) = \mu(1 - \mu)$, so
-    $\mathrm{Var}(Y \mid \mu) = N \mu(1 - \mu)$ with fixed dispersion
-    $\phi = 1$.  When `n_trials=1` this reduces to the Bernoulli model.
+    The inverse link gives the success probability
+    $p = g^{-1}(\eta) \in (0, 1)$. The response-scale mean returned by
+    `fit(...).mu` and `predict(...)` is $\mu = Np$, matching the count scale
+    of `y`. The response variance is $N p(1 - p)$ with fixed dispersion
+    $\phi = 1$. When `n_trials=1` this reduces to the Bernoulli model, and
+    the probability scale and response scale coincide.
 
-    The canonical link is the logit $g(\mu) = \log(\mu / (1 - \mu))$.
+    The canonical link is the logit $g(p) = \log(p / (1 - p))$.
     Binomial fixes `disp = 1.0` and ignores `aux`.
     """
 
@@ -520,6 +547,17 @@ class Binomial(ExponentialDispersionFamily):
         v_unit = jnp.clip(prob * (1.0 - prob), min=jnp.finfo(float).tiny)
         g_prime = self.glink.deriv(prob)
         return n * prob, g_prime / n, n / (v_unit * g_prime**2)
+
+    def response_mean(
+        self,
+        eta: Array,
+        disp: Scalar = 0.0,
+        aux: Scalar | None = None,
+    ) -> Array:
+        r"""Return expected success counts on the response scale."""
+        del disp, aux
+        prob = jnp.clip(self.glink.inverse(eta), *self._bounds)
+        return self.n_trials * prob
 
     def negloglikelihood(
         self,
@@ -587,7 +625,7 @@ class Binomial(ExponentialDispersionFamily):
         **Arguments:**
 
         - `y`: success counts in `{0, 1, ..., n_trials}`, shape `(n,)`.
-        - `mu`: success probabilities, shape `(n,)`.
+        - `mu`: fitted mean success counts, shape `(n,)`.
         - `disp`: ignored.
         - `aux`: ignored.
 
@@ -596,7 +634,7 @@ class Binomial(ExponentialDispersionFamily):
         CDF values, shape `(n,)`.
         """
         del disp, aux
-        mu_ = jnp.clip(mu, *self._bounds)
+        mu_ = jnp.clip(mu / self.n_trials, *self._bounds)
         n = self.n_trials
         # P(Y <= y; n, p) = I_{1-p}(n-y, y+1) = betainc(n-y, y+1, 1-p) for y < n
         return jnp.where(y >= n, 1.0, betainc(n - y, y + 1, 1.0 - mu_))
@@ -613,7 +651,7 @@ class Binomial(ExponentialDispersionFamily):
         **Arguments:**
 
         - `y`: success counts in `{0, 1, ..., n_trials}`, shape `(n,)`.
-        - `mu`: success probabilities, shape `(n,)`.
+        - `mu`: fitted mean success counts, shape `(n,)`.
         - `disp`: ignored.
         - `aux`: ignored.
 
@@ -623,7 +661,7 @@ class Binomial(ExponentialDispersionFamily):
         """
         del disp, aux
         n = self.n_trials
-        mu_ = jnp.clip(mu, *self._bounds)
+        mu_ = jnp.clip(mu / self.n_trials, *self._bounds)
         compl = n - y
         return 2.0 * (xlogy(y, y) + xlogy(compl, compl) - n * jnp.log(n) - xlogy(y, mu_) - xlogy(compl, 1.0 - mu_))
 

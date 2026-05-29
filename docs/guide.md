@@ -31,8 +31,8 @@ You can access fit artifacts directly from the returned noun:
 ```python
 fitted.params.beta     # coefficient vector, shape (p,)
 fitted.params.disp     # dispersion φ
-fitted.mu              # fitted means E[y | X], shape (n,)
 fitted.eta             # linear predictor Xβ, shape (n,)
+fitted.mu              # fitted means E[y | X] on the response scale, shape (n,)
 fitted.converged       # True if the fitter converged within tolerance
 fitted.num_iters       # number of iterations taken
 ```
@@ -44,7 +44,12 @@ fitted.num_iters       # number of iterations taken
 
 ## Choosing a family and link
 
-The family encodes the response distribution and variance function. The link function maps the linear predictor to the mean. glmax gives every family a sensible default link, but you can override it.
+The family encodes the response distribution and variance function. The link
+function maps the linear predictor to the family parameter used by the model.
+For most families, that inverse-link value is already the response mean. For
+grouped Binomial counts, the inverse link gives a probability and the response
+mean is `n_trials * probability`. glmax gives every family a sensible default
+link, but you can override it.
 
 ```python
 # Poisson regression — log link by default
@@ -68,6 +73,14 @@ See [Families & Links](api/families-and-links.md) for the full list.
 ## Making predictions
 
 Once you have a fitted model, `predict` applies it to any design matrix. It doesn't need the full [`FittedGLM`](api/fit/index.md) — just the family and the parameters — so you can also use it for prediction with hand-constructed coefficients or from warm-starting experiments.
+
+!!! note "`predict` and `fitted.mu` are response-scale means"
+    `predict(...)` returns the same kind of mean stored in `fitted.mu`:
+    $\mathrm{E}[Y \mid X]$ on the same scale as `y`. For Poisson with a log
+    link, this is $\exp(\eta)$. For grouped Binomial with
+    `Binomial(n_trials=10)`, the inverse link gives probability
+    $p = g^{-1}(\eta)$, but `predict(...)` returns expected success counts
+    `10 * p`.
 
 ```python
 # In-sample fitted means (same as fitted.mu)
@@ -172,7 +185,10 @@ handles rank-deficient designs more gracefully.
 
 ## Offsets and warm-starting
 
-An offset is a fixed term added to the linear predictor before the inverse link. The classic use case is rate modeling in Poisson regression, where the offset is the log of exposure time or population size.
+An offset is a fixed term added to the linear predictor before converting
+$\eta$ to the response-scale mean. The classic use case is rate modeling in
+Poisson regression, where the offset is the log of exposure time or population
+size.
 
 ```python
 import jax.numpy as jnp

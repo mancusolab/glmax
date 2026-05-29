@@ -136,9 +136,10 @@ class TestCdf:
     def test_binomial_cdf_matches_scipy_n_trials(self):
         f = Binomial(n_trials=10)
         y = jnp.array([2.0, 5.0, 8.0, 10.0])
-        mu = jnp.array([0.3, 0.5, 0.7, 0.9])
+        prob = jnp.array([0.3, 0.5, 0.7, 0.9])
+        mu = f.n_trials * prob
         result = f.cdf(y, mu)
-        expected = scipy.stats.binom.cdf(y, 10, mu)
+        expected = scipy.stats.binom.cdf(y, 10, prob)
         assert jnp.allclose(result, expected, atol=1e-6)
 
     def test_gamma_cdf_matches_scipy(self):
@@ -963,3 +964,44 @@ class TestBinomial:
 
         assert jnp.all(jnp.isfinite(result.params.beta))
         assert bool(result.converged)
+
+    def test_fit_mu_is_count_scale_for_grouped_binomial(self):
+        family = Binomial(n_trials=10)
+        X = jnp.ones((5, 1))
+        y = jnp.array([2.0, 4.0, 5.0, 6.0, 8.0])
+
+        result = glmax.fit(family, X, y)
+        prob = family.glink.inverse(result.eta)
+
+        assert jnp.allclose(result.mu, family.n_trials * prob)
+        assert jnp.all(result.mu >= 0.0)
+        assert jnp.all(result.mu <= family.n_trials)
+
+    def test_predict_returns_count_scale_for_grouped_binomial(self):
+        family = Binomial(n_trials=10)
+        X = jnp.ones((5, 1))
+        y = jnp.array([2.0, 4.0, 5.0, 6.0, 8.0])
+
+        result = glmax.fit(family, X, y)
+        prediction = glmax.predict(family, result.params, X)
+        prob = family.glink.inverse(X @ result.params.beta)
+
+        assert jnp.allclose(prediction, result.mu)
+        assert jnp.allclose(prediction, family.n_trials * prob)
+        assert jnp.all(prediction >= 0.0)
+        assert jnp.all(prediction <= family.n_trials)
+
+    def test_grouped_binomial_diagnostics_use_count_scale_mu(self):
+        family = Binomial(n_trials=10)
+        X = jnp.ones((5, 1))
+        y = jnp.array([2.0, 4.0, 5.0, 6.0, 8.0])
+
+        result = glmax.fit(family, X, y)
+        pearson = glmax.check(result, diagnostic=glmax.PearsonResidual())
+        deviance = glmax.check(result, diagnostic=glmax.DevianceResidual())
+        gof = glmax.check(result)
+
+        assert jnp.all(jnp.isfinite(pearson))
+        assert jnp.all(jnp.isfinite(deviance))
+        assert jnp.isfinite(gof.pearson_chi2)
+        assert jnp.isfinite(gof.deviance)

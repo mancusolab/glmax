@@ -92,7 +92,11 @@ loss, (g_y, g_X) = jax.value_and_grad(
 
 ### Differentiating `predict`
 
-`predict` is fully differentiable without any special handling — it's just a matrix multiply and a link inverse. Gradients with respect to `beta` or `X` work out of the box:
+`predict` is fully differentiable without any special handling. It computes a
+linear predictor and then asks the family for the response-scale mean. For most
+families this is just the inverse link $g^{-1}(\eta)$; for grouped Binomial it
+includes the `n_trials` conversion from probability to expected count.
+Gradients with respect to `beta` or `X` work out of the box:
 
 ```python
 from glmax import Params

@@ -11,13 +11,29 @@ fitted = glmax.fit(glmax.Binomial(glmax.ProbitLink()), X, y)  # explicit link
 ```
 
 The family determines how the linear predictor $\eta = X\beta$ maps to the
-mean response $\mu$, how the variance scales with $\mu$, and how
-[`glmax.Params`][] fields are interpreted:
+mean response $\mu = \mathrm{E}[Y \mid X]$, how the variance scales with
+$\mu$, and how [`glmax.Params`][] fields are interpreted:
 
 - `disp` is the GLM dispersion $\phi$. Gaussian and Gamma use it as EDM
   dispersion; Poisson, Binomial, and Negative Binomial canonicalize it to `1.0`.
 - `aux` carries optional family-specific state. Negative Binomial stores its
   overdispersion `alpha` in `aux` while canonical `disp` remains `1.0`.
+
+!!! note "Inverse-link scale vs response scale"
+    In ordinary one-response families, the inverse link is the response mean:
+    $\mu = g^{-1}(\eta)$. This is the Gaussian, Poisson, Gamma, Inverse
+    Gaussian, and Negative Binomial behavior.
+
+    Grouped Binomial is different. With `Binomial(n_trials=N)`, the inverse
+    link gives the success probability $p = g^{-1}(\eta)$, but the observed
+    response is a success count. The response-scale mean is therefore
+    $\mu = Np$. `fitted.mu`, `glmax.predict(...)`, diagnostics, CDFs, and
+    deviance calculations use this response-scale mean.
+
+!!! warning "Do not assume `fitted.mu == family.glink.inverse(fitted.eta)`"
+    That equality holds for most families, but it is not the general contract.
+    The general contract is `fitted.mu == family.response_mean(...)`, and
+    `predict(...)` returns that same response-scale mean.
 
 ---
 
@@ -38,6 +54,7 @@ this contract.
                 - deviance_contribs
                 - sample
                 - calc_weight
+                - response_mean
                 - init_eta
                 - update_nuisance
                 - init_nuisance
@@ -87,10 +104,12 @@ this contract.
 
 ## Link functions
 
-Links connect the mean response $\mu$ to the linear predictor $\eta$. The
-abstract link contract documents the forward link, inverse link, and their
-derivatives so the family layer and fitting kernels can work against one
-interface.
+Links connect a family parameter to the linear predictor $\eta$. For most
+families that parameter is the response mean $\mu$. For grouped Binomial it is
+the success probability $p$, and the family then converts $p$ to the
+response-scale mean $\mu = Np$. The abstract link contract documents the
+forward link, inverse link, and their derivatives so the family layer and
+fitting kernels can work against one interface.
 
 ??? abstract "`glmax.AbstractLink`"
 

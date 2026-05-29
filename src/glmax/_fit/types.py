@@ -73,7 +73,7 @@ class FitResult(eqx.Module, strict=True):
         The fitted state stores $(\hat{\beta}, \hat{\eta}, \hat{\mu})$,
         where $\hat{\beta}$ is the fitted coefficient vector,
         $\hat{\eta}$ is the fitted linear predictor, and
-        $\hat{\mu} = g^{-1}(\hat{\eta})$ is the fitted mean response.
+        $\hat{\mu}$ is the fitted mean on the response scale.
 
         **Arguments:**
 
@@ -88,9 +88,7 @@ class FitResult(eqx.Module, strict=True):
         - `num_iters`: integer scalar; number of iterations taken.
         - `objective`: final negative log-likelihood scalar.
         - `objective_delta`: change in objective on the last iteration.
-        - `score_residual`: score-style residual
-          $(y - \hat{\mu}) g'(\hat{\mu})$, shape `(n,)`, where $g$ is the link
-          function.
+        - `score_residual`: score-style residual, shape `(n,)`.
         """
         self.params = params
         self.X = X
