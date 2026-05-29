@@ -1,7 +1,5 @@
 # pattern: Imperative Shell
 
-from typing import ClassVar
-
 import numpy as np
 import pytest
 import statsmodels.api as sm
@@ -13,8 +11,6 @@ import jax.random as rdm
 import glmax
 
 from glmax.family import Binomial, Gaussian, NegativeBinomial, Poisson
-from glmax.family.dist import ExponentialDispersionFamily
-from glmax.family.links import IdentityLink
 
 
 # ---------------------------------------------------------------------------
@@ -90,107 +86,12 @@ def simulate_glm_data(
     return X, y, beta_true
 
 
-class _AuxiliaryWarmStartFamily(ExponentialDispersionFamily):
-    glink: IdentityLink = IdentityLink()
-    _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
-    _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
-    is_discrete: ClassVar[bool] = False
-
-    def negloglikelihood(self, y, eta, disp=0.0, aux=None):
-        del disp, aux
-        return jnp.sum(jnp.square(jnp.asarray(y) - jnp.asarray(eta)))
-
-    def variance(self, mu, disp=0.0, aux=None):
-        del disp, aux
-        return jnp.ones_like(jnp.asarray(mu))
-
-    def sample(self, key, eta, disp=0.0, aux=None):
-        del key, disp, aux
-        return jnp.asarray(eta)
-
-    def cdf(self, y, mu, disp=0.0, aux=None):
-        del disp, aux
-        return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
-
-    def deviance_contribs(self, y, mu, disp=0.0, aux=None):
-        del disp, aux
-        return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
-
-    def update_nuisance(self, X, y, eta, disp, step_size=1.0, aux=None):
-        del X, y, eta, step_size
-        return jnp.asarray(disp) + 2.0, jnp.asarray(aux) + 0.5
-
-    def init_nuisance(self):
-        return jnp.asarray(1.0), jnp.asarray(0.25)
-
-
-class _LegacyCalcWeightFamily(ExponentialDispersionFamily):
-    glink: IdentityLink = IdentityLink()
-    _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
-    _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
-    is_discrete: ClassVar[bool] = False
-
-    def negloglikelihood(self, y, eta, disp=0.0, aux=None):
-        del disp, aux
-        return jnp.sum(jnp.square(jnp.asarray(y) - jnp.asarray(eta)))
-
-    def variance(self, mu, disp=0.0, aux=None):
-        del aux
-        return jnp.ones_like(jnp.asarray(mu)) * (jnp.asarray(disp) + 1.0)
-
-    def sample(self, key, eta, disp=0.0, aux=None):
-        del key, disp, aux
-        return jnp.asarray(eta)
-
-    def cdf(self, y, mu, disp=0.0, aux=None):
-        del disp, aux
-        return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
-
-    def deviance_contribs(self, y, mu, disp=0.0, aux=None):
-        del disp, aux
-        return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
-
-    def calc_weight(self, eta, disp=0.0, aux=None):
-        mu = jnp.asarray(eta)
-        aux_shift = jnp.asarray(0.0 if aux is None else aux)
-        variance = jnp.ones_like(mu) * (jnp.asarray(disp) + 2.0 + aux_shift)
-        weight = jnp.ones_like(mu) * (7.0 + aux_shift)
-        return mu, variance, weight
-
-
-class _MissingAuxLogProbFamily(ExponentialDispersionFamily):
-    glink: IdentityLink = IdentityLink()
-    _links: ClassVar[list[type[IdentityLink]]] = [IdentityLink]
-    _bounds: ClassVar[tuple[float, float]] = (-jnp.inf, jnp.inf)
-    is_discrete: ClassVar[bool] = False
-
-    def negloglikelihood(self, y, eta, disp=0.0):
-        del disp
-        return jnp.sum(jnp.square(jnp.asarray(y) - jnp.asarray(eta)))
-
-    def variance(self, mu, disp=0.0, aux=None):
-        del disp, aux
-        return jnp.ones_like(jnp.asarray(mu))
-
-    def sample(self, key, eta, disp=0.0, aux=None):
-        del key, disp, aux
-        return jnp.asarray(eta)
-
-    def cdf(self, y, mu, disp=0.0, aux=None):
-        del disp, aux
-        return jax.nn.sigmoid(jnp.asarray(y) - jnp.asarray(mu))
-
-    def deviance_contribs(self, y, mu, disp=0.0, aux=None):
-        del disp, aux
-        return jnp.square(jnp.asarray(y) - jnp.asarray(mu))
-
-
 def test_poisson(getkey):
     n_samples = 200
     n_features = 5
 
     # Simulate Poisson regression data
-    X, y, beta_true = simulate_glm_data(getkey(), n_samples, n_features, family="poisson")
+    X, y, _ = simulate_glm_data(getkey(), n_samples, n_features, family="poisson")
 
     # solve using statsmodel method (ground truth)
     sm_poi = sm.GLM(np.array(y), np.array(X), family=sm.families.Poisson())
@@ -211,7 +112,7 @@ def test_normal(getkey):
     n_features = 5
 
     # Simulate Normal regression data
-    X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="normal")
+    X, y, _ = simulate_glm_data(key, n_samples, n_features, family="normal")
 
     # solve using statsmodel method (ground truth)
     sm_norm = sm.OLS(np.array(y), np.array(X))
@@ -232,7 +133,7 @@ def test_logit(getkey):
     n_features = 5
 
     # Simulate Binomial regression data
-    X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="binomial")
+    X, y, _ = simulate_glm_data(key, n_samples, n_features, family="binomial")
 
     # solve using statsmodel method (ground truth)
     sm_logit = sm.GLM(np.array(y), np.array(X), family=sm.families.Binomial())
@@ -253,7 +154,7 @@ def test_NegativeBinomial(getkey):
     n_features = 5
 
     # Simulate NegativeBinomial regression data
-    X, y, beta_true = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
+    X, y, _ = simulate_glm_data(key, n_samples, n_features, family="negative_binomial", dispersion=2.0)
 
     glm_state = glmax.fit(NegativeBinomial(), X, y)
     infer_state = glmax.infer(glm_state)

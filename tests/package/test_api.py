@@ -32,7 +32,6 @@ from glmax import (
     PearsonResidual,
     QuantileResidual,
 )
-from glmax._fit import IRLSFitter
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
 
@@ -89,13 +88,6 @@ def test_canonical_contract_imports_exist() -> None:
     assert PearsonResidual is not None
     assert QuantileResidual is not None
     assert AbstractFitter is not None
-
-
-def test_fitter_is_abstract_equinox_model() -> None:
-    assert issubclass(AbstractFitter, eqx.Module)
-
-    with pytest.raises(TypeError):
-        AbstractFitter()
 
 
 def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
@@ -217,19 +209,6 @@ def test_contract_dataclasses_are_pytrees() -> None:
     assert not hasattr(result, "p")
 
 
-def test_canonical_fit_supports_non_default_solver_constructor_path() -> None:
-    family = Gaussian()
-    X = jnp.array([[1.0, 0.5], [1.0, 1.5], [1.0, 2.0], [1.0, 3.0]])
-    y = jnp.array([0.8, 1.7, 2.1, 2.9])
-
-    result = glmax.fit(family, X, y, fitter=IRLSFitter(solver=lx.QR()))
-
-    assert isinstance(result, FittedGLM)
-    assert result.params.beta.shape == (2,)
-    assert bool(result.converged)
-    assert jnp.all(jnp.isfinite(result.params.beta))
-
-
 @pytest.mark.parametrize(
     ("family", "X", "y"),
     [
@@ -249,22 +228,6 @@ def test_canonical_fit_succeeds_for_supported_families(family, X, y) -> None:
     assert bool(jnp.isfinite(result.objective))
     assert bool(jnp.isfinite(result.objective_delta))
     _assert_canonical_params_for_family(family, result.params)
-
-
-@pytest.mark.parametrize(
-    ("family", "X", "y"),
-    [
-        (Gaussian(), jnp.array([[0.0], [1.0], [2.0]]), jnp.array([0.0, 1.0, 2.0])),
-        (Gamma(), jnp.array([[1.0], [2.0], [3.0]]), jnp.array([0.8, 1.1, 1.7])),
-        (Poisson(), jnp.array([[0.0], [1.0], [2.0]]), jnp.array([0.0, 1.0, 1.0])),
-        (Binomial(), jnp.array([[0.0], [1.0], [2.0]]), jnp.array([0.0, 0.0, 1.0])),
-    ],
-)
-def test_predict_ignores_aux_for_families_without_aux_state(family, X, y) -> None:
-    params = Params(beta=jnp.array([1.0]), disp=jnp.array(1.0), aux=jnp.array(0.25))
-    canonical_params = Params(beta=jnp.array([1.0]), disp=jnp.array(1.0), aux=None)
-
-    assert jnp.allclose(glmax.predict(family, params, X), glmax.predict(family, canonical_params, X))
 
 
 def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None:

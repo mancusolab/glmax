@@ -937,8 +937,7 @@ class TestBinomial:
         eta = jnp.zeros(3)
         assert jnp.isfinite(f.negloglikelihood(y, eta))
 
-    @pytest.mark.parametrize("n_trials", [1, 5, 10, 50])
-    def test_nll_n1_matches_bernoulli_when_n_trials_1(self, n_trials):
+    def test_nll_n1_matches_bernoulli_when_n_trials_1(self):
         """For n_trials=1, NLL must equal the Bernoulli NLL."""
         import jax.scipy.stats as jss
 
@@ -1000,8 +999,19 @@ class TestBinomial:
         pearson = glmax.check(result, diagnostic=glmax.PearsonResidual())
         deviance = glmax.check(result, diagnostic=glmax.DevianceResidual())
         gof = glmax.check(result)
+        prob = result.mu / family.n_trials
+        compl = family.n_trials - y
+        expected_variance = result.mu * (1.0 - prob)
+        expected_deviance_contribs = 2.0 * (
+            xlogy(y, y)
+            + xlogy(compl, compl)
+            - family.n_trials * jnp.log(family.n_trials)
+            - xlogy(y, prob)
+            - xlogy(compl, 1.0 - prob)
+        )
+        expected_deviance = jnp.sign(y - result.mu) * jnp.sqrt(jnp.clip(expected_deviance_contribs, min=0.0))
 
-        assert jnp.all(jnp.isfinite(pearson))
-        assert jnp.all(jnp.isfinite(deviance))
-        assert jnp.isfinite(gof.pearson_chi2)
-        assert jnp.isfinite(gof.deviance)
+        assert jnp.allclose(pearson, (y - result.mu) / jnp.sqrt(expected_variance))
+        assert jnp.allclose(deviance, expected_deviance)
+        assert jnp.allclose(gof.pearson_chi2, jnp.sum((y - result.mu) ** 2 / expected_variance))
+        assert jnp.allclose(gof.deviance, jnp.sum(expected_deviance_contribs))

@@ -615,20 +615,19 @@ def test_canonical_fit_supports_non_default_solver_path() -> None:
     assert jnp.all(jnp.isfinite(result.params.beta))
 
 
-def test_default_fitter_forwards_offset_and_transforms_init_to_eta() -> None:
+def test_default_fitter_applies_offset_to_linear_predictor() -> None:
     X = jnp.array([[1.0, 2.0], [3.0, 4.0], [0.5, -1.0]])
     y = jnp.array([1.0, 0.0, 1.0])
     offset = jnp.array([0.2, 0.1, 0.3])
     init = Params(beta=jnp.array([0.4, -0.1]), disp=jnp.array(0.7), aux=None)
 
-    result_1 = glmax.fit(Gaussian(), X, y, offset=offset, init=init)
-    result_2 = glmax.fit(Gaussian(), X, y, offset=offset, init=init)
+    with_offset = glmax.fit(Gaussian(), X, y, offset=offset, init=init)
+    without_offset = glmax.fit(Gaussian(), X, y, init=init)
 
-    assert isinstance(result_1, FittedGLM)
-    assert jnp.allclose(result_1.beta, result_2.beta)
-    assert jnp.allclose(result_1.params.disp, result_2.params.disp)
-    assert result_1.params.aux is None
-    assert result_2.params.aux is None
+    assert isinstance(with_offset, FittedGLM)
+    assert jnp.allclose(with_offset.eta, X @ with_offset.beta + offset)
+    assert not jnp.allclose(with_offset.eta, without_offset.eta)
+    assert with_offset.params.aux is None
 
 
 def test_irls_fitter_canonicalizes_supported_warm_start_params() -> None:
