@@ -19,8 +19,8 @@ $\mu$, and how [`glmax.Params`][] fields are interpreted:
 - `aux` carries optional family-specific state. Negative Binomial stores its
   overdispersion `alpha` in `aux` while canonical `disp` remains `1.0`.
 
-!!! note "Inverse-link scale vs response scale"
-    In ordinary one-response families, the inverse link is the response mean:
+!!! warning "Response means are not always inverse-link values"
+    For most families, the inverse link is the response mean:
     $\mu = g^{-1}(\eta)$. This is the Gaussian, Poisson, Gamma, Inverse
     Gaussian, and Negative Binomial behavior.
 
@@ -30,8 +30,6 @@ $\mu$, and how [`glmax.Params`][] fields are interpreted:
     $\mu = Np$. `fitted.mu`, `glmax.predict(...)`, diagnostics, CDFs, and
     deviance calculations use this response-scale mean.
 
-!!! warning "Do not assume `fitted.mu == family.glink.inverse(fitted.eta)`"
-    That equality holds for most families, but it is not the general contract.
     The general contract is `fitted.mu == family.response_mean(...)`, and
     `predict(...)` returns that same response-scale mean.
 
@@ -42,6 +40,12 @@ $\mu$, and how [`glmax.Params`][] fields are interpreted:
 `ExponentialDispersionFamily` defines the common interface that fitting,
 inference, diagnostics, and prediction rely on. Concrete families implement
 this contract.
+
+!!! warning "`negloglikelihood` returns contributions"
+    `negloglikelihood(y, eta, disp, aux)` returns per-observation negative
+    log-likelihood contributions with shape `(n,)`, not a scalar objective.
+    Fitters own the reduction: `sum(nll)` for unweighted fits or
+    `sum(w * nll)` for weighted fits.
 
 ??? abstract "`glmax.ExponentialDispersionFamily`"
 

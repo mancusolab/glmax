@@ -68,7 +68,7 @@ class _CanonicalWarmStartFamily(ExponentialDispersionFamily):
         del aux
         resid = jnp.asarray(y) - jnp.asarray(eta)
         safe_disp = jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
-        return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
+        return jnp.square(resid) / safe_disp + safe_disp
 
     def variance(self, mu, disp=1.0, aux=None):
         del aux
@@ -107,7 +107,7 @@ class _NonIdempotentCanonicalWarmStartFamily(ExponentialDispersionFamily):
         del aux
         resid = jnp.asarray(y) - jnp.asarray(eta)
         safe_disp = jnp.asarray(disp)
-        return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
+        return jnp.square(resid) / safe_disp + safe_disp
 
     def variance(self, mu, disp=1.0, aux=None):
         del aux
@@ -148,7 +148,7 @@ class _AuxSensitiveIRLSFamily(ExponentialDispersionFamily):
         del disp
         alpha = jnp.asarray(0.5) if aux is None else jnp.asarray(aux)
         resid = jnp.asarray(y) - jnp.asarray(eta)
-        return jnp.sum(jnp.square(resid)) / alpha + alpha
+        return jnp.square(resid) / alpha + alpha
 
     def variance(self, mu, disp=1.0, aux=None):
         del disp

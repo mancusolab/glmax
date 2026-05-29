@@ -67,12 +67,13 @@ class ExponentialDispersionFamily(eqx.Module):
         disp: Scalar = 0.0,
         aux: Scalar | None = None,
     ) -> Array:
-        r"""Compute negative log-likelihood.
+        r"""Compute per-observation negative log-likelihood contributions.
 
-        This returns the scalar objective
-        $-\log p(y \mid \eta, \phi, a)$, where $y$ is the response vector,
-        $\eta$ is the linear predictor, $\phi$ is the dispersion scalar,
-        and $a$ is optional auxiliary state.
+        This returns the vector of contributions
+        $-\log p(y_i \mid \eta_i, \phi, a)$, where $y$ is the response
+        vector, $\eta$ is the linear predictor, $\phi$ is the dispersion
+        scalar, and $a$ is optional auxiliary state. Callers that need a
+        scalar objective must reduce explicitly, usually with `jnp.sum(...)`.
 
         **Arguments:**
 
@@ -83,7 +84,7 @@ class ExponentialDispersionFamily(eqx.Module):
 
         **Returns:**
 
-        Scalar negative log-likelihood.
+        Negative log-likelihood contributions, shape `(n,)`.
         """
 
     @abstractmethod
@@ -288,26 +289,6 @@ class ExponentialDispersionFamily(eqx.Module):
         return jnp.array(1.0), None
 
 
-def _negloglikelihood_contribs(
-    family: ExponentialDispersionFamily,
-    y: Array,
-    eta: Array,
-    disp: Scalar = 0.0,
-    aux: Scalar | None = None,
-) -> Array:
-    """Map a scalar family likelihood over singleton observations."""
-
-    def single(y_i: Array, eta_i: Array) -> Array:
-        return family.negloglikelihood(
-            jnp.reshape(y_i, (1,)),
-            jnp.reshape(eta_i, (1,)),
-            disp,
-            aux,
-        )
-
-    return jax.vmap(single)(y, eta)
-
-
 class Gaussian(ExponentialDispersionFamily):
     r"""Gaussian (normal) exponential family with density
 
@@ -342,7 +323,7 @@ class Gaussian(ExponentialDispersionFamily):
         disp: Scalar = 1.0,
         aux: Scalar | None = None,
     ) -> Array:
-        r"""Gaussian negative log-likelihood.
+        r"""Gaussian negative log-likelihood contributions.
 
         This evaluates the Gaussian log density with mean
         $\mu = g^{-1}(\eta)$ and variance $\phi = \sigma^2$.
@@ -354,17 +335,17 @@ class Gaussian(ExponentialDispersionFamily):
         - `disp`: variance $\phi = \sigma^2$, scalar. When `disp <= 0` (for
           example the
           IRLS sentinel `0.0` before dispersion estimation is wired in),
-          falls back to `1.0` so the objective remains finite and comparable.
+          falls back to `1.0` so the contributions remain finite and comparable.
         - `aux`: ignored.
 
         **Returns:**
 
-        Scalar negative log-likelihood.
+        Negative log-likelihood contributions, shape `(n,)`.
         """
         del aux
         mu = self.glink.inverse(eta)
         safe_disp = jnp.where(disp > 0, disp, 1.0)
-        return -jnp.sum(jaxstats.norm.logpdf(y, mu, jnp.sqrt(safe_disp)))
+        return -jaxstats.norm.logpdf(y, mu, jnp.sqrt(safe_disp))
 
     def variance(self, mu: Array, disp: Scalar = 1.0, aux: Scalar | None = None) -> Array:
         r"""Gaussian variance term $\phi V(\mu) = \phi$.
@@ -585,7 +566,7 @@ class Binomial(ExponentialDispersionFamily):
         disp: Scalar = 0.0,
         aux: Scalar | None = None,
     ) -> Array:
-        r"""Binomial negative log-likelihood.
+        r"""Binomial negative log-likelihood contributions.
 
         **Arguments:**
 
@@ -596,10 +577,10 @@ class Binomial(ExponentialDispersionFamily):
 
         **Returns:**
 
-        Scalar negative log-likelihood.
+        Negative log-likelihood contributions, shape `(n,)`.
         """
         del disp, aux
-        return -jnp.sum(jaxstats.binom.logpmf(y, self.n_trials, self.glink.inverse(eta)))
+        return -jaxstats.binom.logpmf(y, self.n_trials, self.glink.inverse(eta))
 
     def variance(self, mu: Array, disp: Scalar = 0.0, aux: Scalar | None = None) -> Array:
         del disp, aux
@@ -719,7 +700,7 @@ class Poisson(ExponentialDispersionFamily):
         disp: Scalar = 0.0,
         aux: Scalar | None = None,
     ) -> Array:
-        r"""Poisson negative log-likelihood.
+        r"""Poisson negative log-likelihood contributions.
 
         This uses the Poisson likelihood with rate $\mu = g^{-1}(\eta)$.
 
@@ -732,10 +713,10 @@ class Poisson(ExponentialDispersionFamily):
 
         **Returns:**
 
-        Scalar negative log-likelihood.
+        Negative log-likelihood contributions, shape `(n,)`.
         """
         del disp, aux
-        return -jnp.sum(jaxstats.poisson.logpmf(y, self.glink.inverse(eta)))
+        return -jaxstats.poisson.logpmf(y, self.glink.inverse(eta))
 
     def variance(self, mu: Array, disp: Scalar = 0.0, aux: Scalar | None = None) -> Array:
         del disp, aux
@@ -849,7 +830,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         disp: Scalar = 1.0,
         aux: Scalar | None = None,
     ) -> Array:
-        r"""Negative-binomial log-likelihood (numerically stable via `logaddexp`).
+        r"""Negative-binomial negative log-likelihood contributions.
 
         Uses $r = 1/\alpha$ and the log-probability parameterization to avoid
         catastrophic cancellation for large counts. Here $\alpha$ is the
@@ -870,7 +851,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         **Returns:**
 
-        Scalar negative log-likelihood.
+        Negative log-likelihood contributions, shape `(n,)`.
         """
         alpha = aux
         log_r = -jnp.log(alpha)
@@ -883,7 +864,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         log1m_p = log_r - log_mu_plus_r
         term1 = gammaln(y + r) - gammaln(y + 1) - gammaln(r)
         term2 = r * log1m_p + y * log_p
-        return -jnp.sum(term1 + term2)
+        return -(term1 + term2)
 
     def variance(self, mu: Array, disp: Scalar = 1.0, aux: Scalar | None = None) -> Array:
         alpha = aux
@@ -922,7 +903,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         return rdm.poisson(key2, lam=gamma_sample).astype(jnp.float64)
 
     def alpha_score_and_hessian(self, X: Array, y: Array, eta: Array, alpha: Scalar) -> tuple[Array, Array]:
-        r"""Gradient and Hessian of the negative log-likelihood w.r.t. $\alpha$.
+        r"""Gradient and Hessian of the summed negative log-likelihood w.r.t. $\alpha$.
 
         Here $\alpha > 0$ is the Negative Binomial overdispersion parameter.
 
@@ -939,14 +920,14 @@ class NegativeBinomial(ExponentialDispersionFamily):
         """
 
         def _ll(alpha):
-            return self.negloglikelihood(y, eta, aux=alpha)
+            return jnp.sum(self.negloglikelihood(y, eta, aux=alpha))
 
         _alpha_score = jax.grad(_ll)
         _alpha_hess = jax.hessian(_ll)
         return _alpha_score(alpha), _alpha_hess(alpha)  # .reshape((1,))
 
     def log_alpha_score_and_hessian(self, X: Array, y: Array, eta: Array, log_alpha: Scalar) -> tuple[Array, Array]:
-        r"""Gradient and Hessian of the negative log-likelihood w.r.t. $\log\alpha$.
+        r"""Gradient and Hessian of the summed negative log-likelihood w.r.t. $\log\alpha$.
 
         Differentiates in log-space to ensure $\alpha > 0$ throughout Newton
         steps. Here $\log \alpha$ is the unconstrained parameter used for
@@ -966,7 +947,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         def _ll(log_alpha_):
             alpha_ = jnp.exp(log_alpha_)
-            return self.negloglikelihood(y, eta, aux=alpha_)
+            return jnp.sum(self.negloglikelihood(y, eta, aux=alpha_))
 
         _alpha_score = jax.grad(_ll)
         _alpha_hess = jax.hessian(_ll)
@@ -1112,14 +1093,14 @@ class Gamma(ExponentialDispersionFamily):
         disp: Scalar = 1.0,
         aux: Scalar | None = None,
     ) -> Array:
-        r"""Gamma negative log-likelihood.
+        r"""Gamma negative log-likelihood contributions.
 
         Uses `jax.scipy.stats.gamma.logpdf` with shape $k = 1/\phi$ and
         scale $\theta = \mu \phi$.
 
         When `disp <= 0` (e.g. the IRLS sentinel `0.0` before dispersion
-        estimation is wired in), falls back to `1.0` so the objective
-        remains finite. The Gamma shape-scale parameterization uses
+        estimation is wired in), falls back to `1.0` so the contributions
+        remain finite. The Gamma shape-scale parameterization uses
         $k = 1 / \phi$ and $\theta = \mu \phi$, where $\phi$ is the
         dispersion scalar.
 
@@ -1132,14 +1113,14 @@ class Gamma(ExponentialDispersionFamily):
 
         **Returns:**
 
-        Scalar negative log-likelihood.
+        Negative log-likelihood contributions, shape `(n,)`.
         """
         del aux
         safe_disp = jnp.where(disp > 0, disp, 1.0)
         mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
         k = 1.0 / safe_disp
         theta = mu * safe_disp
-        return -jnp.sum(jaxstats.gamma.logpdf(y, a=k, scale=theta))
+        return -jaxstats.gamma.logpdf(y, a=k, scale=theta)
 
     def variance(self, mu: Array, disp: Scalar = 1.0, aux: Scalar | None = None) -> Array:
         r"""Gamma variance term $\phi V(\mu) = \phi \mu^2$.
@@ -1282,16 +1263,16 @@ class InverseGaussian(ExponentialDispersionFamily):
         disp: Scalar = 1.0,
         aux: Scalar | None = None,
     ) -> Array:
-        r"""Inverse-Gaussian negative log-likelihood.
+        r"""Inverse-Gaussian negative log-likelihood contributions.
 
-        Full NLL including constants for proper convergence tracking:
+        Per-observation NLL contributions including constants:
 
-        $$\frac{n}{2}\log(2\pi\phi) + \frac{3}{2}\sum\log y_i
-        + \frac{1}{2\phi}\sum\frac{(y_i - \mu_i)^2}{\mu_i^2 y_i}$$
+        $$\frac{1}{2}\log(2\pi\phi) + \frac{3}{2}\log y_i
+        + \frac{(y_i - \mu_i)^2}{2\phi\mu_i^2 y_i}$$
 
         When `disp <= 0` (e.g. the IRLS sentinel `0.0` before dispersion
-        estimation is wired in), falls back to `1.0` so the objective
-        remains finite.
+        estimation is wired in), falls back to `1.0` so the contributions
+        remain finite.
 
         **Arguments:**
 
@@ -1302,16 +1283,15 @@ class InverseGaussian(ExponentialDispersionFamily):
 
         **Returns:**
 
-        Scalar negative log-likelihood.
+        Negative log-likelihood contributions, shape `(n,)`.
         """
         del aux
         safe_disp = jnp.where(disp > 0, disp, 1.0)
         mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
-        n = y.shape[0]
         return (
-            0.5 * n * jnp.log(2.0 * jnp.pi * safe_disp)
-            + 1.5 * jnp.sum(jnp.log(y))
-            + 0.5 * jnp.sum((y - mu) ** 2 / (safe_disp * mu**2 * y))
+            0.5 * jnp.log(2.0 * jnp.pi * safe_disp)
+            + 1.5 * jnp.log(y)
+            + 0.5 * (y - mu) ** 2 / (safe_disp * mu**2 * y)
         )
 
     def variance(self, mu: Array, disp: Scalar = 1.0, aux: Scalar | None = None) -> Array:

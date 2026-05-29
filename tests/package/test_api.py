@@ -248,7 +248,7 @@ def test_single_feature_fit_keeps_beta_vector_shape_for_roundtrip_init() -> None
             del aux
             resid = jnp.asarray(y) - jnp.asarray(eta)
             safe_disp = jnp.maximum(jnp.asarray(disp), jnp.asarray(1.0))
-            return jnp.sum(jnp.square(resid)) / safe_disp + safe_disp
+            return jnp.square(resid) / safe_disp + safe_disp
 
         def variance(self, mu, disp=1.0, aux=None):
             del aux

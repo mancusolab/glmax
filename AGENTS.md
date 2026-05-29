@@ -19,6 +19,7 @@
 - **Expects**:
   - `X` passed to `fit` is rank-2 with shape `(n, p)`; `y` is rank-1 with shape `(n,)`. Both must contain only finite values.
   - Optional `offset` is either scalar or sample-aligned with shape `(n,)`; other broadcastable shapes are rejected at the public `fit(...)` boundary to avoid silent model changes. Frequency weights must be sample-aligned with shape `(n,)`.
+  - `ExponentialDispersionFamily.negloglikelihood(y, eta, disp, aux)` returns per-observation negative log-likelihood contributions with shape `(n,)`; fitters and diagnostics own scalar reductions.
   - `Params.beta` is an inexact rank-1 vector of length `p`; `Params.disp` is an inexact scalar; `Params.aux` is either `None` or an inexact family-specific scalar.
   - `FitResult` is the fitter contract and carries `params`, `X`, `y`, `eta`, `mu`, `glm_wt`, `weights`, `converged`, `num_iters`, `objective`, `objective_delta`, and `score_residual`.
   - `FittedGLM` is the public fitted noun and binds `family` plus `result`, forwarding common fit artifacts for ergonomics.

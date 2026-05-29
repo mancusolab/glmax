@@ -10,7 +10,6 @@ import lineax as lx
 from jax import Array, lax
 
 from ..family import ExponentialDispersionFamily
-from ..family.dist import _negloglikelihood_contribs
 from .types import AbstractFitter, FitResult, Params
 from .weights import AbstractWeights
 
@@ -51,9 +50,9 @@ def _irls(
         solver = lx.Normal(solver)
 
     def objective_fn(y_, eta_, disp_, aux_):
+        contribs = family.negloglikelihood(y_, eta_, disp_, aux_)
         if sample_weight is None:
-            return family.negloglikelihood(y_, eta_, disp_, aux_)
-        contribs = _negloglikelihood_contribs(family, y_, eta_, disp_, aux_)
+            return jnp.sum(contribs)
         return jnp.sum(sample_weight * contribs)
 
     def body_fun(val: tuple[Array, ...]):

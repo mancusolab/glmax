@@ -12,7 +12,6 @@ from jaxtyping import ArrayLike
 
 from .._misc import inexact_asarray
 from ..family import ExponentialDispersionFamily
-from ..family.dist import _negloglikelihood_contribs
 from .irls import IRLSFitter
 from .types import (
     AbstractFitter,
@@ -69,9 +68,9 @@ def _fit_core_jvp(
     def score(X_, y_, offset_):
         def objective(b):
             eta_ = X_ @ b + offset_
+            contribs = family.negloglikelihood(y_, eta_, disp, aux)
             if weights is None:
-                return family.negloglikelihood(y_, eta_, disp, aux)
-            contribs = _negloglikelihood_contribs(family, y_, eta_, disp, aux)
+                return jnp.sum(contribs)
             return jnp.sum(weights.objective_multiplier() * contribs)
 
         return jax.grad(objective)(beta)
@@ -117,9 +116,9 @@ def _fit_core_jvp(
     # Objective tangent at converged beta.
     def objective_fn(X_, y_, offset_):
         eta_ = X_ @ beta + offset_
+        contribs = family.negloglikelihood(y_, eta_, disp, aux)
         if weights is None:
-            return family.negloglikelihood(y_, eta_, disp, aux)
-        contribs = _negloglikelihood_contribs(family, y_, eta_, disp, aux)
+            return jnp.sum(contribs)
         return jnp.sum(weights.objective_multiplier() * contribs)
 
     _, dobjective = jax.jvp(objective_fn, (X, y, offset), (dX, dy, doffset))

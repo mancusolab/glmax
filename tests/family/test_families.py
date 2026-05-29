@@ -99,7 +99,8 @@ class TestCalcWeight:
         y = jnp.array([1.0, 0.0, 1.0])
         eta = jnp.array([0.5, -0.5, 0.5])
         nll = f.negloglikelihood(y, eta, disp=disp, aux=aux)
-        assert jnp.isfinite(nll)
+        assert nll.shape == y.shape
+        assert jnp.all(jnp.isfinite(nll))
 
 
 # ---------------------------------------------------------------------------
@@ -429,7 +430,7 @@ class TestNBNegloglikelihoodStability:
         y = jnp.array([1000.0])
         eta = jnp.log(y)
         nll = nb.negloglikelihood(y, eta, disp=1.0, aux=0.1)
-        assert jnp.isfinite(nll), f"NB nll must be finite for large y, got {nll}"
+        assert jnp.all(jnp.isfinite(nll)), f"NB nll must be finite for large y, got {nll}"
 
     def test_nb_nll_split_disp_aux_signature(self):
         """negloglikelihood(y, eta, disp, aux) uses aux as alpha."""
@@ -437,7 +438,8 @@ class TestNBNegloglikelihoodStability:
         y = jnp.array([2.0, 3.0, 1.0])
         eta = jnp.array([0.7, 1.1, 0.3])
         nll = nb.negloglikelihood(y, eta, disp=1.0, aux=0.5)
-        assert jnp.isfinite(nll)
+        assert nll.shape == y.shape
+        assert jnp.all(jnp.isfinite(nll))
 
     def test_nb_nll_ignores_disp_and_uses_aux(self):
         nb = NegativeBinomial()
@@ -459,7 +461,7 @@ class TestNBLargeEtaOverflow:
         y = jnp.array([1000.0])
         eta = jnp.array([800.0])
         nll = nb.negloglikelihood(y, eta, disp=1.0, aux=0.1)
-        assert jnp.isfinite(nll), f"NB NLL for eta=800 must be finite, got {nll}"
+        assert jnp.all(jnp.isfinite(nll)), f"NB NLL for eta=800 must be finite, got {nll}"
 
     def test_nb_nll_finite_for_eta_710(self):
         """NB NLL must be finite at the float64 exp-overflow boundary ~710."""
@@ -467,7 +469,7 @@ class TestNBLargeEtaOverflow:
         y = jnp.array([500.0])
         eta = jnp.array([710.0])
         nll = nb.negloglikelihood(y, eta, disp=1.0, aux=0.5)
-        assert jnp.isfinite(nll), f"NB NLL for eta=710 must be finite, got {nll}"
+        assert jnp.all(jnp.isfinite(nll)), f"NB NLL for eta=710 must be finite, got {nll}"
 
 
 class TestNBNegloglikelihoodGradient:
@@ -480,11 +482,12 @@ class TestNBNegloglikelihoodGradient:
         eta = jnp.array([1.0])
         aux = jnp.asarray(0.1)
 
-        grad_aux = jax.grad(lambda a: nb.negloglikelihood(y, eta, disp=1.0, aux=a))(aux)
+        grad_aux = jax.grad(lambda a: jnp.sum(nb.negloglikelihood(y, eta, disp=1.0, aux=a)))(aux)
 
         eps = 1e-5
         fd_grad = (
-            nb.negloglikelihood(y, eta, disp=1.0, aux=aux + eps) - nb.negloglikelihood(y, eta, disp=1.0, aux=aux - eps)
+            jnp.sum(nb.negloglikelihood(y, eta, disp=1.0, aux=aux + eps))
+            - jnp.sum(nb.negloglikelihood(y, eta, disp=1.0, aux=aux - eps))
         ) / (2 * eps)
 
         assert jnp.allclose(grad_aux, fd_grad, rtol=1e-3), (
@@ -499,12 +502,12 @@ class TestNBNegloglikelihoodGradient:
         eta0 = jnp.array([1.0])
 
         # grad w.r.t. eta (scalar sum, argnums=1)
-        grad_eta = jax.grad(lambda e: nb.negloglikelihood(y, e, disp=1.0, aux=aux))(eta0)
+        grad_eta = jax.grad(lambda e: jnp.sum(nb.negloglikelihood(y, e, disp=1.0, aux=aux)))(eta0)
 
         eps = 1e-5
         fd_grad = (
-            nb.negloglikelihood(y, eta0 + eps, disp=1.0, aux=aux)
-            - nb.negloglikelihood(y, eta0 - eps, disp=1.0, aux=aux)
+            jnp.sum(nb.negloglikelihood(y, eta0 + eps, disp=1.0, aux=aux))
+            - jnp.sum(nb.negloglikelihood(y, eta0 - eps, disp=1.0, aux=aux))
         ) / (2 * eps)
 
         assert jnp.allclose(grad_eta, fd_grad, rtol=1e-3), (
@@ -551,7 +554,8 @@ class TestTransformSafety:
         y = jnp.array([3.0, 5.0, 1.0])
         eta = jnp.array([1.0, 1.5, 0.5])
         nll = jax.jit(lambda y_, eta_, aux_: nb.negloglikelihood(y_, eta_, disp=1.0, aux=aux_))(y, eta, 0.1)
-        assert jnp.isfinite(nll), f"JIT NB NLL must be finite, got {nll}"
+        assert nll.shape == y.shape
+        assert jnp.all(jnp.isfinite(nll)), f"JIT NB NLL must be finite, got {nll}"
 
     def test_ad_nb_negloglikelihood_wrt_aux(self):
         """jax.grad of NB NLL w.r.t. aux must not raise."""
@@ -559,7 +563,7 @@ class TestTransformSafety:
         y = jnp.array([3.0, 5.0, 1.0])
         eta = jnp.array([1.0, 1.5, 0.5])
         aux = jnp.asarray(0.1)
-        grad_fn = jax.grad(lambda aux_: nb.negloglikelihood(y, eta, disp=1.0, aux=aux_))
+        grad_fn = jax.grad(lambda aux_: jnp.sum(nb.negloglikelihood(y, eta, disp=1.0, aux=aux_)))
         g = grad_fn(aux)
         assert jnp.isfinite(g), f"AD through NB NLL w.r.t. aux must be finite, got {g}"
 
@@ -571,7 +575,7 @@ class TestTransformSafety:
         result = jax.vmap(lambda e: f.negloglikelihood(jnp.array([1.0]), jnp.array([e]), disp=disp, aux=aux))(
             eta_scalar_batch
         )
-        assert result.shape == (8,), f"{FamilyCls.__name__}: expected shape (8,), got {result.shape}"
+        assert result.shape == (8, 1), f"{FamilyCls.__name__}: expected shape (8, 1), got {result.shape}"
         assert jnp.all(jnp.isfinite(result)), (
             f"{FamilyCls.__name__}: vmap negloglikelihood produced non-finite values: {result}"
         )
@@ -716,7 +720,9 @@ class TestGamma:
         g = Gamma()
         y = jnp.ones(20) * 2.0
         eta = jnp.ones(20) * 0.5  # InverseLink: mu = 1/eta = 2
-        assert jnp.isfinite(g.negloglikelihood(y, eta, disp=1.0, aux=0.3))
+        nll = g.negloglikelihood(y, eta, disp=1.0, aux=0.3)
+        assert nll.shape == y.shape
+        assert jnp.all(jnp.isfinite(nll))
 
     def test_sample_shape_and_positivity(self):
         g = Gamma()
@@ -804,7 +810,9 @@ class TestInverseGaussian:
         # PowerLink(-2): inverse is eta^{-1/2}, eta=1 -> mu=1
         y = jnp.ones(10) * 1.5
         eta = jnp.ones(10)  # mu = eta^{-1/2} = 1
-        assert jnp.isfinite(ig.negloglikelihood(y, eta, disp=0.5))
+        nll = ig.negloglikelihood(y, eta, disp=0.5)
+        assert nll.shape == y.shape
+        assert jnp.all(jnp.isfinite(nll))
 
     def test_negloglikelihood_matches_formula(self):
         ig = InverseGaussian()
@@ -813,11 +821,10 @@ class TestInverseGaussian:
         # PowerLink(-2): eta = mu^{-2}
         eta = mu ** (-2.0)
         phi = 0.4
-        n = 3
         expected = (
-            0.5 * n * jnp.log(2.0 * jnp.pi * phi)
-            + 1.5 * jnp.sum(jnp.log(y))
-            + 0.5 * jnp.sum((y - mu) ** 2 / (phi * mu**2 * y))
+            0.5 * jnp.log(2.0 * jnp.pi * phi)
+            + 1.5 * jnp.log(y)
+            + 0.5 * (y - mu) ** 2 / (phi * mu**2 * y)
         )
         result = ig.negloglikelihood(y, eta, disp=phi)
         assert jnp.allclose(result, expected, atol=1e-10)
@@ -935,7 +942,9 @@ class TestBinomial:
         f = Binomial(n_trials=n_trials)
         y = jnp.array([0.0, n_trials // 2, n_trials], dtype=jnp.float64)
         eta = jnp.zeros(3)
-        assert jnp.isfinite(f.negloglikelihood(y, eta))
+        nll = f.negloglikelihood(y, eta)
+        assert nll.shape == y.shape
+        assert jnp.all(jnp.isfinite(nll))
 
     def test_nll_n1_matches_bernoulli_when_n_trials_1(self):
         """For n_trials=1, NLL must equal the Bernoulli NLL."""
@@ -945,7 +954,7 @@ class TestBinomial:
         y = jnp.array([0.0, 1.0, 0.0, 1.0])
         eta = jnp.array([0.5, -0.3, 1.2, -0.8])
         mu = f.glink.inverse(eta)
-        expected = -jnp.sum(jss.bernoulli.logpmf(y, mu))
+        expected = -jss.bernoulli.logpmf(y, mu)
         assert jnp.allclose(f.negloglikelihood(y, eta), expected, atol=1e-10)
 
     @pytest.mark.parametrize("n_trials", [5, 10, 25])

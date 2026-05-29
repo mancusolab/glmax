@@ -11,7 +11,7 @@ from jax.scipy import linalg as jscla
 from jaxtyping import Array
 
 from ._fit import FittedGLM
-from .family.dist import _negloglikelihood_contribs, Gaussian
+from .family.dist import Gaussian
 
 
 T = TypeVar("T")
@@ -241,10 +241,10 @@ class GoodnessOfFit(AbstractDiagnostic[GofStats], strict=True):
         p_f = jnp.asarray(p, dtype=jnp.float64)
         df_resid = effective_n - p_f
         ll_disp = jnp.clip(deviance / effective_n, min=jnp.finfo(float).tiny) if isinstance(family, Gaussian) else disp
+        ll_contribs = family.negloglikelihood(y, eta, ll_disp, aux=aux)
         if fitted.weights is None:
-            ll = -family.negloglikelihood(y, eta, ll_disp, aux=aux)
+            ll = -jnp.sum(ll_contribs)
         else:
-            ll_contribs = _negloglikelihood_contribs(family, y, eta, ll_disp, aux=aux)
             ll = -jnp.sum(weight * ll_contribs)
         aic = -2.0 * ll + 2.0 * p_f
         bic = -2.0 * ll + p_f * jnp.log(effective_n)
