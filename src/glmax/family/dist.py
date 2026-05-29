@@ -22,7 +22,6 @@ from .links import (
     LogitLink,
     LogLink,
     LogLogLink,
-    NBLink,
     PowerLink,
     ProbitLink,
     SqrtLink,
@@ -287,6 +286,26 @@ class ExponentialDispersionFamily(eqx.Module):
         ``(jnp.array(1.0), None)`` for families without auxiliary state.
         """
         return jnp.array(1.0), None
+
+
+def _negloglikelihood_contribs(
+    family: ExponentialDispersionFamily,
+    y: Array,
+    eta: Array,
+    disp: Scalar = 0.0,
+    aux: Scalar | None = None,
+) -> Array:
+    """Map a scalar family likelihood over singleton observations."""
+
+    def single(y_i: Array, eta_i: Array) -> Array:
+        return family.negloglikelihood(
+            jnp.reshape(y_i, (1,)),
+            jnp.reshape(eta_i, (1,)),
+            disp,
+            aux,
+        )
+
+    return jax.vmap(single)(y, eta)
 
 
 class Gaussian(ExponentialDispersionFamily):
@@ -811,7 +830,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
     glink: AbstractLink = LogLink()
     is_discrete: ClassVar[bool] = True
-    _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink, NBLink, PowerLink]  # CLogLog
+    _links: ClassVar[list[type[AbstractLink]]] = [IdentityLink, LogLink, PowerLink]
     _bounds: ClassVar[tuple[float, float]] = (jnp.finfo(float).tiny, jnp.inf)
 
     def __init__(self, glink: AbstractLink = LogLink()) -> None:

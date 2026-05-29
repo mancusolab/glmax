@@ -9,6 +9,7 @@ import lineax as lx
 from jax import Array, numpy as jnp
 
 from ..family import ExponentialDispersionFamily
+from .weights import AbstractWeights
 
 
 class Params(NamedTuple):
@@ -53,6 +54,7 @@ class FitResult(eqx.Module, strict=True):
     objective: Array
     objective_delta: Array
     score_residual: Array
+    weights: AbstractWeights | None
 
     def __init__(
         self,
@@ -67,6 +69,7 @@ class FitResult(eqx.Module, strict=True):
         objective: Array,
         objective_delta: Array,
         score_residual: Array,
+        weights: AbstractWeights | None = None,
     ) -> None:
         r"""Construct a validated [`glmax.FitResult`][].
 
@@ -89,6 +92,7 @@ class FitResult(eqx.Module, strict=True):
         - `objective`: final negative log-likelihood scalar.
         - `objective_delta`: change in objective on the last iteration.
         - `score_residual`: score-style residual, shape `(n,)`.
+        - `weights`: optional semantic sample weights used during fitting.
         """
         self.params = params
         self.X = X
@@ -101,6 +105,7 @@ class FitResult(eqx.Module, strict=True):
         self.objective = objective
         self.objective_delta = objective_delta
         self.score_residual = score_residual
+        self.weights = weights
 
     @property
     def beta(self) -> Array:
@@ -157,6 +162,12 @@ class FitResult(eqx.Module, strict=True):
         if glm_wt.ndim != 1 or glm_wt.shape[0] != expected_n:
             raise ValueError("FitResult.glm_wt must be a rank-1 vector aligned with FitResult.eta.")
 
+        if self.weights is not None:
+            if not isinstance(self.weights, AbstractWeights):
+                raise TypeError("FitResult.weights must be an AbstractWeights instance or None.")
+            if self.weights.value.shape[0] != expected_n:
+                raise ValueError("FitResult.weights must align with FitResult.X over samples.")
+
         score_residual = jnp.asarray(self.score_residual)
         if score_residual.ndim != 1 or score_residual.shape[0] != expected_n:
             raise ValueError("FitResult.score_residual must be a rank-1 vector aligned with FitResult.eta.")
@@ -189,7 +200,7 @@ class FittedGLM(eqx.Module, strict=True):
     and [`glmax.check`][].
 
     Common artifacts are available as forwarding properties: `params`, `beta`,
-    `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`,
+    `eta`, `mu`, `glm_wt`, `weights`, `converged`, `num_iters`, `objective`,
     `objective_delta`, `score_residual`.
     """
 
@@ -234,6 +245,10 @@ class FittedGLM(eqx.Module, strict=True):
     @property
     def glm_wt(self) -> Array:
         return self.result.glm_wt
+
+    @property
+    def weights(self) -> AbstractWeights | None:
+        return self.result.weights
 
     @property
     def converged(self) -> Array:
@@ -281,7 +296,7 @@ class AbstractFitter(eqx.Module, strict=True):
         X: Array,
         y: Array,
         offset: Array,
-        weights: Array | None,
+        weights: AbstractWeights | None,
         init: Params | None = None,
     ) -> FitResult:
         r"""Fit `family` against data and return a `FitResult`.
@@ -295,7 +310,7 @@ class AbstractFitter(eqx.Module, strict=True):
         - `X`: covariate matrix, shape `(n, p)`.
         - `y`: response vector, shape `(n,)`.
         - `offset`: offset vector, shape `(n,)`.
-        - `weights`: optional per-sample weight vector, shape `(n,)`.
+        - `weights`: optional semantic sample weights.
         - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
           the family default.
 

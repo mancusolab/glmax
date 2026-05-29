@@ -17,7 +17,6 @@ from .links import (
     LogitLink as LogitLink,
     LogLink as LogLink,
     LogLogLink as LogLogLink,
-    NBLink as NBLink,
     PowerLink as PowerLink,
     ProbitLink as ProbitLink,
     SqrtLink as SqrtLink,

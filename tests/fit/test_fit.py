@@ -35,7 +35,6 @@ from glmax.family.links import (
     LogitLink,
     LogLink,
     LogLogLink,
-    NBLink,
     PowerLink,
     ProbitLink,
     SqrtLink,
@@ -343,12 +342,6 @@ _VALID_LINK_COMBINATION_CASES = [
         id="negative-binomial-log-link",
     ),
     pytest.param(
-        NegativeBinomial(NBLink(alpha=0.1)),
-        _INTERCEPT_ONLY_X,
-        jnp.array([1.0, 2.0, 4.0, 3.0, 2.0]),
-        id="negative-binomial-nb-link",
-    ),
-    pytest.param(
         NegativeBinomial(PowerLink(0.5)),
         _INTERCEPT_ONLY_X,
         jnp.array([1.0, 2.0, 4.0, 3.0, 2.0]),
@@ -439,9 +432,7 @@ def _statsmodels_result_for_fitted(fitted: FittedGLM):
         else:
             sm_family = sm.families.Gamma(link=sm_links.Identity())
     elif isinstance(family, NegativeBinomial):
-        if isinstance(glink, NBLink):
-            sm_link = sm_links.NegativeBinomial(alpha=float(np.asarray(glink.alpha)))
-        elif isinstance(glink, LogLink):
+        if isinstance(glink, LogLink):
             sm_link = sm_links.Log()
         elif isinstance(glink, IdentityLink):
             sm_link = sm_links.Identity()
@@ -740,12 +731,63 @@ def test_single_feature_beta_shape_roundtrip() -> None:
     assert second.params.aux is None
 
 
-def test_unsupported_weights_rejected() -> None:
+def test_raw_array_weights_rejected() -> None:
+    X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
+    y = jnp.array([0.2, 0.9, 2.2, 2.8])
+
+    with pytest.raises(TypeError, match=r"glmax\.weights"):
+        glmax.fit(Gaussian(), X, y, weights=jnp.ones(4))
+
+
+def test_weights_constructor_supports_frequency_only() -> None:
+    w = glmax.weights(freq=jnp.array([1.0, 2.0, 0.0]))
+
+    assert jnp.allclose(w.value, jnp.array([1.0, 2.0, 0.0]))
+    assert jnp.allclose(w.fit_multiplier(), jnp.array([1.0, 2.0, 0.0]))
+    assert jnp.allclose(w.objective_multiplier(), jnp.array([1.0, 2.0, 0.0]))
+    assert jnp.allclose(w.effective_n(3), jnp.array(3.0))
+
+    with pytest.raises(NotImplementedError, match="variance weights"):
+        glmax.weights(var=jnp.ones(3))
+    with pytest.raises(NotImplementedError, match="variance weights"):
+        glmax.weights(freq=jnp.ones(3), var=jnp.ones(3))
+
+
+def test_frequency_weights_reject_invalid_values() -> None:
+    with pytest.raises(ValueError, match="rank-1"):
+        glmax.weights(freq=jnp.ones((2, 2)))
+    with pytest.raises(ValueError, match="finite"):
+        glmax.weights(freq=jnp.array([1.0, jnp.nan]))
+    with pytest.raises(ValueError, match="nonnegative"):
+        glmax.weights(freq=jnp.array([1.0, -1.0]))
+    with pytest.raises(ValueError, match="at least one positive"):
+        glmax.weights(freq=jnp.zeros(3))
+
+
+def test_fit_rejects_frequency_weight_shape_mismatch() -> None:
     X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
     y = jnp.array([0.2, 0.9, 2.2, 2.8])
 
     with pytest.raises(ValueError, match="weights"):
-        glmax.fit(Gaussian(), X, y, weights=jnp.ones(4))
+        glmax.fit(Gaussian(), X, y, weights=glmax.weights(freq=jnp.ones(3)))
+
+
+def test_frequency_weighted_poisson_matches_repeated_rows() -> None:
+    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+    y = jnp.array([0.0, 1.0, 2.0, 4.0])
+    freq = jnp.array([2.0, 1.0, 0.0, 3.0])
+    repeated_idx = jnp.array([0, 0, 1, 3, 3, 3])
+
+    fitter = IRLSFitter(tol=1e-8)
+    weighted = glmax.fit(Poisson(), X, y, weights=glmax.weights(freq=freq), fitter=fitter)
+    repeated = glmax.fit(Poisson(), X[repeated_idx], y[repeated_idx], fitter=fitter)
+
+    assert weighted.weights is not None
+    assert jnp.allclose(weighted.weights.value, freq)
+    assert jnp.allclose(weighted.params.beta, repeated.params.beta, rtol=1e-5, atol=1e-6)
+    assert jnp.allclose(weighted.objective, repeated.objective, rtol=1e-5, atol=1e-6)
+    _, _, base_wt = weighted.family.calc_weight(weighted.eta, weighted.params.disp, weighted.params.aux)
+    assert jnp.allclose(weighted.glm_wt, freq * base_wt)
 
 
 def test_fit_rejects_offset_that_would_broadcast_across_samples() -> None:

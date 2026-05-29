@@ -235,7 +235,7 @@ def test_newton_fitter_raises_on_weights():
     family, X, y = _gaussian_data()
     offset = jnp.zeros(y.shape[0])
     weights = jnp.ones(y.shape[0])
-    with pytest.raises(ValueError, match="not supported"):
+    with pytest.raises(TypeError, match=r"glmax\.weights"):
         NewtonFitter().fit(family, X, y, offset, weights=weights)
 
 

@@ -14,7 +14,7 @@ def _grad_per_sample(func, x):
     r"""Get a per-sample gradient via `eqx.filter_vmap(eqx.filter_grad(...))`.
 
     Uses eqx.filter_vmap and eqx.filter_grad instead of raw jax.vmap/jax.grad
-    so that eqx.Module dynamic leaves (e.g. PowerLink.power, NBLink.alpha) are
+    so that eqx.Module dynamic leaves (e.g. PowerLink.power) are
     partitioned correctly and never treated as a vmap batch axis under nested
     vmap transforms.
     """

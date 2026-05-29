@@ -6,7 +6,6 @@ Covers:
   gradient checks, and nested-vmap safety for InverseLink and PowerLink.
 - [High 2] Nested-vmap safety of _grad_per_sample (eqx.filter_vmap/filter_grad).
 - [High 3] InverseLink.inverse(eta=0) returns finite value.
-- [Medium 1] NBLink.__call__ precision at large mu.
 - [Low 1] PowerLink(0.0) raises ValueError.
 """
 
@@ -22,7 +21,6 @@ from glmax.family.links import (
     CLogLogLink,
     InverseLink,
     LogLogLink,
-    NBLink,
     PowerLink,
     ProbitLink,
     SqrtLink,
@@ -204,29 +202,6 @@ def test_inverse_link_inverse_at_zero_is_finite():
 
 
 # ---------------------------------------------------------------------------
-# [Medium 1] NBLink precision at large mu
-# ---------------------------------------------------------------------------
-
-
-def test_nb_link_call_finite_at_large_mu():
-    """NBLink(1.0)(mu) is finite across a wide dynamic range."""
-    link = NBLink(1.0)
-    mu = jnp.array([1e-10, 1.0, 1e10, 1e15])
-    result = link(mu)
-    assert jnp.all(jnp.isfinite(result)), f"Non-finite values: {result}"
-
-
-def test_nb_link_call_matches_stable_formula():
-    """NBLink(1.0)(mu) matches log(mu) - log1p(mu) for alpha=1 at moderate values."""
-    link = NBLink(1.0)
-    mu = jnp.array([0.1, 1.0, 10.0, 100.0])
-    mu_alpha = mu * 1.0  # alpha=1
-    stable_ref = jnp.log(mu_alpha) - jnp.log1p(mu_alpha)
-    result = link(mu)
-    np.testing.assert_allclose(result, stable_ref, rtol=1e-6)
-
-
-# ---------------------------------------------------------------------------
 # [Low 1] PowerLink(0.0) raises ValueError
 # ---------------------------------------------------------------------------
 
@@ -237,27 +212,6 @@ def test_power_link_zero_power_raises():
         PowerLink(0.0)
 
 
-# ---------------------------------------------------------------------------
-# [Low 2] NBLink.inverse domain boundary: eta=0 returns -inf (documented)
-# ---------------------------------------------------------------------------
-
-
-def test_nb_link_inverse_at_zero_is_neg_inf():
-    """NBLink.inverse(0.0) returns -inf.
-
-    The docstring for NBLink.inverse states the domain is entries < 0.
-    At eta=0, expm1(-0) = 0, making 1/(alpha*0) = -inf. This test documents
-    that boundary behavior explicitly so any future silent-clip guard will
-    surface as a deliberate, reviewed change.
-    """
-    link = NBLink(1.0)
-    result = link.inverse(jnp.array([0.0]))
-    # Domain constraint: eta=0 is outside the valid domain (eta < 0).
-    # The expected mathematical result is -inf; confirm it rather than masking it.
-    assert jnp.all(result == -jnp.inf), f"Expected -inf at eta=0, got {result}"
-
-
-# ---------------------------------------------------------------------------
 # ProbitLink
 # ---------------------------------------------------------------------------
 

@@ -10,7 +10,9 @@ import lineax as lx
 from jax import Array, lax
 
 from ..family import ExponentialDispersionFamily
+from ..family.dist import _negloglikelihood_contribs
 from .types import AbstractFitter, FitResult, Params
+from .weights import AbstractWeights
 
 
 __all__ = ["IRLSFitter"]
@@ -29,6 +31,7 @@ class _IRLSState(NamedTuple):
 def _irls(
     X: Array,
     y: Array,
+    sample_weight: Array | None,
     family: ExponentialDispersionFamily,
     solver: lx.AbstractLinearSolver,
     eta: Array,
@@ -47,11 +50,19 @@ def _irls(
     if not isinstance(solver, lx.QR | lx.SVD):
         solver = lx.Normal(solver)
 
+    def objective_fn(y_, eta_, disp_, aux_):
+        if sample_weight is None:
+            return family.negloglikelihood(y_, eta_, disp_, aux_)
+        contribs = _negloglikelihood_contribs(family, y_, eta_, disp_, aux_)
+        return jnp.sum(sample_weight * contribs)
+
     def body_fun(val: tuple[Array, ...]):
         likelihood_o, diff, num_iter, _beta_o, eta_o, disp_o, aux_o = val
 
         # compute means, weights, and gradients
         mu_k, g_deriv_k, weight = family.calc_weight(eta_o, disp_o, aux_o)
+        if sample_weight is not None:
+            weight = sample_weight * weight
         r = eta_o + g_deriv_k * (y - mu_k) * step_size - offset_eta
 
         # prepare for lineax and solve
@@ -72,7 +83,7 @@ def _irls(
         disp_n, aux_n = family.update_nuisance(X, y, eta_n, disp_o, step_size, aux=aux_o)
 
         # re-evaluate
-        likelihood_n = family.negloglikelihood(y, eta_n, disp_n, aux_n)
+        likelihood_n = objective_fn(y, eta_n, disp_n, aux_n)
         diff = likelihood_n - likelihood_o
 
         return likelihood_n, diff, num_iter + 1, beta, eta_n, disp_n, aux_n
@@ -84,7 +95,7 @@ def _irls(
 
     init_beta = jnp.zeros((p,))
     init_eta = eta + offset_eta
-    init_likelihood = family.negloglikelihood(y, init_eta, disp_init, aux_init)
+    init_likelihood = objective_fn(y, init_eta, disp_init, aux_init)
     init_tuple = (init_likelihood, jnp.inf, 0, init_beta, init_eta, disp_init, aux_init)
 
     objective, objective_delta, num_iters, beta, eta, disp, aux = lax.while_loop(cond_fun, body_fun, init_tuple)
@@ -153,7 +164,7 @@ class IRLSFitter(AbstractFitter, strict=True):
         X: Array,
         y: Array,
         offset: Array,
-        weights: Array | None,
+        weights: AbstractWeights | None,
         init: Params | None = None,
     ) -> FitResult:
         r"""Run IRLS to convergence and return a `FitResult`.
@@ -168,7 +179,7 @@ class IRLSFitter(AbstractFitter, strict=True):
         - `X`: covariate matrix, shape `(n, p)`.
         - `y`: response vector, shape `(n,)`.
         - `offset`: offset vector, shape `(n,)`.
-        - `weights`: optional per-sample weight vector, shape `(n,)`.
+        - `weights`: optional semantic sample weights.
         - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
           the family default.
         - `step_size`: IRLS update step-size multiplier (default `1.0`).
@@ -178,8 +189,9 @@ class IRLSFitter(AbstractFitter, strict=True):
         [`glmax.FitResult`][] with converged parameters, fit artifacts, and
         convergence metadata.
         """
-        if weights is not None:
-            raise ValueError("Per-sample weights are not supported yet.")
+        if weights is not None and not isinstance(weights, AbstractWeights):
+            raise TypeError("IRLSFitter.fit(...) expects `weights` to be produced by glmax.weights(...).")
+        sample_weight = None if weights is None else weights.fit_multiplier()
 
         default_disp, default_aux = family.init_nuisance()
         if init is not None:
@@ -194,6 +206,7 @@ class IRLSFitter(AbstractFitter, strict=True):
         irls_state = _irls(
             X,
             y,
+            sample_weight,
             family,
             self.solver,
             init_eta,
@@ -208,6 +221,8 @@ class IRLSFitter(AbstractFitter, strict=True):
 
         eta = X @ beta + offset
         mu_fit, link_deriv, weight = family.calc_weight(eta, disp, aux)
+        if sample_weight is not None:
+            weight = sample_weight * weight
         score_residual = (y - mu_fit) * link_deriv
         mu = family.response_mean(eta, disp, aux)
         beta = jnp.ravel(beta)
@@ -219,6 +234,7 @@ class IRLSFitter(AbstractFitter, strict=True):
             eta=eta,
             mu=mu,
             glm_wt=weight,
+            weights=weights,
             converged=converged,
             num_iters=n_iter,
             objective=objective,

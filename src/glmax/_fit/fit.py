@@ -12,12 +12,14 @@ from jaxtyping import ArrayLike
 
 from .._misc import inexact_asarray
 from ..family import ExponentialDispersionFamily
+from ..family.dist import _negloglikelihood_contribs
 from .irls import IRLSFitter
 from .types import (
     AbstractFitter,
     FittedGLM,
     Params,
 )
+from .weights import AbstractWeights
 
 
 __all__ = ["fit", "predict"]
@@ -30,10 +32,11 @@ def _fit_core(
     offset: Array,
     *,
     family: ExponentialDispersionFamily,
+    weights: AbstractWeights | None,
     init: Params | None,
     fitter: AbstractFitter,
 ) -> FittedGLM:
-    result = fitter.fit(family, X, y, offset, None, init)
+    result = fitter.fit(family, X, y, offset, weights, init)
     return FittedGLM(family=family, result=result)
 
 
@@ -43,13 +46,14 @@ def _fit_core_jvp(
     tangents: tuple[Array | None, Array | None, Array | None],
     *,
     family: ExponentialDispersionFamily,
+    weights: AbstractWeights | None,
     init: Params | None,
     fitter: AbstractFitter,
 ) -> tuple[FittedGLM, FittedGLM]:
     X, y, offset = primals
     dX, dy, doffset = tangents
 
-    fitted = _fit_core(X, y, offset, family=family, init=init, fitter=fitter)
+    fitted = _fit_core(X, y, offset, family=family, weights=weights, init=init, fitter=fitter)
     beta = fitted.result.params.beta
     disp = fitted.result.params.disp
     aux = fitted.result.params.aux
@@ -63,7 +67,14 @@ def _fit_core_jvp(
     # Differentiating implicitly: H dbeta = -∂_data(∇_β nll) · d(data)
     # where H = X^T W X is the Fisher information evaluated at the converged fit.
     def score(X_, y_, offset_):
-        return jax.grad(lambda b: family.negloglikelihood(y_, X_ @ b + offset_, disp, aux))(beta)
+        def objective(b):
+            eta_ = X_ @ b + offset_
+            if weights is None:
+                return family.negloglikelihood(y_, eta_, disp, aux)
+            contribs = _negloglikelihood_contribs(family, y_, eta_, disp, aux)
+            return jnp.sum(weights.objective_multiplier() * contribs)
+
+        return jax.grad(objective)(beta)
 
     _, rhs = jax.jvp(score, (X, y, offset), (dX, dy, doffset))
     # H = X^T W X is SPD under a well-specified GLM. Use lineax with throw=True so
@@ -90,6 +101,8 @@ def _fit_core_jvp(
     # GLM working weight tangent.
     def glm_wt_fn(eta_):
         _, _, w = family.calc_weight(eta_, disp, aux)
+        if weights is not None:
+            w = weights.fit_multiplier() * w
         return w
 
     _, dglm_wt = jax.jvp(glm_wt_fn, (fitted.eta,), (deta,))
@@ -103,7 +116,11 @@ def _fit_core_jvp(
 
     # Objective tangent at converged beta.
     def objective_fn(X_, y_, offset_):
-        return family.negloglikelihood(y_, X_ @ beta + offset_, disp, aux)
+        eta_ = X_ @ beta + offset_
+        if weights is None:
+            return family.negloglikelihood(y_, eta_, disp, aux)
+        contribs = _negloglikelihood_contribs(family, y_, eta_, disp, aux)
+        return jnp.sum(weights.objective_multiplier() * contribs)
 
     _, dobjective = jax.jvp(objective_fn, (X, y, offset), (dX, dy, doffset))
 
@@ -142,6 +159,12 @@ def _fit_core_jvp(
             dscore_res,
         ),
     )
+    if fitted.result.weights is not None:
+        tangent = eqx.tree_at(
+            lambda f: f.result.weights.value,
+            tangent,
+            jnp.zeros_like(fitted.result.weights.value),
+        )
     if aux is not None:
         tangent = eqx.tree_at(lambda f: f.result.params.aux, tangent, daux)
 
@@ -178,7 +201,7 @@ def fit(
     - `X`: covariate matrix, shape `(n, p)`.
     - `y`: response vector, shape `(n,)`.
     - `offset`: optional offset vector added to the linear predictor.
-    - `weights`: optional per-sample weights (not yet supported).
+    - `weights`: optional semantic sample weights from [`glmax.weights`][].
     - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses the
       family default.
     - `fitter`: [`glmax.AbstractFitter`][] strategy. Defaults to
@@ -192,7 +215,7 @@ def fit(
     **Raises:**
 
     - `TypeError`: if `family`, `init`, or `fitter` have wrong types.
-    - `ValueError`: if `weights` is set (not yet supported).
+    - `ValueError`: if array shapes or values are invalid.
     """
 
     if not isinstance(family, ExponentialDispersionFamily):
@@ -201,6 +224,8 @@ def fit(
         raise TypeError("fit(...) expects `init` to be a Params instance or None.")
     if not isinstance(fitter, AbstractFitter):
         raise TypeError("fit(...) expects `fitter` to be an AbstractFitter instance.")
+    if weights is not None and not isinstance(weights, AbstractWeights):
+        raise TypeError("fit(...) expects `weights` to be produced by glmax.weights(...).")
 
     # ensure things are in inexact numerical space.
     X = cast(Array, inexact_asarray(X))
@@ -210,9 +235,6 @@ def fit(
     else:
         offset = cast(Array, inexact_asarray(offset))
 
-    if weights is not None:
-        raise ValueError("Per-sample weights are not supported yet.")
-
     if X.ndim != 2:
         raise ValueError("X must be rank-2 with shape (n, p).")
     if y.ndim != 1:
@@ -221,6 +243,8 @@ def fit(
         raise ValueError("X and y must share the sample dimension n.")
     if offset.ndim > 0 and offset.shape != y.shape:
         raise ValueError("offset must be scalar or rank-1 with shape (n,).")
+    if weights is not None and weights.value.shape != y.shape:
+        raise ValueError("weights must be rank-1 with shape (n,).")
 
     # these are helpful enough, but lets not go overboard checking for bad input...
     # we need to re-cast due to error_if having type sig Any
@@ -235,7 +259,7 @@ def fit(
         _, default_aux = family.init_nuisance()
         init = Params(beta=init.beta, disp=init.disp, aux=None if default_aux is None else init.aux)
 
-    return _fit_core(X, y, offset, family=family, init=init, fitter=fitter)
+    return _fit_core(X, y, offset, family=family, weights=weights, init=init, fitter=fitter)
 
 
 @eqx.filter_jit

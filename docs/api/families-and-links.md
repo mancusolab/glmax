@@ -157,13 +157,6 @@ fitting kernels can work against one interface.
 
 ---
 
-::: glmax.NBLink
-    options:
-        members:
-            - __init__
-
----
-
 ::: glmax.ProbitLink
     options:
         members:

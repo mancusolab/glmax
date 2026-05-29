@@ -31,6 +31,7 @@ from glmax import (
     Params,
     PearsonResidual,
     QuantileResidual,
+    weights,
 )
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
@@ -88,6 +89,7 @@ def test_canonical_contract_imports_exist() -> None:
     assert PearsonResidual is not None
     assert QuantileResidual is not None
     assert AbstractFitter is not None
+    assert weights is not None
 
 
 def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:

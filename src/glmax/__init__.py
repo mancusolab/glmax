@@ -13,6 +13,7 @@ from ._fit import (
     NewtonFitter as NewtonFitter,
     Params as Params,
     predict as predict,
+    weights as weights,
 )
 from ._infer import (
     AbstractStdErrEstimator as AbstractStdErrEstimator,
@@ -49,7 +50,6 @@ from .family import (
     LogitLink as LogitLink,
     LogLink as LogLink,
     LogLogLink as LogLogLink,
-    NBLink as NBLink,
     NegativeBinomial as NegativeBinomial,
     Poisson as Poisson,
     PowerLink as PowerLink,
