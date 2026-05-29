@@ -218,11 +218,17 @@ def fit(
         raise ValueError("y must be rank-1 with shape (n,).")
     if X.shape[0] != y.shape[0]:
         raise ValueError("X and y must share the sample dimension n.")
+    if offset.ndim > 0 and offset.shape != y.shape:
+        raise ValueError("offset must be scalar or rank-1 with shape (n,).")
 
     # these are helpful enough, but lets not go overboard checking for bad input...
     # we need to re-cast due to error_if having type sig Any
     X = cast(Array, eqx.error_if(X, ~jnp.all(jnp.isfinite(X)), "X must contain only finite values."))
     y = cast(Array, eqx.error_if(y, ~jnp.all(jnp.isfinite(y)), "y must contain only finite values."))
+    offset = cast(
+        Array,
+        eqx.error_if(offset, ~jnp.all(jnp.isfinite(offset)), "offset must contain only finite values."),
+    )
 
     if init is not None:
         _, default_aux = family.init_nuisance()

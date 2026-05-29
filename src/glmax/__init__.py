@@ -1,6 +1,6 @@
 # pattern: Imperative Shell
 
-from importlib.metadata import version  # pragma: no cover
+from importlib.metadata import PackageNotFoundError, version  # pragma: no cover
 
 import jax
 
@@ -60,4 +60,14 @@ from .family import (
 
 jax.config.update("jax_enable_x64", True)  # noqa: E402
 
-__version__ = version("glmax")
+
+def _package_version() -> str:
+    try:
+        return version("glmax")
+    except PackageNotFoundError:
+        from ._version import __version__
+
+        return __version__
+
+
+__version__ = _package_version()

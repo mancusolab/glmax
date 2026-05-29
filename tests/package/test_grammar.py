@@ -63,7 +63,7 @@ def _assert_canonical_params_for_family(family, params: Params) -> None:
         return
 
     assert params.aux is None
-    if isinstance(family, (Gaussian, Gamma)):
+    if isinstance(family, Gaussian | Gamma):
         assert float(jnp.asarray(params.disp)) > 0.0
     else:
         assert jnp.allclose(params.disp, jnp.array(1.0))

@@ -749,6 +749,23 @@ def test_unsupported_weights_rejected() -> None:
         glmax.fit(Gaussian(), X, y, weights=jnp.ones(4))
 
 
+def test_fit_rejects_offset_that_would_broadcast_across_samples() -> None:
+    X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
+    y = jnp.array([0.2, 0.9, 2.2, 2.8])
+
+    with pytest.raises(ValueError, match="offset"):
+        glmax.fit(Gaussian(), X, y, offset=jnp.ones((1,)))
+
+
+def test_fit_accepts_scalar_offset() -> None:
+    X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
+    y = jnp.array([0.2, 0.9, 2.2, 2.8])
+
+    result = glmax.fit(Gaussian(), X, y, offset=jnp.array(0.1))
+
+    assert result.eta.shape == y.shape
+
+
 def test_fit_is_filter_vmappable_over_y() -> None:
     key1, key2 = jr.split(jr.key(0))
     n, batch = 30, 4

@@ -44,7 +44,7 @@ def _irls(
 
     # Xop = lx.MatrixLinearOperator(X)
     step_size = cast(Array, jnp.asarray(step_size))
-    if not isinstance(solver, (lx.QR, lx.SVD)):
+    if not isinstance(solver, lx.QR | lx.SVD):
         solver = lx.Normal(solver)
 
     def body_fun(val: tuple[Array, ...]):

@@ -5,7 +5,7 @@
 
 ## Contracts
 - **Exposes**:
-  - Package-root API from `src/glmax/__init__.py`: `Params`, `AbstractFitter`, `FitResult`, `FittedGLM`, `IRLSFitter`, `NewtonFitter`, `InferenceResult`, `AbstractDiagnostic`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `fit`, `predict`, `infer`, `check`, `AbstractLink`, `IdentityLink`, `LogLink`, `LogitLink`, `InverseLink`, `PowerLink`, `ProbitLink`, `CLogLogLink`, `LogLogLink`, `SqrtLink`, `CauchitLink`, `NBLink`, `Gaussian`, `Gamma`, `Poisson`, `Binomial`, `NegativeBinomial`, `ExponentialDispersionFamily`.
+  - Package-root API from `src/glmax/__init__.py`: `Params`, `AbstractFitter`, `FitResult`, `FittedGLM`, `IRLSFitter`, `NewtonFitter`, `InferenceResult`, `AbstractDiagnostic`, `PearsonResidual`, `DevianceResidual`, `QuantileResidual`, `GoodnessOfFit`, `GofStats`, `Influence`, `InfluenceStats`, `AbstractTest`, `WaldTest`, `ScoreTest`, `AbstractStdErrEstimator`, `FisherInfoError`, `HuberError`, `fit`, `predict`, `infer`, `check`, `AbstractLink`, `IdentityLink`, `LogLink`, `LogitLink`, `InverseLink`, `PowerLink`, `ProbitLink`, `CLogLogLink`, `LogLogLink`, `SqrtLink`, `CauchitLink`, `NBLink`, `Gaussian`, `Gamma`, `Poisson`, `Binomial`, `NegativeBinomial`, `InverseGaussian`, `ExponentialDispersionFamily`.
   - Family and link implementations from `src/glmax/family/__init__.py`.
   - User-facing grammar docs in `README.md`, `docs/index.md`, `docs/api/families-and-links.md`, `docs/api/fit/index.md`, `docs/api/fit/strategies.md`, `docs/api/predict.md`, `docs/api/infer/index.md`, `docs/api/infer/strategies.md`, and `docs/api/check.md`.
 - **Guarantees**:
@@ -18,7 +18,7 @@
   - Per-sample `weights` are accepted by the `fit` signature but raise `ValueError` until implemented.
 - **Expects**:
   - `X` passed to `fit` is rank-2 with shape `(n, p)`; `y` is rank-1 with shape `(n,)`. Both must contain only finite values.
-  - Optional `offset` and `weights` broadcast over the sample axis when present.
+  - Optional `offset` is either scalar or sample-aligned with shape `(n,)`; other broadcastable shapes are rejected at the public `fit(...)` boundary to avoid silent model changes. `weights` will follow the same scalar-or-sample-aligned rule when implemented.
   - `Params.beta` is an inexact rank-1 vector of length `p`; `Params.disp` is an inexact scalar; `Params.aux` is either `None` or an inexact family-specific scalar.
   - `FitResult` is the fitter contract and carries `params`, `X`, `y`, `eta`, `mu`, `glm_wt`, `converged`, `num_iters`, `objective`, `objective_delta`, and `score_residual`.
   - `FittedGLM` is the public fitted noun and binds `family` plus `result`, forwarding common fit artifacts for ergonomics.
@@ -28,7 +28,7 @@
   - Negative Binomial stores its auxiliary `alpha` in `Params.aux`; canonical `Params.disp` remains the GLM dispersion slot and is `1.0` for Negative Binomial fits.
 
 ## Dependencies
-- **Uses**: `jax`, `jaxlib`, `equinox`, `jaxtyping`, `lineax`, `optimistix`.
+- **Uses**: `jax`, `jaxlib`, `equinox`, `jaxtyping`, `lineax`.
 - **Boundary**:
   - `src/glmax/_fit/types.py` owns `Params`, `FitResult`, `FittedGLM`, and `AbstractFitter` (abstract base with `solver`, `step_size`, `tol`, `max_iter` as `AbstractVar` fields).
   - `src/glmax/_fit/fit.py` owns the public `fit` and `predict` verbs (`@eqx.filter_jit`-wrapped). Input validation (shape, finiteness) lives here.

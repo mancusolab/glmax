@@ -1,5 +1,6 @@
 # pattern: Imperative Shell
 
+import importlib.metadata
 import inspect
 
 from pathlib import Path
@@ -68,7 +69,7 @@ def _assert_canonical_params_for_family(family, params: Params) -> None:
         return
 
     assert params.aux is None
-    if isinstance(family, (Gaussian, Gamma)):
+    if isinstance(family, Gaussian | Gamma):
         assert float(jnp.asarray(params.disp)) > 0.0
     else:
         assert jnp.allclose(params.disp, jnp.array(1.0))
@@ -104,6 +105,16 @@ def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
 
 def test_pytest_imports_glmax_from_worktree_src() -> None:
     assert Path(glmax.__file__).resolve() == EXPECTED_INIT.resolve()
+
+
+def test_package_version_falls_back_to_generated_version_module(monkeypatch) -> None:
+    def missing_metadata(_: str) -> str:
+        raise importlib.metadata.PackageNotFoundError("glmax")
+
+    monkeypatch.setattr(glmax, "version", missing_metadata)
+
+    generated_version = importlib.import_module("glmax._version").__version__
+    assert glmax._package_version() == generated_version
 
 
 def test_fit_signature_matches_canonical_surface() -> None:

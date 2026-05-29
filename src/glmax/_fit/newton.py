@@ -45,7 +45,7 @@ def _newton(
     """Fisher scoring Newton to solve a GLM."""
     _, p = X.shape
     # Xop = lx.MatrixLinearOperator(X)
-    if not isinstance(solver, (lx.QR, lx.SVD)):
+    if not isinstance(solver, lx.QR | lx.SVD):
         solver = lx.Normal(solver)
     step_size = cast(Array, jnp.asarray(step_size))
 

@@ -42,7 +42,7 @@ def test_predict_generates_stable_shape_for_supported_families(family, y) -> Non
     if isinstance(family, Binomial):
         assert jnp.all(pred1 >= 0.0)
         assert jnp.all(pred1 <= 1.0)
-    elif isinstance(family, (Poisson, NegativeBinomial)):
+    elif isinstance(family, Poisson | NegativeBinomial):
         assert jnp.all(pred1 > 0.0)
 
 
