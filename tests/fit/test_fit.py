@@ -193,7 +193,7 @@ def test_fit_passes_grammar_nouns_to_custom_fitter() -> None:
             X: Array,
             y: Array,
             offset: Array,
-            weights: Array | None,
+            *,
             init: Params | None = None,
         ) -> FitResult:
             seen["family"] = family
@@ -231,10 +231,10 @@ def test_fit_rejects_non_fitresult_from_custom_fitter() -> None:
             X: Array,
             y: Array,
             offset: Array,
-            weights: Array | None,
+            *,
             init: Params | None = None,
         ) -> object:
-            del family, X, y, offset, weights, init
+            del family, X, y, offset, init
             return object()
 
     family = Gaussian()
@@ -555,10 +555,10 @@ def test_fit_ignores_aux_for_families_without_aux_state_before_custom_fitter(fam
             X: Array,
             y: Array,
             offset: Array,
-            weights: Array | None,
+            *,
             init: Params | None = None,
         ) -> FitResult:
-            del family, X, y, offset, weights
+            del family, X, y, offset
             seen["called"] = True
             assert init is not None
             return FitResult(
@@ -629,8 +629,8 @@ def test_irls_fitter_canonicalizes_supported_warm_start_params() -> None:
     raw_init = Params(beta=jnp.array([0.1]), disp=jnp.array(0.7), aux=jnp.array(0.1))
     canonical_init = Params(beta=jnp.array([0.1]), disp=jnp.array(1.0), aux=jnp.array(0.25))
 
-    raw_result = IRLSFitter().fit(family, X, y, offset, None, init=raw_init)
-    canonical_result = IRLSFitter().fit(family, X, y, offset, None, init=canonical_init)
+    raw_result = IRLSFitter().fit(family, X, y, offset, init=raw_init)
+    canonical_result = IRLSFitter().fit(family, X, y, offset, init=canonical_init)
 
     assert jnp.allclose(raw_result.params.disp, canonical_result.params.disp)
     assert jnp.allclose(raw_result.params.aux, canonical_result.params.aux)
@@ -643,7 +643,7 @@ def test_public_fit_matches_single_canonicalization_reference_for_non_idempotent
     y = jnp.array([1.2, 1.9, 3.1, 4.0])
     seed = Params(beta=jnp.array([0.1]), disp=jnp.array(0.7), aux=jnp.array(2.0))
 
-    expected = IRLSFitter().fit(family, X, y, jnp.zeros_like(y), None, init=seed)
+    expected = IRLSFitter().fit(family, X, y, jnp.zeros_like(y), init=seed)
     first = glmax.fit(family, X, y, init=seed)
     inferred = glmax.infer(first)
     second = glmax.fit(family, X, y, init=first.params)
@@ -678,8 +678,8 @@ def test_irls_fitter_threads_aux_through_kernel_state() -> None:
     small_aux = Params(beta=jnp.array([0.0]), disp=jnp.array(1.0), aux=jnp.array(0.5))
     large_aux = Params(beta=jnp.array([0.0]), disp=jnp.array(1.0), aux=jnp.array(2.0))
 
-    small_fit = IRLSFitter().fit(family, X, y, offset, None, init=small_aux)
-    large_fit = IRLSFitter().fit(family, X, y, offset, None, init=large_aux)
+    small_fit = IRLSFitter().fit(family, X, y, offset, init=small_aux)
+    large_fit = IRLSFitter().fit(family, X, y, offset, init=large_aux)
 
     assert jnp.allclose(small_fit.params.aux, small_aux.aux)
     assert jnp.allclose(large_fit.params.aux, large_aux.aux)
@@ -729,65 +729,6 @@ def test_single_feature_beta_shape_roundtrip() -> None:
     assert second.beta.shape == (1,)
     assert jnp.allclose(second.params.disp, first.params.disp)
     assert second.params.aux is None
-
-
-def test_raw_array_weights_rejected() -> None:
-    X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
-    y = jnp.array([0.2, 0.9, 2.2, 2.8])
-
-    with pytest.raises(TypeError, match=r"glmax\.weights"):
-        glmax.fit(Gaussian(), X, y, weights=jnp.ones(4))
-
-
-def test_weights_constructor_supports_frequency_only() -> None:
-    w = glmax.weights(freq=jnp.array([1.0, 2.0, 0.0]))
-
-    assert jnp.allclose(w.value, jnp.array([1.0, 2.0, 0.0]))
-    assert jnp.allclose(w.fit_multiplier(), jnp.array([1.0, 2.0, 0.0]))
-    assert jnp.allclose(w.objective_multiplier(), jnp.array([1.0, 2.0, 0.0]))
-    assert jnp.allclose(w.effective_n(3), jnp.array(3.0))
-
-    with pytest.raises(NotImplementedError, match="variance weights"):
-        glmax.weights(var=jnp.ones(3))
-    with pytest.raises(NotImplementedError, match="variance weights"):
-        glmax.weights(freq=jnp.ones(3), var=jnp.ones(3))
-
-
-def test_frequency_weights_reject_invalid_values() -> None:
-    with pytest.raises(ValueError, match="rank-1"):
-        glmax.weights(freq=jnp.ones((2, 2)))
-    with pytest.raises(ValueError, match="finite"):
-        glmax.weights(freq=jnp.array([1.0, jnp.nan]))
-    with pytest.raises(ValueError, match="nonnegative"):
-        glmax.weights(freq=jnp.array([1.0, -1.0]))
-    with pytest.raises(ValueError, match="at least one positive"):
-        glmax.weights(freq=jnp.zeros(3))
-
-
-def test_fit_rejects_frequency_weight_shape_mismatch() -> None:
-    X = jnp.array([[0.0], [1.0], [2.0], [3.0]])
-    y = jnp.array([0.2, 0.9, 2.2, 2.8])
-
-    with pytest.raises(ValueError, match="weights"):
-        glmax.fit(Gaussian(), X, y, weights=glmax.weights(freq=jnp.ones(3)))
-
-
-def test_frequency_weighted_poisson_matches_repeated_rows() -> None:
-    X = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
-    y = jnp.array([0.0, 1.0, 2.0, 4.0])
-    freq = jnp.array([2.0, 1.0, 0.0, 3.0])
-    repeated_idx = jnp.array([0, 0, 1, 3, 3, 3])
-
-    fitter = IRLSFitter(tol=1e-8)
-    weighted = glmax.fit(Poisson(), X, y, weights=glmax.weights(freq=freq), fitter=fitter)
-    repeated = glmax.fit(Poisson(), X[repeated_idx], y[repeated_idx], fitter=fitter)
-
-    assert weighted.weights is not None
-    assert jnp.allclose(weighted.weights.value, freq)
-    assert jnp.allclose(weighted.params.beta, repeated.params.beta, rtol=1e-5, atol=1e-6)
-    assert jnp.allclose(weighted.objective, repeated.objective, rtol=1e-5, atol=1e-6)
-    _, _, base_wt = weighted.family.calc_weight(weighted.eta, weighted.params.disp, weighted.params.aux)
-    assert jnp.allclose(weighted.glm_wt, freq * base_wt)
 
 
 def test_fit_rejects_offset_that_would_broadcast_across_samples() -> None:

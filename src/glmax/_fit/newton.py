@@ -11,7 +11,6 @@ from jax import Array, lax
 
 from ..family import ExponentialDispersionFamily
 from .types import AbstractFitter, FitResult, Params
-from .weights import AbstractWeights
 
 
 __all__ = ["NewtonFitter"]
@@ -30,7 +29,6 @@ class _NewtonState(NamedTuple):
 def _newton(
     X: Array,
     y: Array,
-    sample_weight: Array | None,
     family: ExponentialDispersionFamily,
     solver: lx.AbstractLinearSolver,
     eta: Array,
@@ -53,17 +51,13 @@ def _newton(
 
     def objective_fn(y_, eta_, disp_, aux_):
         contribs = family.negloglikelihood(y_, eta_, disp_, aux_)
-        if sample_weight is None:
-            return jnp.sum(contribs)
-        return jnp.sum(sample_weight * contribs)
+        return jnp.sum(contribs)
 
     def body_fun(val: tuple[Array, ...]):
         likelihood_o, diff, num_iter, beta_o, eta_o, disp_o, aux_o = val
 
         # Compute GLM weights and residuals.
         mu_k, g_deriv_k, weight_k = family.calc_weight(eta_o, disp_o, aux_o)
-        if sample_weight is not None:
-            weight_k = sample_weight * weight_k
 
         # Newton direction: solve (X^T W X) delta = X^T [w * g'(mu) * (mu - y)].
         # Expressed as weighted normal equations: (W^{1/2} X)^T (W^{1/2} X) delta
@@ -197,7 +191,7 @@ class NewtonFitter(AbstractFitter, strict=True):
         X: Array,
         y: Array,
         offset: Array,
-        weights: AbstractWeights | None,
+        *,
         init: Params | None = None,
     ) -> FitResult:
         r"""Run Fisher scoring Newton to convergence and return a `FitResult`.
@@ -212,7 +206,6 @@ class NewtonFitter(AbstractFitter, strict=True):
         - `X`: covariate matrix, shape `(n, p)`.
         - `y`: response vector, shape `(n,)`.
         - `offset`: offset vector, shape `(n,)`.
-        - `weights`: optional semantic sample weights.
         - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses
           the family default.
 
@@ -221,10 +214,6 @@ class NewtonFitter(AbstractFitter, strict=True):
         [`glmax.FitResult`][] with converged parameters, fit artifacts, and
         convergence metadata.
         """
-        if weights is not None and not isinstance(weights, AbstractWeights):
-            raise TypeError("NewtonFitter.fit(...) expects `weights` to be produced by glmax.weights(...).")
-        sample_weight = None if weights is None else weights.fit_multiplier()
-
         default_disp, default_aux = family.init_nuisance()
         if init is not None:
             disp_init = jnp.asarray(init.disp)
@@ -238,7 +227,6 @@ class NewtonFitter(AbstractFitter, strict=True):
         newton_state = _newton(
             X,
             y,
-            sample_weight,
             family,
             self.solver,
             init_eta,
@@ -255,8 +243,6 @@ class NewtonFitter(AbstractFitter, strict=True):
 
         eta = X @ beta + offset
         mu_fit, link_deriv, weight = family.calc_weight(eta, disp, aux)
-        if sample_weight is not None:
-            weight = sample_weight * weight
         score_residual = (y - mu_fit) * link_deriv
         mu = family.response_mean(eta, disp, aux)
         beta = jnp.ravel(beta)
@@ -268,7 +254,6 @@ class NewtonFitter(AbstractFitter, strict=True):
             eta=eta,
             mu=mu,
             glm_wt=weight,
-            weights=weights,
             converged=converged,
             num_iters=n_iter,
             objective=objective,

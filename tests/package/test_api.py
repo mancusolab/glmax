@@ -31,7 +31,6 @@ from glmax import (
     Params,
     PearsonResidual,
     QuantileResidual,
-    weights,
 )
 from glmax.family import Binomial, Gamma, Gaussian, NegativeBinomial, Poisson
 from glmax.family.dist import ExponentialDispersionFamily
@@ -89,7 +88,6 @@ def test_canonical_contract_imports_exist() -> None:
     assert PearsonResidual is not None
     assert QuantileResidual is not None
     assert AbstractFitter is not None
-    assert weights is not None
 
 
 def test_top_level_fit_resolves_to_canonical_entrypoint() -> None:
@@ -113,12 +111,11 @@ def test_package_version_falls_back_to_generated_version_module(monkeypatch) -> 
 
 def test_fit_signature_matches_canonical_surface() -> None:
     sig = inspect.signature(glmax.fit)
-    assert list(sig.parameters) == ["family", "X", "y", "offset", "weights", "init", "fitter"]
+    assert list(sig.parameters) == ["family", "X", "y", "offset", "init", "fitter"]
     assert sig.parameters["family"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["X"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["y"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert sig.parameters["offset"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert sig.parameters["weights"].kind is inspect.Parameter.KEYWORD_ONLY
     assert sig.parameters["init"].default is None
     assert sig.parameters["fitter"].kind is inspect.Parameter.KEYWORD_ONLY
 
@@ -156,7 +153,7 @@ def test_fit_returns_fittedglm_using_injected_fitter() -> None:
             X: Array,
             y: Array,
             offset: Array,
-            weights: Array | None,
+            *,
             init: Params | None = None,
         ) -> FitResult:
             seen["family"] = family

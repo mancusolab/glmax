@@ -170,9 +170,7 @@ A few things statsmodels provides that glmax doesn't yet support:
 
 - **`.summary()` formatted tables** — inference results are structured arrays, not formatted text. Use `result.params.beta`, `result.se`, etc. directly.
 - **Dispersion inference** — standard errors on the dispersion parameter for Gaussian and Gamma are on the roadmap.
-- **Variance weights** — frequency weights are available as
-  `weights=glmax.weights(freq=w)`. Variance weights and combined weights are
-  not implemented yet.
+- **Weights** — observation weights are not part of the core grammar yet.
 
 ---
 

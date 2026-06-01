@@ -228,26 +228,17 @@ class GoodnessOfFit(AbstractDiagnostic[GofStats], strict=True):
 
         deviance_contribs = family.deviance_contribs(y, mu, disp, aux=aux)
         pearson_contribs = (y - mu) ** 2 / family.variance(mu, disp, aux=aux)
-        if fitted.weights is None:
-            effective_n = jnp.asarray(n, dtype=jnp.float64)
-            deviance = jnp.sum(deviance_contribs)
-            pearson_chi2 = jnp.sum(pearson_contribs)
-        else:
-            weight = fitted.weights.objective_multiplier()
-            effective_n = fitted.weights.effective_n(n)
-            deviance = jnp.sum(weight * deviance_contribs)
-            pearson_chi2 = jnp.sum(weight * pearson_contribs)
+        n_f = jnp.asarray(n, dtype=jnp.float64)
+        deviance = jnp.sum(deviance_contribs)
+        pearson_chi2 = jnp.sum(pearson_contribs)
 
         p_f = jnp.asarray(p, dtype=jnp.float64)
-        df_resid = effective_n - p_f
-        ll_disp = jnp.clip(deviance / effective_n, min=jnp.finfo(float).tiny) if isinstance(family, Gaussian) else disp
+        df_resid = n_f - p_f
+        ll_disp = jnp.clip(deviance / n_f, min=jnp.finfo(float).tiny) if isinstance(family, Gaussian) else disp
         ll_contribs = family.negloglikelihood(y, eta, ll_disp, aux=aux)
-        if fitted.weights is None:
-            ll = -jnp.sum(ll_contribs)
-        else:
-            ll = -jnp.sum(weight * ll_contribs)
+        ll = -jnp.sum(ll_contribs)
         aic = -2.0 * ll + 2.0 * p_f
-        bic = -2.0 * ll + p_f * jnp.log(effective_n)
+        bic = -2.0 * ll + p_f * jnp.log(n_f)
 
         return GofStats(
             deviance=deviance,
@@ -277,9 +268,9 @@ class InfluenceStats(eqx.Module, strict=True):
 class Influence(AbstractDiagnostic[InfluenceStats], strict=True):
     r"""Leverage and Cook's distance via Cholesky-based hat-matrix computation.
 
-    Recomputes $\operatorname{chol}(X^\top W X)$ from the fitted weights,
-    where $X$ is the design matrix and $W$ is the diagonal matrix of working
-    weights. It does not rely on the Cholesky factor from IRLS because that
+    Recomputes $\operatorname{chol}(X^\top W X)$ from the fitted GLM working
+    weights, where $X$ is the design matrix and $W$ is diagonal. It does not
+    rely on the Cholesky factor from IRLS because that
     factor is not persisted in [`glmax.FitResult`][].
     """
 

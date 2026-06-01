@@ -14,7 +14,6 @@ from .types import (
     FittedGLM as FittedGLM,
     Params as Params,
 )
-from .weights import weights as weights
 
 
 __all__ = [
@@ -26,5 +25,4 @@ __all__ = [
     "NewtonFitter",
     "fit",
     "predict",
-    "weights",
 ]

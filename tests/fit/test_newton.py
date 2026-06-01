@@ -100,7 +100,7 @@ def test_newton_fitter_returns_fit_result(family_data):
     family, X, y = family_data()
     fitter = NewtonFitter()
     offset = jnp.zeros(y.shape[0])
-    result = fitter.fit(family, X, y, offset, weights=None)
+    result = fitter.fit(family, X, y, offset)
     assert isinstance(result, FitResult)
 
 
@@ -109,7 +109,7 @@ def test_newton_fitter_converges(family_data):
     family, X, y = family_data()
     fitter = NewtonFitter()
     offset = jnp.zeros(y.shape[0])
-    result = fitter.fit(family, X, y, offset, weights=None)
+    result = fitter.fit(family, X, y, offset)
     assert bool(result.converged), f"Newton did not converge: objective_delta={result.objective_delta}"
 
 
@@ -119,7 +119,7 @@ def test_newton_fitter_output_shapes(family_data):
     n, p = X.shape
     fitter = NewtonFitter()
     offset = jnp.zeros(n)
-    result = fitter.fit(family, X, y, offset, weights=None)
+    result = fitter.fit(family, X, y, offset)
     assert result.params.beta.shape == (p,)
     assert result.eta.shape == (n,)
     assert result.mu.shape == (n,)
@@ -136,8 +136,8 @@ def test_newton_fitter_output_shapes(family_data):
 def test_newton_matches_irls(family_data):
     family, X, y = family_data()
     offset = jnp.zeros(y.shape[0])
-    irls_result = glmax.IRLSFitter().fit(family, X, y, offset, weights=None)
-    newton_result = NewtonFitter().fit(family, X, y, offset, weights=None)
+    irls_result = glmax.IRLSFitter().fit(family, X, y, offset)
+    newton_result = NewtonFitter().fit(family, X, y, offset)
     assert_allclose(
         np.asarray(newton_result.params.beta),
         np.asarray(irls_result.params.beta),
@@ -212,9 +212,9 @@ def test_newton_warm_start_converges_in_fewer_iterations():
     offset = jnp.zeros(y.shape[0])
     fitter = NewtonFitter()
 
-    cold_result = fitter.fit(family, X, y, offset, weights=None)
+    cold_result = fitter.fit(family, X, y, offset)
     warm_init = cold_result.params
-    warm_result = fitter.fit(family, X, y, offset, weights=None, init=warm_init)
+    warm_result = fitter.fit(family, X, y, offset, init=warm_init)
 
     # Warm start should reach the same beta
     assert_allclose(
@@ -224,19 +224,6 @@ def test_newton_warm_start_converges_in_fewer_iterations():
     )
     # And should take equal or fewer iterations
     assert int(warm_result.num_iters) <= int(cold_result.num_iters)
-
-
-# ---------------------------------------------------------------------------
-# Weights
-# ---------------------------------------------------------------------------
-
-
-def test_newton_fitter_raises_on_weights():
-    family, X, y = _gaussian_data()
-    offset = jnp.zeros(y.shape[0])
-    weights = jnp.ones(y.shape[0])
-    with pytest.raises(TypeError, match=r"glmax\.weights"):
-        NewtonFitter().fit(family, X, y, offset, weights=weights)
 
 
 # ---------------------------------------------------------------------------
