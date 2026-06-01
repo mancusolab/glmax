@@ -97,6 +97,9 @@ Pass `offset` if your model has an exposure or other additive term in the linear
 mu_new = glmax.predict(fitted.family, fitted.params, X_new, offset=log_exposure_new)
 ```
 
+For log-link count models, this prediction is an expected count for the supplied
+exposure. Divide by exposure if you want a rate.
+
 ---
 
 ## Inference on coefficients
@@ -196,6 +199,22 @@ import jax.numpy as jnp
 # log(exposure) added to the linear predictor: log(μ) = Xβ + offset
 fitted = glmax.fit(glmax.Poisson(), X, y, offset=jnp.log(exposure))
 ```
+
+This gives
+
+$$
+\mu = \exp(X\beta + \log(\mathrm{exposure}))
+    = \mathrm{exposure} \cdot \exp(X\beta).
+$$
+
+`predict(...)` returns $\mu$, the expected count for the supplied exposure. To
+report rates, divide by `exposure`.
+
+!!! warning "Exposure is not a weight"
+    Exposure is part of the mean model. It changes the expected count by adding
+    `log(exposure)` to the linear predictor. Observation weights would change how
+    rows contribute to fitting; they are intentionally not part of the core
+    grammar.
 
 Warm-starting lets you seed the solver with parameters from a previous fit. This is useful when refitting the same model on updated data, or when you want to continue from a partially converged solution.
 

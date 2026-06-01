@@ -183,7 +183,9 @@ def fit(
     - `family`: [`glmax.ExponentialDispersionFamily`][] instance.
     - `X`: covariate matrix, shape `(n, p)`.
     - `y`: response vector, shape `(n,)`.
-    - `offset`: optional offset vector added to the linear predictor.
+    - `offset`: optional offset vector added to the linear predictor. For
+      log-link count models with exposure, pass `log(exposure)`, not raw
+      exposure.
     - `init`: optional [`glmax.Params`][] for warm-starting; `None` uses the
       family default.
     - `fitter`: [`glmax.AbstractFitter`][] strategy. Defaults to
@@ -262,7 +264,9 @@ def predict(
     - `params`: fitted [`glmax.Params`][] (for example `fitted.params` from
       [`glmax.fit`][]).
     - `X`: covariate matrix, shape `(n, p)`.
-    - `offset`: optional offset vector added to the linear predictor.
+    - `offset`: optional offset vector added to the linear predictor. Use the
+      same convention as `fit(...)`; for log-link count exposure, pass
+      `log(exposure)`.
 
     **Returns:**
 

@@ -1,7 +1,11 @@
 # pattern: Imperative Shell
 
 
+import numpy as np
 import pytest
+import statsmodels.api as sm
+
+from numpy.testing import assert_allclose
 
 import jax.numpy as jnp
 
@@ -81,3 +85,44 @@ def test_predict_boundary_rejects_invalid_nouns() -> None:
 
     with pytest.raises(TypeError, match="Params"):
         glmax.predict(family, jnp.array([1.0]), X)
+
+
+@pytest.mark.parametrize(
+    ("family", "sm_family", "y"),
+    [
+        (Poisson(), sm.families.Poisson(), jnp.array([0.0, 1.0, 2.0, 4.0, 3.0, 8.0])),
+        (
+            NegativeBinomial(),
+            None,
+            jnp.array([0.0, 1.0, 3.0, 2.0, 7.0, 4.0]),
+        ),
+    ],
+)
+def test_log_link_count_predictions_with_exposure_offset_match_statsmodels(family, sm_family, y) -> None:
+    X = jnp.array(
+        [
+            [1.0, -1.2],
+            [1.0, -0.4],
+            [1.0, 0.2],
+            [1.0, 0.8],
+            [1.0, 1.5],
+            [1.0, 2.2],
+        ]
+    )
+    exposure = jnp.array([0.5, 1.0, 2.0, 4.0, 1.5, 3.0])
+    offset = jnp.log(exposure)
+    X_new = jnp.array([[1.0, -0.8], [1.0, 0.5], [1.0, 1.7]])
+    exposure_new = jnp.array([0.75, 2.5, 5.0])
+    offset_new = jnp.log(exposure_new)
+
+    fitted = glmax.fit(family, X, y, offset=offset)
+    if isinstance(family, NegativeBinomial):
+        sm_family = sm.families.NegativeBinomial(alpha=float(np.asarray(fitted.params.aux)))
+    sm_result = sm.GLM(np.asarray(y), np.asarray(X), family=sm_family, offset=np.asarray(offset)).fit()
+
+    mu = glmax.predict(family, fitted.params, X_new, offset=offset_new)
+    sm_mu = sm_result.predict(np.asarray(X_new), offset=np.asarray(offset_new))
+
+    assert_allclose(np.asarray(fitted.params.beta), sm_result.params, rtol=2e-5, atol=2e-5)
+    assert_allclose(np.asarray(mu), sm_mu, rtol=2e-5, atol=2e-5)
+    assert_allclose(np.asarray(mu / exposure_new), np.asarray(jnp.exp(X_new @ fitted.params.beta)), rtol=1e-12)

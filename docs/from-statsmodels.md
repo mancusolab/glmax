@@ -85,17 +85,20 @@ The link is passed directly to the family constructor. See [Families & Links](ap
 
 ---
 
-## Offsets
+## Offsets and Exposure
 
-Both libraries use `offset=` as a keyword argument. In statsmodels it goes to
-`.fit()`; in glmax it goes to `fit()` directly. Either way, the offset is added
-to the linear predictor before converting $\eta$ to fitted values on the
-response scale.
+Both libraries support offsets: fixed terms added to the linear predictor before
+converting $\eta$ to response-scale fitted values.
 
 **statsmodels:**
 
 ```python
-result = sm.Poisson(y, X).fit(offset=np.log(exposure))
+result = sm.GLM(
+    y,
+    X,
+    family=sm.families.Poisson(),
+    offset=np.log(exposure),
+).fit()
 ```
 
 **glmax:**
@@ -103,6 +106,22 @@ result = sm.Poisson(y, X).fit(offset=np.log(exposure))
 ```python
 fitted = glmax.fit(glmax.Poisson(), X, y, offset=jnp.log(exposure))
 ```
+
+For Poisson and Negative Binomial models with a log link, `offset=log(exposure)`
+models expected counts:
+
+$$
+\mu = \exp(X\beta + \log(\mathrm{exposure}))
+    = \mathrm{exposure} \cdot \exp(X\beta).
+$$
+
+`glmax.predict(...)` returns expected counts for the supplied exposure. Divide by
+exposure to get rates.
+
+!!! warning "Do not pass raw exposure as offset"
+    statsmodels has some model APIs that distinguish `offset=` from `exposure=`.
+    glmax keeps one primitive: `offset`. For exposure workflows, pass
+    `jnp.log(exposure)`.
 
 ---
 

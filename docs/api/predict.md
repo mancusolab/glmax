@@ -16,4 +16,14 @@ carrier rather than hiding state inside a fitted object method.
     `predict(...)` returns the expected count $\mu = 10p$. If you want
     probabilities from grouped Binomial predictions, divide by `n_trials`.
 
+!!! note "Exposure changes counts, not rates"
+    For log-link count models, use `offset=jnp.log(exposure)`. Then
+    `predict(...)` returns expected counts for the supplied exposure:
+    $\mu = \mathrm{exposure} \cdot \exp(X\beta)$. Divide by `exposure` to get
+    rates.
+
+!!! warning "Offset is already on the linear-predictor scale"
+    Do not pass raw exposure as `offset`. `offset` is added to $\eta$, so exposure
+    workflows should pass `log(exposure)`.
+
 ::: glmax.predict
