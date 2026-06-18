@@ -84,17 +84,6 @@ toc_depth = 4
 
 [project.plugins.autorefs]
 
-[project.plugins.hippogriffe]
-show_bases = true
-extra_public_objects = [
-  "numpy.ndarray",
-  "lineax.AbstractLinearOperator",
-  "lineax.AbstractLinearSolver",
-  "lineax.Cholesky",
-  "jax.Array",
-  "jax.typing.ArrayLike",
-]
-
 [project.plugins.mkdocstrings]
 custom_templates = "docs/_templates"
 

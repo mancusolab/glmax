@@ -54,13 +54,12 @@ Source = "https://github.com/MancusoLab/glmax"
 
 [project.optional-dependencies]
 docs = [
-  "hippogriffe @ git+https://github.com/quattro/hippogriffe.git@main",
   "mkdocstrings-python>=1.12",
   "zensical>=0.0.37",
 ]
 
 [tool.hatch.metadata]
-allow-direct-references = true
+allow-direct-references = false
 
 [tool.hatch.version]
 source = "vcs"

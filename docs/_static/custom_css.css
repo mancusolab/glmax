@@ -169,7 +169,45 @@ h4.doc-heading {
     border: solid var(--doc-heading-border-color);
     border-width: 1.5pt;
     border-radius: 2pt;
-    padding: 0pt 5pt 2pt 5pt;
+    padding: 2pt 5pt;
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+h4.doc-heading code.doc-symbol.doc-symbol-heading.doc-symbol-class {
+    background-color: rgb(29, 43, 61);
+    border-radius: 2pt;
+    color: rgb(118, 191, 255);
+    font-weight: 700;
+    padding: 0.15rem 0.55rem;
+}
+h4.doc-heading code.doc-class-signature {
+    background: transparent;
+    box-shadow: none;
+    color: var(--md-code-fg-color);
+    padding: 0;
+    white-space: normal;
+}
+h4.doc-heading code.doc-class-signature .doc-class-name {
+    color: var(--md-code-fg-color);
+}
+h4.doc-heading code.doc-class-signature a,
+h4.doc-heading code.doc-class-signature autoref {
+    color: rgb(0, 189, 164);
+    font-weight: 700;
+}
+h4.doc-heading a.doc-source-link {
+    color: rgb(0, 189, 164);
+    font-family: var(--md-code-font-family);
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+code.doc-symbol.doc-symbol-heading.doc-symbol-class-attribute,
+code.doc-symbol.doc-symbol-heading.doc-symbol-attribute,
+small.doc-label.doc-label-class-attribute {
+    display: none;
 }
 h5.doc-heading, h6.heading {
     background-color: var(--doc-heading-color-alt);
