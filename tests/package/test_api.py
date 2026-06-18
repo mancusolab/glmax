@@ -2,6 +2,7 @@
 
 import importlib.metadata
 import inspect
+import types
 
 from pathlib import Path
 
@@ -103,10 +104,28 @@ def test_package_version_falls_back_to_generated_version_module(monkeypatch) -> 
     def missing_metadata(_: str) -> str:
         raise importlib.metadata.PackageNotFoundError("glmax")
 
-    monkeypatch.setattr(glmax, "version", missing_metadata)
+    def generated_module(name: str):
+        assert name == "glmax._version"
+        return types.SimpleNamespace(__version__="1.2.3+generated")
 
-    generated_version = importlib.import_module("glmax._version").__version__
-    assert glmax._package_version() == generated_version
+    monkeypatch.setattr(glmax, "version", missing_metadata)
+    monkeypatch.setattr(glmax, "import_module", generated_module)
+
+    assert glmax._package_version() == "1.2.3+generated"
+
+
+def test_package_version_returns_unknown_without_metadata_or_generated_module(monkeypatch) -> None:
+    def missing_metadata(_: str) -> str:
+        raise importlib.metadata.PackageNotFoundError("glmax")
+
+    def missing_generated_module(name: str):
+        assert name == "glmax._version"
+        raise ModuleNotFoundError(name)
+
+    monkeypatch.setattr(glmax, "version", missing_metadata)
+    monkeypatch.setattr(glmax, "import_module", missing_generated_module)
+
+    assert glmax._package_version() == "0+unknown"
 
 
 def test_fit_signature_matches_canonical_surface() -> None:

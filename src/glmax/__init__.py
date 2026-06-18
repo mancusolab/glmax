@@ -1,5 +1,6 @@
 # pattern: Imperative Shell
 
+from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version  # pragma: no cover
 
 import jax
@@ -64,9 +65,12 @@ def _package_version() -> str:
     try:
         return version("glmax")
     except PackageNotFoundError:
-        from ._version import __version__
+        try:
+            generated_version = import_module(f"{__name__}._version")
+        except ModuleNotFoundError:
+            return "0+unknown"
 
-        return __version__
+        return generated_version.__version__
 
 
 __version__ = _package_version()

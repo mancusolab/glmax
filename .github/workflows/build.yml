@@ -25,9 +25,21 @@ jobs:
           - os: ubuntu-latest
             python-version: "3.11"
             artifact-name: dist-linux-py3.11
+          - os: ubuntu-latest
+            python-version: "3.12"
+            artifact-name: dist-linux-py3.12
+          - os: ubuntu-latest
+            python-version: "3.13"
+            artifact-name: dist-linux-py3.13
+          - os: ubuntu-latest
+            python-version: "3.14"
+            artifact-name: dist-linux-py3.14
           - os: macos-latest
             python-version: "3.11"
             artifact-name: dist-macos-py3.11
+          - os: macos-latest
+            python-version: "3.14"
+            artifact-name: dist-macos-py3.14
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
