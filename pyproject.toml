@@ -82,6 +82,7 @@ dependencies = [
 [tool.hatch.envs.default.scripts]
 test = "pytest -p no:capture {args:tests}"
 test-cov = "coverage run -m pytest -p no:capture {args:tests}"
+smoke = "python scripts/wheel_smoke.py"
 cov-report = [
   "- coverage combine",
   "coverage report",
@@ -103,6 +104,15 @@ dependencies = [
 
 [tool.hatch.envs.lint.scripts]
 typecheck = "ty check {args:src/glmax}"
+check = "ruff check {args:src tests scripts}"
+format = "ruff format --exclude src/glmax/_version.py {args:src tests scripts}"
+format-check = "ruff format --check --exclude src/glmax/_version.py {args:src tests scripts}"
+
+[tool.hatch.envs.docs]
+features = ["docs"]
+
+[tool.hatch.envs.docs.scripts]
+build = "zensical build --strict --clean"
 
 [tool.ruff]
 line-length = 120

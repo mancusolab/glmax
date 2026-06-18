@@ -5,6 +5,7 @@
 Use ``tools/worktree-python`` for non-pytest commands that must import ``glmax``
 from this worktree's ``src/`` tree.
 """
+
 import sys
 
 from pathlib import Path

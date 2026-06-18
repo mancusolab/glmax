@@ -821,11 +821,7 @@ class TestInverseGaussian:
         # PowerLink(-2): eta = mu^{-2}
         eta = mu ** (-2.0)
         phi = 0.4
-        expected = (
-            0.5 * jnp.log(2.0 * jnp.pi * phi)
-            + 1.5 * jnp.log(y)
-            + 0.5 * (y - mu) ** 2 / (phi * mu**2 * y)
-        )
+        expected = 0.5 * jnp.log(2.0 * jnp.pi * phi) + 1.5 * jnp.log(y) + 0.5 * (y - mu) ** 2 / (phi * mu**2 * y)
         result = ig.negloglikelihood(y, eta, disp=phi)
         assert jnp.allclose(result, expected, atol=1e-10)
 
