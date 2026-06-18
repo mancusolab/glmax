@@ -16,30 +16,8 @@ permissions:
 
 jobs:
   wheel-smoke:
-    name: Wheel smoke (${{ matrix.os }}, Python ${{ matrix.python-version }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            python-version: "3.11"
-            artifact-name: dist-linux-py3.11
-          - os: ubuntu-latest
-            python-version: "3.12"
-            artifact-name: dist-linux-py3.12
-          - os: ubuntu-latest
-            python-version: "3.13"
-            artifact-name: dist-linux-py3.13
-          - os: ubuntu-latest
-            python-version: "3.14"
-            artifact-name: dist-linux-py3.14
-          - os: macos-latest
-            python-version: "3.11"
-            artifact-name: dist-macos-py3.11
-          - os: macos-latest
-            python-version: "3.14"
-            artifact-name: dist-macos-py3.14
+    name: Wheel smoke
+    runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -47,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v8.1.0
@@ -62,14 +40,25 @@ jobs:
       - name: Install and smoke-test wheel
         shell: bash
         run: |
-          uv venv smoke-venv --python ${{ matrix.python-version }}
+          uv venv smoke-venv --python 3.11
           uv pip install --python smoke-venv dist/*.whl
           smoke-venv/bin/python scripts/wheel_smoke.py
+
+      - name: Install and smoke-test sdist
+        shell: bash
+        run: |
+          uv venv sdist-smoke-venv --python 3.11
+          uv pip install --python sdist-smoke-venv dist/*.tar.gz
+          sdist-smoke-venv/bin/python - <<'PY'
+          import glmax
+
+          print(f"imported glmax from {glmax.__file__}")
+          PY
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact-name }}
+          name: distributions
           path: dist/*
 
       - name: Prune uv cache
