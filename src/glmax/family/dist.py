@@ -34,6 +34,10 @@ else:
     from equinox import AbstractClassVar
 
 
+def _resolve_aux(disp: Scalar, aux: Scalar | None) -> Scalar:
+    return disp if aux is None else aux
+
+
 class ExponentialDispersionFamily(eqx.Module):
     r"""Abstract base for one-parameter exponential dispersion family distributions.
 
@@ -853,7 +857,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         Negative log-likelihood contributions, shape `(n,)`.
         """
-        alpha = aux
+        alpha = _resolve_aux(disp, aux)
         log_r = -jnp.log(alpha)
         r = jnp.exp(log_r)
         # Compute log_mu in log-domain directly (glink is LogLink: inverse = exp(eta)).
@@ -867,7 +871,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         return -(term1 + term2)
 
     def variance(self, mu: Array, disp: Scalar = 1.0, aux: Scalar | None = None) -> Array:
-        alpha = aux
+        alpha = _resolve_aux(disp, aux)
         return mu + alpha * (mu**2)
 
     def sample(
@@ -896,7 +900,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
         """
         key1, key2 = rdm.split(key)
         mu = self.glink.inverse(eta)
-        alpha = aux
+        alpha = _resolve_aux(disp, aux)
         r = 1.0 / alpha
         # jax.random.gamma samples Gamma(a=r, scale=1); multiply by mu/r to get Gamma(a=r, scale=mu/r)
         gamma_sample = rdm.gamma(key1, r, shape=mu.shape) * (mu / r)
@@ -984,7 +988,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         `(1.0, new_alpha)`.
         """
-        alpha = aux
+        alpha = _resolve_aux(disp, aux)
         log_alpha = jnp.log(alpha)
         score, hess = self.log_alpha_score_and_hessian(X, y, eta, log_alpha)
         log_alpha_n = jnp.clip(
@@ -1027,7 +1031,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         CDF values, shape `(n,)`.
         """
-        alpha = aux
+        alpha = _resolve_aux(disp, aux)
         r = 1.0 / alpha
         p_fail = r / (r + mu)
         return betainc(r, jnp.floor(y) + 1.0, p_fail)
@@ -1052,7 +1056,7 @@ class NegativeBinomial(ExponentialDispersionFamily):
 
         Non-negative deviance contributions, shape `(n,)`.
         """
-        alpha = aux
+        alpha = _resolve_aux(disp, aux)
         r = 1.0 / alpha
         y_ = y
         mu_ = jnp.clip(mu, *self._bounds)
@@ -1289,9 +1293,7 @@ class InverseGaussian(ExponentialDispersionFamily):
         safe_disp = jnp.where(disp > 0, disp, 1.0)
         mu = jnp.clip(self.glink.inverse(eta), *self._bounds)
         return (
-            0.5 * jnp.log(2.0 * jnp.pi * safe_disp)
-            + 1.5 * jnp.log(y)
-            + 0.5 * (y - mu) ** 2 / (safe_disp * mu**2 * y)
+            0.5 * jnp.log(2.0 * jnp.pi * safe_disp) + 1.5 * jnp.log(y) + 0.5 * (y - mu) ** 2 / (safe_disp * mu**2 * y)
         )
 
     def variance(self, mu: Array, disp: Scalar = 1.0, aux: Scalar | None = None) -> Array:

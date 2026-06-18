@@ -1,7 +1,7 @@
 # Families and links
 
 A GLM is defined by its response family and link function. Pass a family
-instance as the first argument to [`glmax.fit`][]:
+instance as the first argument to [`glmax.fit`](fit/index.md#glmax.fit):
 
 ```python
 import glmax
@@ -12,7 +12,7 @@ fitted = glmax.fit(glmax.Binomial(glmax.ProbitLink()), X, y)  # explicit link
 
 The family determines how the linear predictor $\eta = X\beta$ maps to the
 mean response $\mu = \mathrm{E}[Y \mid X]$, how the variance scales with
-$\mu$, and how [`glmax.Params`][] fields are interpreted:
+$\mu$, and how [`glmax.Params`](fit/index.md#glmax.Params) fields are interpreted:
 
 - `disp` is the GLM dispersion $\phi$. Gaussian and Gamma use it as EDM
   dispersion; Poisson, Binomial, and Negative Binomial canonicalize it to `1.0`.

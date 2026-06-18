@@ -6,7 +6,7 @@
       {% if loop.last %}
         {% include "expression.html.jinja" with context %})</code>
       {% else %}
-        {% include "expression.html" with context %},
+        {% include "expression.html.jinja" with context %},
       {% endif %}
     {% endfor %}
 {% else %}

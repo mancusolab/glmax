@@ -22,7 +22,7 @@ jobs:
           pip install --upgrade pip
           pip install -e ".[docs]"
       - name: Build docs
-        run: mkdocs build
+        run: zensical build --strict --clean
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

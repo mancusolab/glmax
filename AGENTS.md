@@ -48,7 +48,7 @@
 - `FittedGLM.mu` and `predict(...)` return response-scale means via `family.response_mean(...)`; do not assume `mu == family.glink.inverse(eta)` for grouped-response families such as `Binomial(n_trials > 1)`.
 - Public exports stay centralized in `src/glmax/__init__.py`; if a user-facing noun or verb changes, update docs and contract tests in the same patch.
 - Keep workflow examples on the grammar nouns and top-level verbs. Reserve `_fit` imports for fitter/solver docs and tests; do not present `_fit` or `_infer` module paths as the primary user workflow.
-- `site/` is generated documentation output. Edit `docs/` and `mkdocs.yml`, not `site/`.
+- `site/` is generated documentation output. Edit `docs/` and `zensical.toml`, not `site/`.
 
 ## Verification
 - Do not run bare `pytest`.

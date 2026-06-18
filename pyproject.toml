@@ -54,12 +54,8 @@ Source = "https://github.com/MancusoLab/glmax"
 [project.optional-dependencies]
 docs = [
   "hippogriffe @ git+https://github.com/quattro/hippogriffe.git@main",
-  "mkdocs>=1.6.1",
-  "mkdocs-include-exclude-files>=0.1.0",
-  "mkdocs-ipynb>=0.1.0",
-  "mkdocs-material>=9.6.7",
-  "mkdocstrings[python]>=0.28.3",
-  "pymdown-extensions>=10.14.3"
+  "mkdocstrings-python>=1.12",
+  "zensical>=0.0.37",
 ]
 
 [tool.hatch.metadata]
@@ -101,9 +97,12 @@ python = ["3.10", "3.11", "3.12"]
 [tool.hatch.envs.lint]
 detached = true
 dependencies = [
-  "pyright>=1.1.46",
   "ruff>=0.2.2",
+  "ty>=0.0.44",
 ]
+
+[tool.hatch.envs.lint.scripts]
+typecheck = "ty check {args:src/glmax}"
 
 [tool.ruff]
 line-length = 120
@@ -131,10 +130,28 @@ jax-ecosystem = ["equinox", "jax", "jaxtyping", "lineax"]
 "tests/**/*" = ["PLR2004", "S101", "TID252"]
 "src/glmax/_version.py" = ["I001"]
 
-[tool.pyright]
-reportIncompatibleMethodOverride = true
-include = ["src/glmax", "tests"]
-exclude = ["docs"]
+[tool.ty.environment]
+python-version = "3.10"
+
+[tool.ty.analysis]
+replace-imports-with-any = [
+  "equinox",
+  "equinox.**",
+  "jax",
+  "jax.**",
+  "jaxlib",
+  "jaxlib.**",
+  "jaxtyping",
+  "jaxtyping.**",
+  "lineax",
+  "lineax.**",
+]
+
+[tool.ty.rules]
+redundant-cast = "ignore"
+
+[tool.ty.src]
+include = ["src/glmax"]
 
 [tool.coverage.run]
 source_pkgs = ["glmax", "tests"]
