@@ -19,3 +19,16 @@ Four verbs — [`fit`](api/fit/index.md), [`predict`](api/predict.md), [`infer`]
 
 See the [Overview](guide.md) to get started, or [From statsmodels](from-statsmodels.md) if you're migrating from statsmodels.
 
+## Installation
+
+For the latest release:
+
+```bash
+pip install glmax
+```
+
+For the latest repository state:
+
+```bash
+pip install git+https://github.com/mancusolab/glmax.git
+```

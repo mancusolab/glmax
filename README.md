@@ -24,10 +24,17 @@ See the [docs](https://mancusolab.github.io/glmax) for the full API reference an
 
 ## Installation
 
+For the latest release:
+
+```bash
+pip install glmax
+```
+
+For the latest repository state:
+
 ```bash
 pip install git+https://github.com/mancusolab/glmax.git
 ```
-
 
 ## Performance
 
